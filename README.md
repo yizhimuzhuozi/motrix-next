@@ -104,10 +104,9 @@ git push origin v1.1.0
 | Platform | Runner | Artifacts |
 |----------|--------|-----------|
 | macOS ARM64 | `macos-latest` | `.dmg` |
-| macOS Intel | `macos-13` | `.dmg` |
 | Windows x64 | `windows-latest` | `.exe` (NSIS) |
-| Linux x64 | `ubuntu-22.04` | `.AppImage` + `.deb` |
-| Linux ARM64 | `ubuntu-22.04-arm` | `.AppImage` + `.deb` |
+| Linux x64 | `ubuntu-latest` | `.AppImage` + `.deb` |
+| Linux ARM64 | `ubuntu-24.04-arm` | `.AppImage` + `.deb` |
 
 The workflow creates a draft release with all artifacts and a `latest.json` manifest for in-app auto-updates.
 
