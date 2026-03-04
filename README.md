@@ -3,8 +3,15 @@
   <h1>Motrix Next</h1>
   <p>A full-featured download manager — rebuilt from the ground up.</p>
 
-  ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
-  ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+  ![Tauri](https://img.shields.io/badge/Tauri%202-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)
+  ![Vue](https://img.shields.io/badge/Vue%203-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)
+  ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
+  ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+
+  ![Platform](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-informational?style=flat-square&logo=apple&logoColor=white)
+  ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
+
+  ![Bundle Size](https://img.shields.io/badge/bundle%20size-~10MB%20(down%20from%20~80MB)-brightgreen?style=flat-square)
 </div>
 
 ---
@@ -40,7 +47,7 @@ We owe a great deal to the original [Motrix](https://github.com/agalwood/Motrix)
 | **Styling** | SCSS + Element theme | **Vanilla CSS + custom properties** |
 | **Engine Mgmt** | Node.js `child_process` | **Tauri sidecar** |
 | **Build System** | electron-builder | **Vite + Cargo** |
-| **Bundle Size** | ~180 MB | **~15 MB** |
+| **Bundle Size** | ~80 MB | **~10 MB** |
 | **Auto-Update** | electron-updater | **Tauri updater plugin** |
 
 Version numbering starts at `1.0.0` to reflect this clean break.
@@ -57,7 +64,7 @@ Version numbering starts at `1.0.0` to reflect this clean break.
 - **Task management** — Pause, resume, delete with file cleanup, batch operations
 - **Download protocols** — Register as default handler for magnet and thunder links
 - **Notifications** — System notifications on task completion
-- **Lightweight** — Tauri-based, minimal resource footprint
+- **Lightweight** — Tauri-based, ~10 MB bundle size (down from ~80 MB), minimal resource footprint
 
 ## Installation
 
