@@ -39,8 +39,10 @@ const config = (preferenceStore.config || {}) as Record<string, unknown>
 const torrentName = ref('')
 const torrentBase64 = ref('')
 const torrentLoaded = ref(false)
+const torrentInfoHash = ref('')
 const torrentFiles = ref<{ idx: number; path: string; length: number }[]>([])
 const selectedFileIndices = ref<number[]>([])
+const submitting = ref(false)
 
 const form = ref({
   uris: '',
@@ -126,6 +128,10 @@ async function parseTorrentData(uint8: Uint8Array) {
     const info = decoded.info
     if (!info) return
 
+    const infoBytes = bencode.encode(info)
+    const hashBuffer = await crypto.subtle.digest('SHA-1', new Uint8Array(infoBytes).buffer as ArrayBuffer)
+    torrentInfoHash.value = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
     const textDecoder = new TextDecoder('utf-8', { fatal: false })
     const decodeName = (v: any) => v instanceof Uint8Array ? textDecoder.decode(v) : String(v)
 
@@ -158,6 +164,7 @@ function clearTorrent() {
   torrentName.value = ''
   torrentBase64.value = ''
   torrentLoaded.value = false
+  torrentInfoHash.value = ''
   torrentFiles.value = []
   selectedFileIndices.value = []
 }
@@ -190,6 +197,8 @@ function handleClose() {
 }
 
 async function handleSubmit() {
+  if (submitting.value) return
+  submitting.value = true
   try {
     if (activeTab.value === ADD_TASK_TYPE.URI) {
       if (!form.value.uris.trim()) return
@@ -208,24 +217,23 @@ async function handleSubmit() {
       if (form.value.allProxy) options['all-proxy'] = form.value.allProxy
       await taskStore.addUri({ uris, outs: [], options })
     } else if (activeTab.value === ADD_TASK_TYPE.TORRENT && torrentBase64.value) {
+      if (torrentInfoHash.value && isEngineReady()) {
+        const { getClient } = await import('@/api/aria2')
+        const [active, waiting] = await Promise.all([
+          getClient().call('tellActive', ['infoHash']) as Promise<{infoHash?: string}[]>,
+          getClient().call('tellWaiting', 0, 1000, ['infoHash']) as Promise<{infoHash?: string}[]>,
+        ])
+        const existing = [...active, ...waiting].map(t => t.infoHash).filter(Boolean)
+        if (existing.includes(torrentInfoHash.value)) {
+          message.warning(t('task.duplicate-task'), { duration: 5000, closable: true })
+          return
+        }
+      }
       const options: Record<string, unknown> = { dir: form.value.dir }
       if (selectedFileIndices.value.length > 0 && selectedFileIndices.value.length < torrentFiles.value.length) {
         options['select-file'] = selectedFileIndices.value.join(',')
       }
-      const gid = await taskStore.addTorrent({ torrent: torrentBase64.value, options })
-      // aria2c may accept the task but immediately fail (e.g. duplicate info_hash)
-      // Wait briefly then check the task status
-      if (gid) {
-        await new Promise(r => setTimeout(r, 500))
-        try {
-          const { getClient } = await import('@/api/aria2')
-          const status = await getClient().call('tellStatus', [gid as string, ['status', 'errorMessage']]) as Record<string, string>
-          if (status?.status === 'error' && status.errorMessage) {
-            message.warning(status.errorMessage, { duration: 5000, closable: true })
-            return
-          }
-        } catch { /* task may have been removed, ignore */ }
-      }
+      await taskStore.addTorrent({ torrent: torrentBase64.value, options })
     } else {
       return
     }
@@ -243,6 +251,8 @@ async function handleSubmit() {
     } else {
       message.error(errMsg, { duration: 5000, closable: true })
     }
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -389,7 +399,7 @@ onUnmounted(() => { document.removeEventListener('keydown', handleHotkey) })
       <template #footer>
         <NSpace justify="end">
           <NButton @click="handleClose">{{ t('app.cancel') }}</NButton>
-          <NButton type="primary" @click="handleSubmit">{{ t('app.submit') }}</NButton>
+          <NButton type="primary" :loading="submitting" @click="handleSubmit">{{ t('app.submit') }}</NButton>
         </NSpace>
       </template>
     </NCard>

@@ -32,6 +32,8 @@ export default {
   'task-error-info': 'エラー',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'ピース',
   'task-piece-length': 'ピースサイズ',
   'task-num-pieces': 'ピース',

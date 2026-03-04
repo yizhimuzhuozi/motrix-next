@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'Errore',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'Pezzo',
   'task-piece-length': 'Dimensione del pezzo',
   'task-num-pieces': 'Pezzi',

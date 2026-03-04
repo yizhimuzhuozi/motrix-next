@@ -1,7 +1,7 @@
 export default {
   'active': '下載中',
   'waiting': '等待中',
-  'stopped': '已停止',
+  'stopped': '已結束',
   'new-task': '新增任務',
   'new-bt-task': '新增 BT 任務',
   'open-file': '開啟種子檔案...',
@@ -32,6 +32,8 @@ export default {
   'task-error-info': '錯誤訊息',
   'file-missing': '檔案遺失',
   'duplicate-task': '任務已存在，無法重複添加',
+  'stop-seeding': '停止做種',
+  'seeding': '做種中',
   'task-piece': '分片',
   'task-piece-length': '分片大小',
   'task-num-pieces': '分片數量',

@@ -1,7 +1,7 @@
 export default {
   'active': 'Downloading',
   'waiting': 'Waiting',
-  'stopped': 'Stopped',
+  'stopped': 'Finished',
   'new-task': 'New Task',
   'new-bt-task': 'New BT Task',
   'open-file': 'Open Torrent File...',
@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'Error',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'Piece',
   'task-piece-length': 'Piece Size',
   'task-num-pieces': 'Pieces',

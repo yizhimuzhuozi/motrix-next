@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'Ошибка',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'Кусок',
   'task-piece-length': 'Размер куска',
   'task-num-pieces': 'Шт',

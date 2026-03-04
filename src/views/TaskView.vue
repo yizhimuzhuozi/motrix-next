@@ -25,8 +25,7 @@ const message = useAppMessage()
 
 const subnavs = computed(() => [
   { key: 'active', title: t('task.active') || 'Active' },
-  { key: 'waiting', title: t('task.waiting') || 'Waiting' },
-  { key: 'stopped', title: t('task.stopped') || 'Stopped' },
+  { key: 'stopped', title: t('task.stopped') || 'Completed' },
 ])
 
 const title = computed(() => {
@@ -131,19 +130,15 @@ function handleDeleteTask(task: Record<string, unknown>) {
     ]),
     positiveText: t('app.yes'),
     negativeText: t('app.no'),
-    onPositiveClick: () => {
-      // Return a promise so Naive UI shows loading spinner on the button
-      return new Promise<void>(async (resolve) => {
-        try {
-          await taskStore.removeTask(task as never)
-          if (deleteFiles.value) {
-            await deleteTaskFiles(task)
-          }
-        } catch (e) {
-          console.error('Delete failed:', e)
+    onPositiveClick: async () => {
+      try {
+        await taskStore.removeTask(task as never)
+        if (deleteFiles.value) {
+          await deleteTaskFiles(task)
         }
-        resolve()
-      })
+      } catch (e) {
+        console.error('Delete failed:', e)
+      }
     },
   })
 }
@@ -166,6 +161,9 @@ async function handleShowInFolder(task: Record<string, unknown>) {
     message.warning(t('task.file-not-exist'))
   }
 }
+function handleStopSeeding(task: Record<string, unknown>) {
+  taskStore.removeTask(task as never).catch(console.error)
+}
 </script>
 
 <template>
@@ -183,6 +181,7 @@ async function handleShowInFolder(task: Record<string, unknown>) {
         @copy-link="handleCopyLink"
         @show-info="handleShowInfo"
         @folder="handleShowInFolder"
+        @stop-seeding="handleStopSeeding"
       />
     </div>
     <TaskDetail

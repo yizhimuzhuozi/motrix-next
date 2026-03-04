@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'خطأ',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'قطعة',
   'task-piece-length': 'حجم القطعة',
   'task-num-pieces': 'قطع',

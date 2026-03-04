@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'Hata',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'Parça',
   'task-piece-length': 'Parça Boyutu',
   'task-num-pieces': 'Adet',

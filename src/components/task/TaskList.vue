@@ -12,6 +12,7 @@ const emit = defineEmits<{
   'copy-link': [task: Record<string, unknown>]
   'show-info': [task: Record<string, unknown>]
   folder: [task: Record<string, unknown>]
+  'stop-seeding': [task: Record<string, unknown>]
 }>()
 
 const { t } = useI18n()
@@ -58,6 +59,7 @@ function handleItemClick(task: Record<string, unknown>, event: MouseEvent) {
           @copy-link="emit('copy-link', item as Record<string, unknown>)"
           @show-info="emit('show-info', item as Record<string, unknown>)"
           @folder="emit('folder', item as Record<string, unknown>)"
+          @stop-seeding="emit('stop-seeding', item as Record<string, unknown>)"
         />
       </div>
     </TransitionGroup>

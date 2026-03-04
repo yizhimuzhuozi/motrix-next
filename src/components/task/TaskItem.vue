@@ -5,7 +5,7 @@ import { TASK_STATUS } from '@shared/constants'
 import { checkTaskIsSeeder, getTaskName, calcProgress, bytesToSize, timeRemaining, timeFormat, checkTaskIsBT } from '@shared/utils'
 import { exists } from '@tauri-apps/plugin-fs'
 import { NProgress, NIcon } from 'naive-ui'
-import { ArrowUpOutline, ArrowDownOutline, GitNetworkOutline, MagnetOutline, AlertCircleOutline } from '@vicons/ionicons5'
+import { ArrowUpOutline, ArrowDownOutline, GitNetworkOutline, MagnetOutline, AlertCircleOutline, CloudUploadOutline } from '@vicons/ionicons5'
 import TaskItemActions from './TaskItemActions.vue'
 
 const props = defineProps<{ task: Record<string, unknown> }>()
@@ -17,6 +17,7 @@ const emit = defineEmits<{
   'copy-link': [task: Record<string, unknown>]
   'show-info': [task: Record<string, unknown>]
   folder: [task: Record<string, unknown>]
+  'stop-seeding': [task: Record<string, unknown>]
 }>()
 
 const { t } = useI18n()
@@ -98,9 +99,13 @@ watch(() => props.task.status, checkFileExists)
 </script>
 
 <template>
-  <div class="task-item" :class="{ 'file-missing': fileMissing }" @dblclick="onDblClick">
+  <div class="task-item" :class="{ 'file-missing': fileMissing, 'is-seeding': isSeeder }" @dblclick="onDblClick">
     <div class="task-name" :title="taskFullName">
       <span>{{ taskFullName }}</span>
+      <span v-if="isSeeder" class="seeding-tag">
+        <NIcon :size="13"><CloudUploadOutline /></NIcon>
+        {{ t('task.seeding') || 'Seeding' }}
+      </span>
       <span v-if="fileMissing" class="file-missing-tag">
         <NIcon :size="13"><AlertCircleOutline /></NIcon>
         {{ t('task.file-missing') || 'File missing' }}
@@ -116,6 +121,7 @@ watch(() => props.task.status, checkFileExists)
       @copy-link="emit('copy-link', task)"
       @show-info="emit('show-info', task)"
       @folder="emit('folder', task)"
+      @stop-seeding="emit('stop-seeding', task)"
     />
     <div class="task-progress">
       <NProgress
@@ -230,5 +236,20 @@ watch(() => props.task.status, checkFileExists)
   font-size: 12px;
   line-height: 14px;
   white-space: nowrap;
+}
+.seeding-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #67C23A;
+  opacity: 0.9;
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: fade-in 0.3s ease;
+}
+.task-item.is-seeding {
+  border-left: 3px solid #67C23A;
+  background: linear-gradient(90deg, rgba(103, 194, 58, 0.04) 0%, transparent 40%);
 }
 </style>

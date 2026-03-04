@@ -33,6 +33,8 @@ export default {
   'task-error-info': 'ผิดพลาด',
   'file-missing': 'File missing',
   'duplicate-task': 'This task already exists and cannot be added again.',
+  'stop-seeding': 'Stop Seeding',
+  'seeding': 'Seeding',
   'task-piece': 'ชิ้นส่วน',
   'task-piece-length': 'ขนาดชิ้น',
   'task-num-pieces': 'ชิ้นส่วน',

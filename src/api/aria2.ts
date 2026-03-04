@@ -88,22 +88,14 @@ export async function fetchTaskList(params: { type: string }) {
     const { type } = params
     switch (type) {
         case TASK_STATUS.ACTIVE: {
-            // Merge active + waiting/paused tasks for the "downloading" view
             const [active, waiting] = await Promise.all([
                 tellActive(),
                 tellWaiting(0, 1000),
             ])
             return [...active, ...waiting] as Record<string, unknown>[]
         }
-        case TASK_STATUS.WAITING:
-        case TASK_STATUS.PAUSED:
-            return tellWaiting(0, 1000)
-        case TASK_STATUS.COMPLETE:
-        case TASK_STATUS.ERROR:
-        case TASK_STATUS.REMOVED:
-            return tellStopped(0, 1000)
         default:
-            return tellActive()
+            return tellStopped(0, 1000)
     }
 }
 

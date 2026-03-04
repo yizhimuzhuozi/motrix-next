@@ -13,7 +13,7 @@ import { type Component } from 'vue'
 const props = defineProps<{ task: Record<string, unknown>; status: string }>()
 const emit = defineEmits<{
   pause: []; resume: []; delete: []; 'delete-record': [];
-  'copy-link': []; 'show-info': []; folder: []
+  'copy-link': []; 'show-info': []; folder: []; 'stop-seeding': []
 }>()
 
 const { t } = useI18n()
@@ -44,7 +44,7 @@ const actionsMap = computed<Record<string, { key: string; icon: Component; label
     { key: 'trash', icon: TrashOutline, label: t('task.remove-record'), event: 'delete-record' },
   ],
   [TASK_STATUS.SEEDING]: [
-    { key: 'stop', icon: StopOutline, label: t('task.pause-task'), event: 'pause' },
+    { key: 'stop', icon: StopOutline, label: t('task.stop-seeding') || 'Stop Seeding', event: 'stop-seeding' },
     { key: 'delete', icon: CloseOutline, label: t('task.delete-task'), event: 'delete' },
   ],
 }))
@@ -68,6 +68,7 @@ function onAction(event: string) {
     case 'copy-link': emit('copy-link'); break
     case 'show-info': emit('show-info'); break
     case 'folder': emit('folder'); break
+    case 'stop-seeding': emit('stop-seeding'); break
   }
 }
 </script>
