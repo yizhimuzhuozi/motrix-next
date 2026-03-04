@@ -113,6 +113,7 @@ fn build_start_args(config: &serde_json::Value) -> Vec<String> {
         args.push("--rpc-listen-port=16800".to_string());
     }
     args.push("--rpc-listen-all=false".to_string());
+    args.push("--rpc-allow-origin-all=true".to_string());
 
     args
 }

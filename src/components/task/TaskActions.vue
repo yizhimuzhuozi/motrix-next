@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/app'
 import { useTaskStore } from '@/stores/task'
 import { usePreferenceStore } from '@/stores/preference'
 import { ADD_TASK_TYPE } from '@shared/constants'
+import { isEngineReady } from '@/api/aria2'
 import { remove } from '@tauri-apps/plugin-fs'
 import { getTaskName } from '@shared/utils'
 import { NButton, NIcon, NTooltip, NCheckbox, useDialog } from 'naive-ui'
@@ -100,18 +101,21 @@ function onDeleteAll() {
 }
 
 function resumeAll() {
+  if (!isEngineReady()) { message.warning(t('app.engine-not-ready')); return }
   taskStore.resumeAllTask()
     .then(() => message.success(t('task.resume-all-task-success')))
     .catch(() => message.error(t('task.resume-all-task-fail')))
 }
 
 function pauseAll() {
+  if (!isEngineReady()) { message.warning(t('app.engine-not-ready')); return }
   taskStore.pauseAllTask()
     .then(() => message.success(t('task.pause-all-task-success')))
     .catch(() => message.error(t('task.pause-all-task-fail')))
 }
 
 function purgeRecord() {
+  if (!isEngineReady()) { message.warning(t('app.engine-not-ready')); return }
   taskStore.purgeTaskRecord()
     .then(() => message.success(t('task.purge-record-success')))
     .catch(() => message.error(t('task.purge-record-fail')))

@@ -90,8 +90,9 @@ onMounted(async () => {
       positiveText: t('app.yes'),
       negativeText: t('app.no'),
       onPositiveClick: async () => {
+        // Simultaneously: dialog close animation (Naive UI built-in) + window body fade
         appReady.value = false
-        await new Promise((r) => setTimeout(r, 300))
+        await new Promise((r) => setTimeout(r, 400))
         await appWindow.destroy()
       },
     })

@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app'
 import { useTaskStore } from '@/stores/task'
 import { usePreferenceStore } from '@/stores/preference'
 import { ADD_TASK_TYPE } from '@shared/constants'
+import { isEngineReady } from '@/api/aria2'
 import { detectResource, bytesToSize } from '@shared/utils'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { downloadDir } from '@tauri-apps/api/path'
@@ -222,7 +223,11 @@ async function handleSubmit() {
   } catch (e: any) {
     const errMsg = e?.message || String(e)
     console.error('[AddTask] submit error:', e)
-    message.error(errMsg, { duration: 5000, closable: true })
+    if (errMsg.includes('not initialized') || !isEngineReady()) {
+      message.error(t('app.engine-not-ready'), { duration: 5000, closable: true })
+    } else {
+      message.error(errMsg, { duration: 5000, closable: true })
+    }
   }
 }
 
