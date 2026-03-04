@@ -184,7 +184,9 @@ defineExpose({ open })
               <NIcon :size="40"><CloseCircleOutline /></NIcon>
             </div>
             <NText class="update-main-text">{{ t('preferences.check-update-failed') }}</NText>
-            <NText depth="3" class="update-error-msg">{{ errorMsg }}</NText>
+            <div class="update-error-detail">
+              <NText depth="3" class="update-error-msg">{{ errorMsg }}</NText>
+            </div>
             <NSpace justify="center" :size="8">
               <NButton size="small" @click="open">{{ t('app.retry') }}</NButton>
               <NButton size="small" quaternary @click="close">{{ t('app.close') }}</NButton>
@@ -231,7 +233,7 @@ defineExpose({ open })
 }
 .update-dialog-body {
   padding: 20px 28px 28px;
-  min-height: 200px;
+  height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -312,13 +314,19 @@ defineExpose({ open })
   padding: 0 8px;
 }
 
-.update-error-msg {
-  font-size: 11px;
-  word-break: break-all;
-  max-height: 60px;
+.update-error-detail {
+  width: 100%;
+  background: rgba(232, 128, 128, 0.06);
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-height: 52px;
   overflow-y: auto;
-  padding: 0 8px;
-  opacity: 0.5;
+}
+.update-error-msg {
+  font-size: 12.5px;
+  word-break: break-all;
+  opacity: 0.55;
+  line-height: 1.5;
 }
 
 .phase-switch-enter-active {
