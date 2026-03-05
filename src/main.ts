@@ -129,6 +129,19 @@ preferenceStore.loadPreference().then(async () => {
         console.warn('[aria2] WebSocket failed, using HTTP fallback:', e)
     }
 
+    try {
+        const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
+        const startUrls = await getCurrent()
+        if (startUrls && startUrls.length > 0) {
+            appStore.handleDeepLinkUrls(startUrls)
+        }
+        await onOpenUrl((urls) => {
+            appStore.handleDeepLinkUrls(urls)
+        })
+    } catch (e) {
+        console.warn('[deep-link] setup failed:', e)
+    }
+
     autoCheckForUpdate()
 
     let lastClipboardText = ''

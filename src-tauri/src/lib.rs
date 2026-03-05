@@ -4,11 +4,12 @@ mod menu;
 mod tray;
 
 use engine::EngineState;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
@@ -22,7 +23,22 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
+        ));
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let _ = app.emit("single-instance-triggered", &argv);
+            if let Some(w) = app.get_webview_window("main") {
+                let _: Result<(), _> = w.show();
+                let _: Result<(), _> = w.set_focus();
+            }
+        }));
+    }
+
+    builder = builder.plugin(tauri_plugin_deep_link::init());
+
+    builder
         .manage(EngineState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_config,
@@ -40,6 +56,7 @@ pub fn run() {
             let m = menu::build_menu(handle)?;
             app.set_menu(m)?;
             tray::setup_tray(handle)?;
+
             app.on_menu_event(|app, event| match event.id().as_ref() {
                 "new-task" => {
                     let _ = app.emit("menu-event", "new-task");
@@ -58,6 +75,13 @@ pub fn run() {
                 }
                 _ => {}
             });
+
+            let app_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
+                let _ = app_handle.emit("deep-link-open", &urls);
+            });
+
             Ok(())
         })
         .build(tauri::generate_context!())

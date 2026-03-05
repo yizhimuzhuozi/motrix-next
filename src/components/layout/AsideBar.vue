@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { ADD_TASK_TYPE } from '@shared/constants'
 import { NIcon, NTooltip } from 'naive-ui'
 import { ListOutline, AddOutline, SettingsOutline, HelpCircleOutline } from '@vicons/ionicons5'
 
+const { t } = useI18n()
 const router = useRouter()
 const appStore = useAppStore()
 const emit = defineEmits<{ 'show-about': [] }>()
@@ -35,7 +37,7 @@ function showAddTask() {
             <template #trigger>
               <NIcon :size="20"><ListOutline /></NIcon>
             </template>
-            Tasks
+            {{ t('app.task-list') }}
           </NTooltip>
         </li>
         <li class="non-draggable" @click="showAddTask">
@@ -43,7 +45,7 @@ function showAddTask() {
             <template #trigger>
               <NIcon :size="20"><AddOutline /></NIcon>
             </template>
-            New Task
+            {{ t('app.add-task') }}
           </NTooltip>
         </li>
       </ul>
@@ -53,7 +55,7 @@ function showAddTask() {
             <template #trigger>
               <NIcon :size="20"><HelpCircleOutline /></NIcon>
             </template>
-            About
+            {{ t('app.about') }}
           </NTooltip>
         </li>
         <li class="non-draggable" @click="nav('/preference/basic')">
@@ -61,7 +63,7 @@ function showAddTask() {
             <template #trigger>
               <NIcon :size="20"><SettingsOutline /></NIcon>
             </template>
-            Preferences
+            {{ t('app.preferences') }}
           </NTooltip>
         </li>
       </ul>

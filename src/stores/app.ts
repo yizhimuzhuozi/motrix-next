@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ADD_TASK_TYPE } from '@shared/constants'
 import { invoke } from '@tauri-apps/api/core'
-import { bytesToSize } from '@shared/utils'
+import { bytesToSize, decodeThunderLink } from '@shared/utils'
 
 const BASE_INTERVAL = 1000
 const PER_INTERVAL = 100
@@ -142,6 +142,31 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    function handleDeepLinkUrls(urls: string[]) {
+        if (!urls || urls.length === 0) return
+        const url = urls[0]
+        const lower = url.toLowerCase()
+        if (lower.endsWith('.torrent') || lower.startsWith('file://') && lower.includes('.torrent')) {
+            const filePath = url.startsWith('file://') ? decodeURIComponent(url.replace(/^file:\/\//, '')) : url
+            showAddTaskDialog(ADD_TASK_TYPE.TORRENT, [filePath])
+        } else if (lower.endsWith('.metalink') || lower.endsWith('.meta4') || (lower.startsWith('file://') && (lower.includes('.metalink') || lower.includes('.meta4')))) {
+            const filePath = url.startsWith('file://') ? decodeURIComponent(url.replace(/^file:\/\//, '')) : url
+            droppedTorrentPaths.value = [filePath]
+            addTaskType.value = ADD_TASK_TYPE.URI
+            addTaskUrl.value = filePath
+            addTaskVisible.value = true
+        } else if (lower.startsWith('magnet:')) {
+            addTaskUrl.value = url
+            showAddTaskDialog(ADD_TASK_TYPE.URI)
+        } else if (lower.startsWith('thunder://')) {
+            addTaskUrl.value = decodeThunderLink(url)
+            showAddTaskDialog(ADD_TASK_TYPE.URI)
+        } else if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('ftp://')) {
+            addTaskUrl.value = url
+            showAddTaskDialog(ADD_TASK_TYPE.URI)
+        }
+    }
+
     return {
         systemTheme,
         trayFocused,
@@ -169,5 +194,6 @@ export const useAppStore = defineStore('app', () => {
         fetchEngineInfo,
         fetchEngineOptions,
         fetchProgress,
+        handleDeepLinkUrls,
     }
 })

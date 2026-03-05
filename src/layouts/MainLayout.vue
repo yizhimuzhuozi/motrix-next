@@ -42,6 +42,8 @@ const updateDialogRef = ref<InstanceType<typeof UpdateDialog> | null>(null)
 let unlistenDragDrop: (() => void) | null = null
 let unlistenMenuEvent: (() => void) | null = null
 let unlistenCloseRequested: (() => void) | null = null
+let unlistenDeepLink: (() => void) | null = null
+let unlistenSingleInstance: (() => void) | null = null
 
 watch(() => appStore.pendingUpdate, (update) => {
   if (update) {
@@ -52,7 +54,6 @@ watch(() => appStore.pendingUpdate, (update) => {
 
 async function handleExitConfirm() {
   isExiting.value = true
-  // Both dialog and window body fade out simultaneously
   showExitDialog.value = false
   appReady.value = false
   await new Promise((r) => setTimeout(r, 450))
@@ -72,8 +73,11 @@ onMounted(async () => {
     if (event.payload.type === 'drop') {
       const paths = event.payload.paths
       const torrentPaths = paths?.filter((p: string) => p.endsWith('.torrent')) || []
+      const metalinkPaths = paths?.filter((p: string) => p.endsWith('.metalink') || p.endsWith('.meta4')) || []
       if (torrentPaths.length > 0) {
         appStore.showAddTaskDialog(ADD_TASK_TYPE.TORRENT, torrentPaths)
+      } else if (metalinkPaths.length > 0) {
+        appStore.handleDeepLinkUrls(metalinkPaths)
       }
     }
   })
@@ -109,6 +113,16 @@ onMounted(async () => {
     }
   })
 
+  unlistenDeepLink = await listen<string[]>('deep-link-open', (event) => {
+    appStore.handleDeepLinkUrls(event.payload)
+  })
+
+  unlistenSingleInstance = await listen<string[]>('single-instance-triggered', (event) => {
+    const argv = event.payload
+    const urls = argv.filter(a => !a.startsWith('-') && (a.includes('://') || a.endsWith('.torrent') || a.endsWith('.metalink') || a.endsWith('.meta4')))
+    if (urls.length > 0) appStore.handleDeepLinkUrls(urls)
+  })
+
   const appWindow = getCurrentWindow()
   unlistenCloseRequested = await appWindow.onCloseRequested(async (event) => {
     event.preventDefault()
@@ -122,6 +136,8 @@ onUnmounted(() => {
   if (unlistenDragDrop) unlistenDragDrop()
   if (unlistenMenuEvent) unlistenMenuEvent()
   if (unlistenCloseRequested) unlistenCloseRequested()
+  if (unlistenDeepLink) unlistenDeepLink()
+  if (unlistenSingleInstance) unlistenSingleInstance()
 })
 </script>
 
