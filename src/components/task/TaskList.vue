@@ -2,7 +2,10 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useTaskStore } from '@/stores/task'
 import { useI18n } from 'vue-i18n'
+import { useTheme } from '@/composables/useTheme'
 import TaskItem from './TaskItem.vue'
+import watermarkDark from '@/assets/brand-watermark-dark.png'
+import watermarkLight from '@/assets/brand-watermark-light.png'
 
 const emit = defineEmits<{
   pause: [task: Record<string, unknown>]
@@ -17,6 +20,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const taskStore = useTaskStore()
+const { isDark } = useTheme()
+const watermarkSrc = computed(() => isDark.value ? watermarkLight : watermarkDark)
 
 const mounted = ref(false)
 const taskList = ref<Record<string, unknown>[]>([])
@@ -78,7 +83,7 @@ function handleItemClick(task: Record<string, unknown>, event: MouseEvent) {
     <Transition name="fade">
       <div v-if="mounted && taskList.length === 0" class="no-task">
         <div class="no-task-inner">
-          <div class="no-task-brand">Motrix Next</div>
+          <img :src="watermarkSrc" alt="Motrix Next" class="no-task-brand" />
           <div class="no-task-text">{{ t('task.no-task') || 'No Task' }}</div>
         </div>
       </div>
@@ -135,13 +140,10 @@ function handleItemClick(task: Record<string, unknown>, event: MouseEvent) {
   width: 100%;
 }
 .no-task-brand {
-  font-size: 72px;
-  font-weight: 400;
-  font-family: Futura, 'Avenir Next', 'SF Pro Display', system-ui, sans-serif;
-  letter-spacing: 6px;
-  color: rgba(142, 153, 164, 0.4);
-  line-height: 1;
-  text-transform: uppercase;
+  max-width: 320px;
+  width: 60%;
+  opacity: 0.35;
+  pointer-events: none;
   margin-bottom: 16px;
 }
 .no-task-text {
