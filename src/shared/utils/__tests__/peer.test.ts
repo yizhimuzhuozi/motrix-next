@@ -26,6 +26,19 @@ describe('peerIdParser', () => {
   it('returns Unknown for UNKNOWN_PEERID constant', () => {
     expect(peerIdParser('0000000000000000000000000000000000000000')).toContain('unknown')
   })
+
+  it('extracts version from peer ID with trailing dashes', () => {
+    // -UT3500-xxx... -> µTorrent 3.5.0.0 (trailing dashes stripped)
+    const result = peerIdParser('-UT3500-abcdefghijkl')
+    expect(result).toContain('µTorrent')
+  })
+
+  it('handles URI-encoded peer ID', () => {
+    // aria2 sometimes returns percent-encoded IDs; peerIdParser decodes them
+    const encoded = encodeURIComponent('-qB4250-abcdefghijkl')
+    const result = peerIdParser(encoded)
+    expect(result).toContain('qBittorrent')
+  })
 })
 
 describe('bitfieldToPercent', () => {
@@ -55,5 +68,15 @@ describe('bitfieldToGraphic', () => {
   it('returns graphic blocks for valid bitfield', () => {
     const result = bitfieldToGraphic('ff')
     expect(result.length).toBeGreaterThan(0)
+  })
+
+  it('maps hex to GRAPHIC characters (░▒▓█)', () => {
+    // GRAPHIC = '░▒▓█', index = Math.floor(hex/4)
+    // hex 0 -> 0/4=0 -> ░
+    // hex f (15) -> 15/4=3 -> █
+    const result0 = bitfieldToGraphic('0')
+    expect(result0.trim()).toBe('░')
+    const resultF = bitfieldToGraphic('f')
+    expect(resultF.trim()).toBe('█')
   })
 })
