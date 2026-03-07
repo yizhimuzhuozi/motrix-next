@@ -184,6 +184,7 @@ async function handleSelectDir() {
 
 function loadForm() {
   form.value = buildForm()
+  savedSnapshot.value = JSON.parse(JSON.stringify(form.value))
 
   const ul = parseSpeedLimit(form.value.maxOverallUploadLimit)
   uploadSpeedValue.value = ul.num

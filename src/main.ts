@@ -25,6 +25,7 @@ app.mount('#app')
 nextTick(() => {
     setTimeout(() => {
         getCurrentWindow().show()
+        getCurrentWindow().setFocus()
     }, 50)
 })
 

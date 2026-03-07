@@ -139,6 +139,7 @@ function buildForm() {
 
 function loadForm() {
   form.value = buildForm()
+  savedSnapshot.value = JSON.parse(JSON.stringify(form.value))
 }
 
 async function loadPaths() {
