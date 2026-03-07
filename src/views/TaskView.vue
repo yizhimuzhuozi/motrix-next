@@ -82,15 +82,26 @@ onBeforeUnmount(stopPolling)
 
 // File deletion handled by @/composables/useFileDelete
 function handlePauseTask(task: Aria2Task) {
-  taskStore.pauseTask(task).catch(console.error)
+  const taskName = getTaskName(task, { defaultName: 'Unknown', maxLen: 40 })
+  taskStore
+    .pauseTask(task)
+    .then(() => message.success(t('task.pause-task-success', { taskName })))
+    .catch(() => message.error(t('task.pause-task-fail', { taskName })))
 }
 function handleResumeTask(task: Aria2Task) {
+  const taskName = getTaskName(task, { defaultName: 'Unknown', maxLen: 40 })
   const { COMPLETE, ERROR, REMOVED } = TASK_STATUS
   if (task.status === ERROR || task.status === COMPLETE || task.status === REMOVED) {
     // Stopped tasks cannot be unpause'd — restart by re-adding the URI
-    taskStore.restartTask(task).catch(console.error)
+    taskStore
+      .restartTask(task)
+      .then(() => message.success(t('task.resume-task-success', { taskName })))
+      .catch(() => message.error(t('task.resume-task-fail', { taskName })))
   } else {
-    taskStore.resumeTask(task).catch(console.error)
+    taskStore
+      .resumeTask(task)
+      .then(() => message.success(t('task.resume-task-success', { taskName })))
+      .catch(() => message.error(t('task.resume-task-fail', { taskName })))
   }
 }
 function handleDeleteTask(task: Aria2Task) {
@@ -131,17 +142,24 @@ function handleDeleteTask(task: Aria2Task) {
         if (deleteFiles.value) {
           await deleteTaskFiles(task)
         }
+        message.success(t('task.delete-task-success', { taskName: name }))
       } catch (e) {
         logger.error('TaskView.deleteTask', e)
+        message.error(t('task.delete-task-fail', { taskName: name }))
       }
     },
   })
 }
 function handleDeleteRecord(task: Aria2Task) {
-  taskStore.removeTaskRecord(task).catch(console.error)
+  const taskName = getTaskName(task, { defaultName: 'Unknown', maxLen: 40 })
+  taskStore
+    .removeTaskRecord(task)
+    .then(() => message.success(t('task.remove-record-success', { taskName })))
+    .catch(() => message.error(t('task.remove-record-fail', { taskName })))
 }
 function handleCopyLink(task: Aria2Task) {
   navigator.clipboard.writeText(getTaskUri(task))
+  message.success(t('task.copy-link-success'))
 }
 function handleShowInfo(task: Aria2Task) {
   taskStore.showTaskDetail(task)

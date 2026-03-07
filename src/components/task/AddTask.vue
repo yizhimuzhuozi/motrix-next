@@ -323,6 +323,7 @@ async function handleSubmit() {
     } else {
       return
     }
+    message.success(t('task.add-task-success') || 'Task added successfully')
     handleClose()
     if (form.value.newTaskShowDownloading) {
       router.push({ path: '/task/active' }).catch(() => {
