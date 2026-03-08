@@ -28,3 +28,4 @@ motrix-legacy/
 
 # Original Motrix upstream source
 motrix-very-legacy/
+package-lock.json
