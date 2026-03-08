@@ -15,6 +15,11 @@
   [![Download](https://img.shields.io/badge/Download-2b2b2b?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDE1djRhMiAyIDAgMCAxLTIgMkg1YTIgMiAwIDAgMS0yLTJ2LTQiLz48cG9seWxpbmUgcG9pbnRzPSI3IDEwIDEyIDE1IDE3IDEwIi8+PGxpbmUgeDE9IjEyIiB5MT0iMTUiIHgyPSIxMiIgeTI9IjMiLz48L3N2Zz4=&logoColor=white)](https://github.com/AnInsomniacy/motrix-next/releases)
 </div>
 
+> [!CAUTION]
+> **Upgrading from v1.x to v2.0.0**
+>
+> v2.0.0 is a major rewrite. The in-app auto-updater **cannot** upgrade from v1.x to v2.0.0 and will show an error. Please **manually download** the latest release from [GitHub Releases](https://github.com/AnInsomniacy/motrix-next/releases) and install it over your existing version. All future updates from v2.0.0 onwards will work via auto-update as usual.
+
 ---
 
 <div align="center">
