@@ -95,7 +95,7 @@ function buildForm() {
   }
 }
 
-const { form, isDirty, handleSave, handleReset } = usePreferenceForm({
+const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceForm({
   buildForm,
   buildSystemConfig: (f) => ({
     dir: f.dir,
@@ -264,6 +264,7 @@ onMounted(async () => {
     logger.debug('Basic.platform', e)
   }
   loadForm()
+  resetSnapshot()
 })
 </script>
 

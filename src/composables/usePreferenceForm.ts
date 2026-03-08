@@ -97,6 +97,11 @@ export function usePreferenceForm<T extends Record<string, unknown>>(options: Us
     savedSnapshot.value = JSON.parse(JSON.stringify(form.value)) as T
   }
 
+  /** Marks the current form state as the saved baseline (clears dirty flag). */
+  function resetSnapshot(): void {
+    savedSnapshot.value = JSON.parse(JSON.stringify(form.value)) as T
+  }
+
   // ── Lifecycle ───────────────────────────────────────────────────────
 
   onMounted(() => {
@@ -116,5 +121,6 @@ export function usePreferenceForm<T extends Record<string, unknown>>(options: Us
     isDirty,
     handleSave,
     handleReset,
+    resetSnapshot,
   }
 }

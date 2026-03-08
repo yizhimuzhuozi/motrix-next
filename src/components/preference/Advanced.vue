@@ -159,7 +159,7 @@ function generateSecret(): string {
   return Array.from(values, (v) => chars[v % chars.length]).join('')
 }
 
-const { form, isDirty, handleSave, handleReset } = usePreferenceForm({
+const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceForm({
   buildForm,
   buildSystemConfig: (f) => ({
     'rpc-listen-port': String(f.rpcListenPort),
@@ -324,6 +324,7 @@ function handleFactoryReset() {
 
 onMounted(() => {
   loadForm()
+  resetSnapshot()
   loadPaths()
 })
 </script>
