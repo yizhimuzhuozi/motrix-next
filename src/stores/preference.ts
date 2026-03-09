@@ -51,6 +51,7 @@ export const usePreferenceStore = defineStore('preference', () => {
       await store.save()
     } catch (e) {
       logger.error('PreferenceStore.savePreference', e)
+      throw e
     }
   }
 

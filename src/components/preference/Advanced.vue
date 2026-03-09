@@ -290,10 +290,18 @@ function handleSessionReset() {
     negativeText: t('app.no'),
     onPositiveClick: async () => {
       try {
+        // Fetch ALL tasks from aria2 across every category.
+        // taskStore.taskList only holds the currently displayed tab,
+        // so we query aria2 directly to get the complete queue.
+        const { fetchTaskList } = await import('@/api/aria2')
+        const [activeTasks, stoppedTasks] = await Promise.all([
+          fetchTaskList({ type: 'active' }),
+          fetchTaskList({ type: 'stopped' }),
+        ])
+        const allGids = [...activeTasks, ...stoppedTasks].map((t) => t.gid)
         // Force-remove all tasks from aria2's in-memory queue.
-        // Without this, paused/active tasks stay in memory and the
-        // 10-second save-session-interval writes them back to disk.
-        const allGids = taskStore.taskList.map((t) => t.gid)
+        // Without this, tasks stay in memory and the 10-second
+        // save-session-interval writes them back to disk.
         if (allGids.length > 0) {
           await taskStore.batchRemoveTask(allGids)
         }
