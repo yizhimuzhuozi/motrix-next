@@ -149,12 +149,11 @@ watch(
     if (hasBatch.value) {
       // Resolve file-based items and auto-switch tab
       await resolveUnresolvedItems()
-      // Flush URI batch items into the editable textarea, then drain from batch.
-      // This makes form.uris the single source of truth for URI submissions.
+      // Flush URI batch items into the editable textarea via normalized merge
       const uriItems = batch.value.filter((i) => i.kind === 'uri')
       if (uriItems.length > 0) {
-        form.value.uris = uriItems.map((i) => i.payload).join('\n')
-        appStore.pendingBatch = batch.value.filter((i) => i.kind !== 'uri')
+        mergeUrisIntoForm(uriItems.map((i) => i.payload))
+        drainUriItemsFromBatch()
       }
       if (fileItems.value.length > 0) {
         activeTab.value = ADD_TASK_TYPE.TORRENT
@@ -182,13 +181,11 @@ watch(
   () => batch.value.length,
   async (newLen, oldLen) => {
     if (!props.show || newLen <= oldLen) return
-    // Flush any newly added URI items into the editable textarea (append, don't overwrite)
+    // Flush any newly added URI items via normalized merge (dedup against existing)
     const uriItems = batch.value.filter((i) => i.kind === 'uri')
     if (uriItems.length > 0) {
-      const existing = form.value.uris.trim()
-      const incoming = uriItems.map((i) => i.payload).join('\n')
-      form.value.uris = existing ? `${existing}\n${incoming}` : incoming
-      appStore.pendingBatch = batch.value.filter((i) => i.kind !== 'uri')
+      mergeUrisIntoForm(uriItems.map((i) => i.payload))
+      drainUriItemsFromBatch()
     }
     await resolveUnresolvedItems()
     if (fileItems.value.length > 0) {
@@ -196,6 +193,41 @@ watch(
     }
   },
 )
+
+// ── URI normalization helpers ────────────────────────────────────────
+
+/** Split, trim, remove blanks, and deduplicate URI lines by first occurrence. */
+function normalizeUriLines(text: string): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (line && !seen.has(line)) {
+      seen.add(line)
+      result.push(line)
+    }
+  }
+  return result
+}
+
+/** Merge incoming URIs into form.uris with order-preserving dedup against existing content. */
+function mergeUrisIntoForm(incoming: string[]): void {
+  const existing = normalizeUriLines(form.value.uris)
+  const seen = new Set(existing)
+  for (const uri of incoming) {
+    const trimmed = uri.trim()
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed)
+      existing.push(trimmed)
+    }
+  }
+  form.value.uris = existing.join('\n')
+}
+
+/** Remove all URI-kind items from pendingBatch, keeping file items intact. */
+function drainUriItemsFromBatch(): void {
+  appStore.pendingBatch = batch.value.filter((i) => i.kind !== 'uri')
+}
 
 // ── File resolution ─────────────────────────────────────────────────
 
@@ -350,6 +382,7 @@ function handleClose() {
   form.value.allProxy = ''
   submitting.value = false
   selectedBatchIndex.value = 0
+  showBatchList.value = false
 }
 
 async function handleSubmit() {
@@ -385,7 +418,7 @@ async function handleSubmit() {
     } else {
       message.success(t('task.add-task-success') || 'Task added successfully')
       handleClose()
-      if (config.newTaskShowDownloading !== false) {
+      if (preferenceStore.config.newTaskShowDownloading !== false) {
         router.push({ path: '/task/active' }).catch(() => {})
       }
     }
@@ -436,7 +469,7 @@ async function submitBatch(options: Aria2EngineOptions) {
 
 async function submitManualUris(options: Aria2EngineOptions) {
   if (!form.value.uris.trim()) return
-  const uris = form.value.uris.split('\n').filter((u: string) => u.trim())
+  const uris = normalizeUriLines(form.value.uris)
   if (uris.length > 1 && form.value.out) {
     delete options.out
     let outs = buildOuts(uris, form.value.out)
