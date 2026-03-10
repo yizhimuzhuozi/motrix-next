@@ -367,7 +367,7 @@ onUnmounted(() => {
         </NCheckbox>
       </div>
       <template #footer>
-        <NSpace justify="center">
+        <NSpace justify="end">
           <NButton class="exit-btn" @click="handleExitCancel">
             {{ t('app.cancel') }}
           </NButton>
