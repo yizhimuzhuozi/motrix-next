@@ -6,7 +6,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Rect,
 };
 #[cfg(not(target_os = "linux"))]
-use tauri::PhysicalPosition;
+use tauri::LogicalPosition;
 #[cfg(target_os = "linux")]
 use tauri::Emitter;
 
@@ -35,7 +35,7 @@ fn ensure_tray_popup(app: &AppHandle) {
 
     let _popup = WebviewWindowBuilder::new(app, "tray-menu", tauri::WebviewUrl::App("/tray-menu".into()))
         .title("")
-        .inner_size(232.0, 200.0)
+        .inner_size(POPUP_WIDTH, POPUP_HEIGHT)
         .visible(false)
         .decorations(false)
         .transparent(true)
@@ -81,33 +81,45 @@ fn show_tray_popup(app: &AppHandle, icon_rect: Rect) {
         return;
     };
 
+    // ── DPI normalization: convert everything to logical coordinates ──
+    // Physical pixels vary with Windows scaling (100%–200%).  Logical
+    // pixels are DPI-independent and match CSS pixels, so all arithmetic
+    // must happen in logical space.
+    let scale = popup
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+
+    // Convert icon rect from physical to logical.
     let (icon_x, icon_y) = match icon_rect.position {
-        tauri::Position::Physical(p) => (p.x as f64, p.y as f64),
+        tauri::Position::Physical(p) => (p.x as f64 / scale, p.y as f64 / scale),
         tauri::Position::Logical(p) => (p.x, p.y),
     };
     let (icon_w, icon_h) = match icon_rect.size {
-        tauri::Size::Physical(s) => (s.width as f64, s.height as f64),
+        tauri::Size::Physical(s) => (s.width as f64 / scale, s.height as f64 / scale),
         tauri::Size::Logical(s) => (s.width, s.height),
     };
 
-    // Resolve the monitor for screen bounds.
+    // Convert monitor size from physical to logical.
     let (screen_w, screen_h) = popup
         .current_monitor()
         .ok()
         .flatten()
         .map(|m| {
             let size = m.size();
-            (size.width as f64, size.height as f64)
+            (size.width as f64 / scale, size.height as f64 / scale)
         })
         .unwrap_or((1920.0, 1080.0));
 
-    // Center popup horizontally on the tray icon.
+    // Center popup horizontally on the tray icon (all in logical pixels).
     let mut x = icon_x + icon_w / 2.0 - POPUP_WIDTH / 2.0;
 
     // Determine direction based on icon position:
     // Top half → below icon, bottom half → above icon.
     let mut y = if icon_y < screen_h / 2.0 {
-        // Icon is in the top half (macOS menu bar, or top taskbar)
+        // Icon is in the top half (macOS menu bar, or Windows top taskbar)
         icon_y + icon_h + POPUP_GAP
     } else {
         // Icon is in the bottom half (Windows default bottom taskbar)
@@ -118,7 +130,7 @@ fn show_tray_popup(app: &AppHandle, icon_rect: Rect) {
     x = x.clamp(0.0, (screen_w - POPUP_WIDTH).max(0.0));
     y = y.clamp(0.0, (screen_h - POPUP_HEIGHT).max(0.0));
 
-    let _ = popup.set_position(PhysicalPosition::new(x as i32, y as i32));
+    let _ = popup.set_position(LogicalPosition::new(x, y));
     let _ = popup.emit("tray-popup-show", ());
     let _ = popup.show();
     let _ = popup.set_focus();

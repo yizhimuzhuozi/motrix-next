@@ -85,13 +85,13 @@ describe('tray.rs — icon_rect-based custom tray menu', () => {
       expect(height).toBeGreaterThanOrEqual(180)
     })
 
-    it('inner_size height matches POPUP_HEIGHT constant', () => {
-      // The window builder inner_size must use the same height as POPUP_HEIGHT
-      const heightMatch = traySource.match(/const POPUP_HEIGHT:\s*f64\s*=\s*([\d.]+)/)
-      const innerMatch = traySource.match(/\.inner_size\(([\d.]+),\s*([\d.]+)\)/)
-      expect(heightMatch).toBeTruthy()
-      expect(innerMatch).toBeTruthy()
-      expect(parseFloat(innerMatch![2])).toBe(parseFloat(heightMatch![1]))
+    it('inner_size uses POPUP_WIDTH and POPUP_HEIGHT constants', () => {
+      // Tauri WebviewWindowBuilder.inner_size(f64, f64) treats args as logical.
+      // The constants POPUP_WIDTH/POPUP_HEIGHT are used directly.
+      const ensureBody = extractFunctionBody(traySource, 'ensure_tray_popup')
+      expect(ensureBody).toBeTruthy()
+      expect(ensureBody).toContain('POPUP_WIDTH')
+      expect(ensureBody).toContain('POPUP_HEIGHT')
     })
   })
 
