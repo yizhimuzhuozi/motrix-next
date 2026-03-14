@@ -361,3 +361,70 @@ mod tests {
 pub fn is_autostart_launch() -> bool {
     std::env::args().any(|a| a == "--autostart")
 }
+
+/// Collects all log files from the app log directory and compresses them
+/// into a ZIP archive at the user-specified path (chosen via a save dialog
+/// on the frontend). Includes a `system-info.json` with OS, architecture,
+/// and app version for diagnostic context.
+/// Returns the full path to the created ZIP file.
+#[tauri::command]
+pub async fn export_diagnostic_logs(app: AppHandle, save_path: String) -> Result<String, AppError> {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| AppError::Io(e.to_string()))?;
+
+    if !log_dir.exists() {
+        return Err(AppError::NotFound("Log directory does not exist".into()));
+    }
+
+    let zip_path = std::path::PathBuf::from(&save_path);
+
+    let zip_file = std::fs::File::create(&zip_path)
+        .map_err(|e| AppError::Io(format!("Failed to create zip: {}", e)))?;
+    let mut zip_writer = zip::ZipWriter::new(zip_file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    // ── System info: embed machine context for diagnostics ──────────
+    let pkg = app.package_info();
+    let system_info = serde_json::json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "app_version": pkg.version.to_string(),
+        "app_name": pkg.name,
+        "exported_at": chrono::Local::now().to_rfc3339(),
+    });
+    let info_bytes = serde_json::to_vec_pretty(&system_info)
+        .map_err(|e| AppError::Io(format!("Failed to serialize system info: {}", e)))?;
+    zip_writer
+        .start_file("system-info.json", options)
+        .map_err(|e| AppError::Io(format!("Failed to add system-info.json: {}", e)))?;
+    std::io::Write::write_all(&mut zip_writer, &info_bytes)
+        .map_err(|e| AppError::Io(format!("Failed to write system-info.json: {}", e)))?;
+
+    // ── Log files ───────────────────────────────────────────────────
+    let entries = std::fs::read_dir(&log_dir)
+        .map_err(|e| AppError::Io(format!("Failed to read log dir: {}", e)))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            let content = std::fs::read(&path)
+                .map_err(|e| AppError::Io(format!("Failed to read {}: {}", name, e)))?;
+            zip_writer
+                .start_file(name.to_string(), options)
+                .map_err(|e| AppError::Io(format!("Failed to add {} to zip: {}", name, e)))?;
+            std::io::Write::write_all(&mut zip_writer, &content)
+                .map_err(|e| AppError::Io(format!("Failed to write {}: {}", name, e)))?;
+        }
+    }
+
+    zip_writer
+        .finish()
+        .map_err(|e| AppError::Io(format!("Failed to finalize zip: {}", e)))?;
+
+    log::info!("Exported diagnostic logs to {}", zip_path.display());
+    Ok(zip_path.to_string_lossy().to_string())
+}

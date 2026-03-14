@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Alapértelmezések visszaállítva',
   'restart-required': 'Újraindítás szükséges az összes módosítás alkalmazásához',
   'installing': 'Telepítés…',
+  'export-diagnostic-logs': 'Diagnosztikai naplók exportálása',
+  'export-diagnostic-logs-success': 'Naplók exportálva ide: {path}',
+  'export-diagnostic-logs-failed': 'Naplók exportálása sikertelen',
+  'log-level': 'Naplózási szint',
+  'log-level-restart-confirm': 'A naplózási szint változása az alkalmazás újraindítása után lép érvénybe.',
+  'restart-now': 'Újraindítás most',
 }

@@ -54,7 +54,7 @@ describe('buildAdvancedForm', () => {
     expect(form.rpcListenPort).toBe(ENGINE_RPC_PORT)
     expect(form.listenPort).toBe(21301)
     expect(form.dhtListenPort).toBe(26701)
-    expect(form.logLevel).toBe('warn')
+    expect(form.logLevel).toBe('info')
     expect(form.enableUpnp).toBe(false)
   })
 

@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'تمت استعادة الإعدادات الافتراضية',
   'restart-required': 'يلزم إعادة التشغيل لتطبيق جميع التغييرات',
   'installing': 'جارِ التثبيت…',
+  'export-diagnostic-logs': 'تصدير سجلات التشخيص',
+  'export-diagnostic-logs-success': 'تم تصدير السجلات إلى {path}',
+  'export-diagnostic-logs-failed': 'فشل تصدير السجلات',
+  'log-level': 'مستوى السجل',
+  'log-level-restart-confirm': 'سيتم تطبيق تغيير مستوى السجل بعد إعادة تشغيل التطبيق.',
+  'restart-now': 'إعادة التشغيل الآن',
 }

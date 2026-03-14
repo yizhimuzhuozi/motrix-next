@@ -33,6 +33,16 @@ if (import.meta.env.PROD) {
 
 app.mount('#app')
 
+// ── Global error boundary — catch all uncaught exceptions to log file ──
+// Registered after mount (UI renders first) but before init block (covers
+// all async code paths: deep-link, clipboard, engine, tracker sync).
+window.addEventListener('error', (e) => {
+  logger.error('GlobalError', e.error ?? e.message)
+})
+window.addEventListener('unhandledrejection', (e) => {
+  logger.error('UnhandledRejection', e.reason)
+})
+
 // ── Main window initialization ──────────────────────────────────────
 
 {

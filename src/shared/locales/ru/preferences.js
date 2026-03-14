@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Настройки по умолчанию восстановлены',
   'restart-required': 'Для применения всех изменений требуется перезапуск',
   'installing': 'Установка…',
+  'export-diagnostic-logs': 'Экспорт диагностических журналов',
+  'export-diagnostic-logs-success': 'Журналы экспортированы в {path}',
+  'export-diagnostic-logs-failed': 'Не удалось экспортировать журналы',
+  'log-level': 'Уровень журналирования',
+  'log-level-restart-confirm': 'Изменение уровня журналирования вступит в силу после перезапуска приложения.',
+  'restart-now': 'Перезапустить сейчас',
 }

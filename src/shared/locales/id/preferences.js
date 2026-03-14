@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Default dikembalikan',
   'restart-required': 'Perlu mulai ulang untuk menerapkan semua perubahan',
   'installing': 'Memasang…',
+  'export-diagnostic-logs': 'Ekspor log diagnostik',
+  'export-diagnostic-logs-success': 'Log diekspor ke {path}',
+  'export-diagnostic-logs-failed': 'Gagal mengekspor log',
+  'log-level': 'Level log',
+  'log-level-restart-confirm': 'Perubahan level log akan diterapkan setelah aplikasi dimulai ulang.',
+  'restart-now': 'Mulai ulang sekarang',
 }

@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Настройките са възстановени',
   'restart-required': 'Изисква се рестартиране за прилагане на всички промени',
   'installing': 'Инсталиране…',
+  'export-diagnostic-logs': 'Експортиране на диагностични логове',
+  'export-diagnostic-logs-success': 'Логовете са експортирани в {path}',
+  'export-diagnostic-logs-failed': 'Неуспешно експортиране на логове',
+  'log-level': 'Ниво на логване',
+  'log-level-restart-confirm': 'Промяната на нивото на логване ще влезе в сила след рестартиране на приложението.',
+  'restart-now': 'Рестартирай сега',
 }

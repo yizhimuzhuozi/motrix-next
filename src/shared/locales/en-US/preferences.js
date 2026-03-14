@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Defaults restored',
   'restart-required': 'Restart required to apply all changes',
   'installing': 'Installing…',
+  'export-diagnostic-logs': 'Export Diagnostic Logs',
+  'export-diagnostic-logs-success': 'Logs exported to {path}',
+  'export-diagnostic-logs-failed': 'Failed to export logs',
+  'log-level': 'Log Level',
+  'log-level-restart-confirm': 'Log level change will take effect after restarting the app.',
+  'restart-now': 'Restart Now',
 }

@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Đã khôi phục mặc định',
   'restart-required': 'Cần khởi động lại để áp dụng tất cả thay đổi',
   'installing': 'Đang cài đặt…',
+  'export-diagnostic-logs': 'Xuất nhật ký chẩn đoán',
+  'export-diagnostic-logs-success': 'Nhật ký đã được xuất tới {path}',
+  'export-diagnostic-logs-failed': 'Xuất nhật ký thất bại',
+  'log-level': 'Cấp độ nhật ký',
+  'log-level-restart-confirm': 'Thay đổi cấp độ nhật ký sẽ có hiệu lực sau khi khởi động lại ứng dụng.',
+  'restart-now': 'Khởi động lại ngay',
 }

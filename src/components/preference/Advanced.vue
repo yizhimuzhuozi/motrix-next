@@ -9,7 +9,8 @@ import { useEngineRestart } from '@/composables/useEngineRestart'
 import { useTaskStore } from '@/stores/task'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { useIpc } from '@/composables/useIpc'
-import { appDataDir, join, resolveResource } from '@tauri-apps/api/path'
+import { appDataDir, downloadDir, join, resolveResource } from '@tauri-apps/api/path'
+import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { LOG_LEVELS, PROXY_SCOPE_OPTIONS } from '@shared/constants'
 import { convertTrackerDataToLine } from '@shared/utils/tracker'
 import {
@@ -40,7 +41,7 @@ import {
   useDialog,
 } from 'naive-ui'
 import { useAppMessage } from '@/composables/useAppMessage'
-import { SyncOutline, DiceOutline, RefreshOutline } from '@vicons/ionicons5'
+import { SyncOutline, DiceOutline, RefreshOutline, DownloadOutline } from '@vicons/ionicons5'
 import { logger } from '@shared/logger'
 import PreferenceActionBar from './PreferenceActionBar.vue'
 
@@ -198,6 +199,23 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceF
           await nextTick()
           await new Promise((r) => requestAnimationFrame(r))
           await restartEngine({ port, secret })
+        },
+      })
+    }
+
+    // Log level changes need a full app relaunch (not engine restart),
+    // because tauri-plugin-log is configured at process startup.
+    if (changed.logLevel !== undefined && changed.logLevel !== prevConfig.logLevel) {
+      dialog.info({
+        title: t('preferences.restart-required'),
+        content: t('preferences.log-level-restart-confirm'),
+        positiveText: t('preferences.restart-now'),
+        negativeText: t('preferences.engine-restart-later'),
+        maskClosable: false,
+        onPositiveClick: async () => {
+          const { stopEngine } = useIpc()
+          await stopEngine()
+          await relaunch()
         },
       })
     }
@@ -402,6 +420,29 @@ function handleFactoryReset() {
   })
 }
 
+const exportingLogs = ref(false)
+
+async function handleExportLogs() {
+  try {
+    const defaultDir = await downloadDir()
+    const savePath = await saveDialog({
+      title: t('preferences.export-diagnostic-logs'),
+      defaultPath: `${defaultDir}/motrix-next-logs.zip`,
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    })
+    if (!savePath) return // user cancelled
+
+    exportingLogs.value = true
+    const zipPath = await invoke<string>('export_diagnostic_logs', { savePath })
+    message.success(t('preferences.export-diagnostic-logs-success', { path: zipPath }))
+  } catch (e) {
+    logger.error('Advanced.exportLogs', e)
+    message.error(t('preferences.export-diagnostic-logs-failed'))
+  } finally {
+    exportingLogs.value = false
+  }
+}
+
 onMounted(() => {
   loadForm()
   resetSnapshot()
@@ -584,6 +625,12 @@ onMounted(() => {
       </NFormItem>
       <NFormItem :show-label="false">
         <NSpace>
+          <NButton class="export-logs-btn" ghost :loading="exportingLogs" @click="handleExportLogs">
+            <template #icon>
+              <NIcon><DownloadOutline /></NIcon>
+            </template>
+            {{ t('preferences.export-diagnostic-logs') }}
+          </NButton>
           <NButton type="warning" ghost @click="handleSessionReset">{{ t('preferences.session-reset') }}</NButton>
           <NButton type="error" ghost @click="handleFactoryReset">{{ t('preferences.factory-reset') }}</NButton>
         </NSpace>
@@ -656,6 +703,29 @@ onMounted(() => {
 }
 .restart-engine-btn :deep(.n-button__state-border) {
   border-color: var(--btn-warning) !important;
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Export Logs — primary-toned ghost button with M3 easing ────── */
+.export-logs-btn {
+  color: var(--color-primary, #5b93d5) !important;
+  border-color: var(--color-primary, #5b93d5) !important;
+  --btn-primary: var(--color-primary, #5b93d5);
+  transition:
+    color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.export-logs-btn:hover {
+  background-color: color-mix(in srgb, var(--btn-primary) 12%, transparent) !important;
+}
+.export-logs-btn :deep(.n-button__border) {
+  border-color: var(--btn-primary) !important;
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.export-logs-btn :deep(.n-button__state-border) {
+  border-color: var(--btn-primary) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 

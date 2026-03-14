@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'デフォルト設定に戻しました',
   'restart-required': 'すべての変更を適用するには再起動が必要です',
   'installing': 'インストール中…',
+  'export-diagnostic-logs': '診断ログをエクスポート',
+  'export-diagnostic-logs-success': 'ログを {path} にエクスポートしました',
+  'export-diagnostic-logs-failed': 'ログのエクスポートに失敗しました',
+  'log-level': 'ログレベル',
+  'log-level-restart-confirm': 'ログレベルの変更はアプリの再起動後に反映されます。',
+  'restart-now': '今すぐ再起動',
 }

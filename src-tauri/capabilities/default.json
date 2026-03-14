@@ -54,6 +54,7 @@
     "autostart:default",
     "updater:default",
     "deep-link:default",
-    "locale:default"
+    "locale:default",
+    "log:default"
   ]
 }

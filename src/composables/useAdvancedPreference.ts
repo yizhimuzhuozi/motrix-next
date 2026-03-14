@@ -93,7 +93,7 @@ export function buildAdvancedSystemConfig(f: AdvancedForm): Record<string, strin
     'listen-port': String(f.listenPort),
     'dht-listen-port': String(f.dhtListenPort),
     'user-agent': f.userAgent || '',
-    'log-level': f.logLevel || 'warn',
+    'log-level': f.logLevel || 'info',
     'bt-tracker': convertLineToComma(f.btTracker),
     'all-proxy': proxyForDownloads ? f.proxy.server : '',
     'no-proxy': proxyForDownloads ? f.proxy.bypass || '' : '',

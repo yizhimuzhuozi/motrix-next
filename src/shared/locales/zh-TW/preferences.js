@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': '已恢復預設設定',
   'restart-required': '需要重新啟動以套用所有變更',
   'installing': '正在安裝…',
+  'export-diagnostic-logs': '匯出診斷日誌',
+  'export-diagnostic-logs-success': '日誌已匯出至 {path}',
+  'export-diagnostic-logs-failed': '匯出日誌失敗',
+  'log-level': '日誌級別',
+  'log-level-restart-confirm': '日誌級別更改將在重新啟動應用後生效。',
+  'restart-now': '立即重新啟動',
 }

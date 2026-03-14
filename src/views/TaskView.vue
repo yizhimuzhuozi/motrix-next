@@ -107,7 +107,7 @@ function handleResumeTask(task: Aria2Task) {
 function handleDeleteTask(task: Aria2Task) {
   const noConfirm = preferenceStore.config?.noConfirmBeforeDeleteTask
   if (noConfirm) {
-    taskStore.removeTask(task).catch(console.error)
+    taskStore.removeTask(task).catch((e) => logger.error('TaskView', e))
     return
   }
   const deleteFiles = ref(false)

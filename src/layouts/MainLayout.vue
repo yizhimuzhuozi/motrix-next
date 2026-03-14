@@ -290,17 +290,17 @@ onMounted(async () => {
         break
       case 'resume-all':
         if (!(await taskStore.hasPausedTasks())) break
-        taskStore.resumeAllTask().catch(console.error)
+        taskStore.resumeAllTask().catch((e) => logger.error('TrayMenu', e))
         break
       case 'pause-all':
         if (!(await taskStore.hasActiveTasks())) break
-        taskStore.pauseAllTask().catch(console.error)
+        taskStore.pauseAllTask().catch((e) => logger.error('TrayMenu', e))
         break
       case 'release-notes':
-        openUrl('https://github.com/AnInsomniacy/motrix-next/releases').catch(console.error)
+        openUrl('https://github.com/AnInsomniacy/motrix-next/releases').catch((e) => logger.error('TrayMenu', e))
         break
       case 'report-issue':
-        openUrl('https://github.com/AnInsomniacy/motrix-next/issues').catch(console.error)
+        openUrl('https://github.com/AnInsomniacy/motrix-next/issues').catch((e) => logger.error('TrayMenu', e))
         break
     }
   })

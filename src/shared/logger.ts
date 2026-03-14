@@ -1,58 +1,59 @@
-/** @fileoverview Centralized logging utility with level-based output control. */
+/** @fileoverview Centralized logging utility bridging to tauri-plugin-log for persistent file output. */
+import { error as tauriError, warn as tauriWarn, info as tauriInfo, debug as tauriDebug } from '@tauri-apps/plugin-log'
 
-/** Available log severity levels, ordered from most to least severe. */
-export enum LogLevel {
-  ERROR = 0,
-  WARN = 1,
-  INFO = 2,
-  DEBUG = 3,
-}
-
-const currentLevel: LogLevel = import.meta.env.PROD ? LogLevel.WARN : LogLevel.DEBUG
-
-/** Formats a log message with timestamp and context prefix. */
-function formatMessage(level: string, context: string, message: string): string {
-  const timestamp = new Date().toISOString()
-  return `[${timestamp}] [${level}] [${context}] ${message}`
+/** Formats a context-prefixed log message suitable for both console and file output. */
+function formatMessage(context: string, message: string): string {
+  return `[${context}] ${message}`
 }
 
 /**
  * Centralized logger providing structured, level-gated output.
- * In production, only ERROR and WARN levels are emitted.
- * In development, all levels including DEBUG are active.
+ *
+ * Each log level bridges to the Rust-side `tauri-plugin-log` for persistent file storage
+ * with automatic rotation. Console output policy:
+ * - **error / warn**: mirror to `console.error` / `console.warn` for DevTools visibility
+ * - **info / debug**: silent in console — only written to the Rust log file
+ *
+ * The `.catch(() => {})` on every tauri call prevents IPC failures from propagating
+ * into business logic (e.g., during app teardown or before plugin initialisation).
  */
 export const logger = {
-  /** Logs an error with full error object serialization. */
+  /** Logs an error with full Error object serialization to both console and log file. */
   error(context: string, error: unknown): void {
-    if (currentLevel < LogLevel.ERROR) return
     const message = error instanceof Error ? error.message : String(error)
-    console.error(formatMessage('ERROR', context, message))
+    const formatted = formatMessage(context, message)
+    console.error(formatted)
+    tauriError(formatted).catch(() => {})
     if (error instanceof Error && error.stack) {
-      console.error(error.stack)
+      const stackFormatted = formatMessage(context, error.stack)
+      tauriError(stackFormatted).catch(() => {})
     }
   },
 
-  /** Logs a warning for degradable failures. */
+  /** Logs a warning for degradable failures to both console and log file. */
   warn(context: string, message: string): void {
-    if (currentLevel < LogLevel.WARN) return
-    console.warn(formatMessage('WARN', context, message))
+    const formatted = formatMessage(context, message)
+    console.warn(formatted)
+    tauriWarn(formatted).catch(() => {})
   },
 
-  /** Logs informational messages for significant operations. */
+  /** Logs informational messages for significant operations (log file only, no console). */
   info(context: string, message: string): void {
-    if (currentLevel < LogLevel.INFO) return
-    console.info(formatMessage('INFO', context, message)) // eslint-disable-line no-console
+    const formatted = formatMessage(context, message)
+    tauriInfo(formatted).catch(() => {})
   },
 
-  /** Logs debug data, suppressed in production. */
+  /** Logs debug data (log file only, no console). Suppressed in production by Rust-side level filter. */
   debug(context: string, data?: unknown): void {
-    if (currentLevel < LogLevel.DEBUG) return
     let message = ''
     if (data instanceof Error) {
       message = data.stack ?? data.message
+    } else if (typeof data === 'string') {
+      message = data
     } else if (data !== undefined) {
       message = JSON.stringify(data)
     }
-    console.debug(formatMessage('DEBUG', context, message)) // eslint-disable-line no-console
+    const formatted = formatMessage(context, message)
+    tauriDebug(formatted).catch(() => {})
   },
 }

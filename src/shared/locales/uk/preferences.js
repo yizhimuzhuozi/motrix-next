@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Налаштування за замовчуванням відновлено',
   'restart-required': 'Для застосування всіх змін потрібен перезапуск',
   'installing': 'Встановлення…',
+  'export-diagnostic-logs': 'Експортувати діагностичні журнали',
+  'export-diagnostic-logs-success': 'Журнали експортовано до {path}',
+  'export-diagnostic-logs-failed': 'Не вдалося експортувати журнали',
+  'log-level': 'Рівень журналювання',
+  'log-level-restart-confirm': 'Зміна рівня журналювання набуде чинності після перезапуску додатка.',
+  'restart-now': 'Перезапустити зараз',
 }

@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'คืนค่าเริ่มต้นแล้ว',
   'restart-required': 'ต้องรีสตาร์ทเพื่อใช้การเปลี่ยนแปลงทั้งหมด',
   'installing': 'กำลังติดตั้ง…',
+  'export-diagnostic-logs': 'ส่งออกบันทึกการวินิจฉัย',
+  'export-diagnostic-logs-success': 'ส่งออกบันทึกไปที่ {path} แล้ว',
+  'export-diagnostic-logs-failed': 'ไม่สามารถส่งออกบันทึกได้',
+  'log-level': 'ระดับบันทึก',
+  'log-level-restart-confirm': 'การเปลี่ยนระดับบันทึกจะมีผลหลังจากรีสตาร์ทแอป',
+  'restart-now': 'รีสตาร์ทตอนนี้',
 }

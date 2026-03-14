@@ -319,14 +319,14 @@ describe('engine.rs — stdout/stderr logging and exit code events', () => {
       const stderrBlock = extractEventHandler(engineSource, 'Stderr', 'start_engine')
       expect(stderrBlock).toBeTruthy()
       expect(stderrBlock).not.toMatch(/=>\s*\{\s*\}/)
-      expect(stderrBlock).toContain('eprintln!')
+      expect(stderrBlock).toContain('log::')
     })
 
     it('logs stdout output (not silently discarded)', () => {
       const stdoutBlock = extractEventHandler(engineSource, 'Stdout', 'start_engine')
       expect(stdoutBlock).toBeTruthy()
       expect(stdoutBlock).not.toMatch(/=>\s*\{\s*\}/)
-      expect(stdoutBlock).toContain('eprintln!')
+      expect(stdoutBlock).toContain('log::')
     })
 
     it('extracts exit code from Terminated payload', () => {
@@ -349,14 +349,14 @@ describe('engine.rs — stdout/stderr logging and exit code events', () => {
       const stderrBlock = extractEventHandler(engineSource, 'Stderr', 'restart_engine')
       expect(stderrBlock).toBeTruthy()
       expect(stderrBlock).not.toMatch(/=>\s*\{\s*\}/)
-      expect(stderrBlock).toContain('eprintln!')
+      expect(stderrBlock).toContain('log::')
     })
 
     it('logs stdout output (not silently discarded)', () => {
       const stdoutBlock = extractEventHandler(engineSource, 'Stdout', 'restart_engine')
       expect(stdoutBlock).toBeTruthy()
       expect(stdoutBlock).not.toMatch(/=>\s*\{\s*\}/)
-      expect(stdoutBlock).toContain('eprintln!')
+      expect(stdoutBlock).toContain('log::')
     })
 
     it('emits engine-crashed event on non-zero exit code', () => {

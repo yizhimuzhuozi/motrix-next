@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Padrões restaurados',
   'restart-required': 'Reinicialização necessária para aplicar todas as alterações',
   'installing': 'Instalando…',
+  'export-diagnostic-logs': 'Exportar logs de diagnóstico',
+  'export-diagnostic-logs-success': 'Logs exportados para {path}',
+  'export-diagnostic-logs-failed': 'Falha ao exportar logs',
+  'log-level': 'Nível de log',
+  'log-level-restart-confirm': 'A alteração do nível de log será aplicada após reiniciar o aplicativo.',
+  'restart-now': 'Reiniciar agora',
 }

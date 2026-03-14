@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Ustawienia domyślne przywrócone',
   'restart-required': 'Wymagane ponowne uruchomienie, aby zastosować wszystkie zmiany',
   'installing': 'Instalowanie…',
+  'export-diagnostic-logs': 'Eksportuj dzienniki diagnostyczne',
+  'export-diagnostic-logs-success': 'Dzienniki wyeksportowane do {path}',
+  'export-diagnostic-logs-failed': 'Nie udało się wyeksportować dzienników',
+  'log-level': 'Poziom logowania',
+  'log-level-restart-confirm': 'Zmiana poziomu logowania zostanie zastosowana po ponownym uruchomieniu aplikacji.',
+  'restart-now': 'Uruchom ponownie teraz',
 }

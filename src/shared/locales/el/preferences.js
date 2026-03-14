@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Οι προεπιλογές επαναφέρθηκαν',
   'restart-required': 'Απαιτείται επανεκκίνηση για εφαρμογή όλων των αλλαγών',
   'installing': 'Εγκατάσταση…',
+  'export-diagnostic-logs': 'Εξαγωγή αρχείων καταγραφής',
+  'export-diagnostic-logs-success': 'Τα αρχεία εξήχθησαν στο {path}',
+  'export-diagnostic-logs-failed': 'Αποτυχία εξαγωγής αρχείων',
+  'log-level': 'Επίπεδο καταγραφής',
+  'log-level-restart-confirm': 'Η αλλαγή επιπέδου καταγραφής θα εφαρμοστεί μετά την επανεκκίνηση της εφαρμογής.',
+  'restart-now': 'Επανεκκίνηση τώρα',
 }

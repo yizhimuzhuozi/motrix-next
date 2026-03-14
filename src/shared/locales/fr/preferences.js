@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Paramètres par défaut restaurés',
   'restart-required': 'Redémarrage nécessaire pour appliquer tous les changements',
   'installing': 'Installation…',
+  'export-diagnostic-logs': 'Exporter les journaux de diagnostic',
+  'export-diagnostic-logs-success': 'Journaux exportés vers {path}',
+  'export-diagnostic-logs-failed': 'Échec de l\'exportation des journaux',
+  'log-level': 'Niveau de journalisation',
+  'log-level-restart-confirm': 'Le changement du niveau de journalisation prendra effet après le redémarrage de l\'application.',
+  'restart-now': 'Redémarrer maintenant',
 }

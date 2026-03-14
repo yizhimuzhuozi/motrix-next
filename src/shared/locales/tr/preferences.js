@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Varsayılanlar geri yüklendi',
   'restart-required': 'Tüm değişikliklerin uygulanması için yeniden başlatma gerekli',
   'installing': 'Kuruluyor…',
+  'export-diagnostic-logs': 'Tanılama günlüklerini dışa aktar',
+  'export-diagnostic-logs-success': 'Günlükler {path} konumuna aktarıldı',
+  'export-diagnostic-logs-failed': 'Günlükler dışa aktarılamadı',
+  'log-level': 'Günlük seviyesi',
+  'log-level-restart-confirm': 'Günlük seviyesi değişikliği uygulamayı yeniden başlattıktan sonra uygulanacaktır.',
+  'restart-now': 'Şimdi yeniden başlat',
 }

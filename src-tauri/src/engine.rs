@@ -109,7 +109,7 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
         .spawn()
         .map_err(|e| format!("Failed to spawn aria2c: {}", e))?;
 
-    eprintln!("[aria2c] started engine process: PID {}", child.pid());
+    log::info!("started engine process: PID {}", child.pid());
 
     let spawned_pid = child.pid();
     *child_lock = Some(child);
@@ -123,19 +123,19 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                     let text = String::from_utf8_lossy(&line);
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {
-                        eprintln!("[aria2c] stdout: {}", trimmed);
+                        log::debug!("stdout: {}", trimmed);
                     }
                 }
                 CommandEvent::Stderr(line) => {
                     let text = String::from_utf8_lossy(&line);
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {
-                        eprintln!("[aria2c] stderr: {}", trimmed);
+                        log::warn!("stderr: {}", trimmed);
                     }
                 }
                 CommandEvent::Terminated(payload) => {
                     let exit_code = payload.code.unwrap_or(-1);
-                    eprintln!("[aria2c] terminated with exit code: {}", exit_code);
+                    log::warn!("terminated with exit code: {}", exit_code);
 
                     // Generation guard: if a newer engine was spawned since this
                     // monitor started, this is a stale handler — ignore silently.
@@ -143,7 +143,7 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                         .try_state::<EngineState>()
                         .map_or(true, |s| !s.is_current_generation(my_gen));
                     if is_stale {
-                        eprintln!("[aria2c] stale monitor (gen {}) ignoring termination", my_gen);
+                        log::debug!("stale monitor (gen {}) ignoring termination", my_gen);
                         break;
                     }
 
@@ -200,7 +200,7 @@ pub fn stop_engine(app: &tauri::AppHandle) -> Result<(), String> {
         child
             .kill()
             .map_err(|e| format!("Failed to kill aria2c: {}", e))?;
-        eprintln!("[aria2c] stopped engine process: PID {}", pid);
+        log::info!("stopped engine process: PID {}", pid);
         // Brief wait for the OS to fully terminate the process and release the port.
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
@@ -231,7 +231,7 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
         child
             .kill()
             .map_err(|e| format!("Failed to kill aria2c: {}", e))?;
-        eprintln!("[aria2c] restart: killed old engine process: PID {}", pid);
+        log::info!("restart: killed old engine process: PID {}", pid);
         // Wait for the OS to reclaim the process and release the port
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
@@ -286,7 +286,7 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
         .spawn()
         .map_err(|e| format!("Failed to spawn aria2c: {}", e))?;
 
-    eprintln!("[aria2c] restart: started new engine process: PID {}", child.pid());
+    log::info!("restart: started new engine process: PID {}", child.pid());
     let spawned_pid = child.pid();
     *child_lock = Some(child);
     let my_gen = state.next_generation();
@@ -307,26 +307,26 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
                     let text = String::from_utf8_lossy(&line);
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {
-                        eprintln!("[aria2c] stdout: {}", trimmed);
+                        log::debug!("stdout: {}", trimmed);
                     }
                 }
                 CommandEvent::Stderr(line) => {
                     let text = String::from_utf8_lossy(&line);
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {
-                        eprintln!("[aria2c] stderr: {}", trimmed);
+                        log::warn!("stderr: {}", trimmed);
                     }
                 }
                 CommandEvent::Terminated(payload) => {
                     let exit_code = payload.code.unwrap_or(-1);
-                    eprintln!("[aria2c] restart: terminated with exit code: {}", exit_code);
+                    log::warn!("restart: terminated with exit code: {}", exit_code);
 
                     // Generation guard: stale monitor → ignore silently.
                     let is_stale = app_handle
                         .try_state::<EngineState>()
                         .map_or(true, |s| !s.is_current_generation(my_gen));
                     if is_stale {
-                        eprintln!("[aria2c] stale monitor (gen {}) ignoring termination", my_gen);
+                        log::debug!("stale monitor (gen {}) ignoring termination", my_gen);
                         break;
                     }
 
@@ -593,8 +593,8 @@ fn cleanup_port(port: &str) {
                         let comm = String::from_utf8_lossy(&check_out.stdout);
                         let comm = comm.trim();
                         if comm.contains("aria2c") {
-                            eprintln!(
-                                "[aria2c] killing leftover aria2c process on port {}: PID {}",
+                            log::debug!(
+                                "killing leftover aria2c process on port {}: PID {}",
                                 port, pid
                             );
                             let _ = std::process::Command::new("sh")
@@ -602,8 +602,8 @@ fn cleanup_port(port: &str) {
                                 .status();
                             killed_any = true;
                         } else {
-                            eprintln!(
-                                "[aria2c] port {} occupied by non-aria2c process '{}' (PID {}), skipping",
+                            log::debug!(
+                                "port {} occupied by non-aria2c process '{}' (PID {}), skipping",
                                 port, comm, pid
                             );
                         }
@@ -652,8 +652,8 @@ fn cleanup_port(port: &str) {
                             })
                             .unwrap_or(false);
                         if is_aria2c {
-                            eprintln!(
-                                "[aria2c] killing leftover aria2c process on port {}: PID {}",
+                            log::debug!(
+                                "killing leftover aria2c process on port {}: PID {}",
                                 port, pid
                             );
                             let _ = std::process::Command::new("taskkill")
@@ -662,8 +662,8 @@ fn cleanup_port(port: &str) {
                                 .status();
                             killed_any = true;
                         } else {
-                            eprintln!(
-                                "[aria2c] port {} occupied by non-aria2c process (PID {}), skipping",
+                            log::debug!(
+                                "port {} occupied by non-aria2c process (PID {}), skipping",
                                 port, pid
                             );
                         }

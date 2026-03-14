@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Setările implicite au fost restaurate',
   'restart-required': 'Este necesară repornirea pentru a aplica toate modificările',
   'installing': 'Se instalează…',
+  'export-diagnostic-logs': 'Exportă jurnale de diagnostic',
+  'export-diagnostic-logs-success': 'Jurnalele au fost exportate în {path}',
+  'export-diagnostic-logs-failed': 'Exportul jurnalelor a eșuat',
+  'log-level': 'Nivel jurnal',
+  'log-level-restart-confirm': 'Modificarea nivelului de jurnal va fi aplicată după repornirea aplicației.',
+  'restart-now': 'Repornește acum',
 }

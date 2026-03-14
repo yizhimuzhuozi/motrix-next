@@ -246,7 +246,7 @@ async fn renewal_loop(ports: Vec<MappedPort>) {
         let gw = match discover_gateway().await {
             Ok(g) => g,
             Err(e) => {
-                eprintln!("[UPnP] renewal: gateway discovery failed: {e}");
+                log::warn!("renewal: gateway discovery failed: {e}");
                 continue;
             }
         };
@@ -255,7 +255,7 @@ async fn renewal_loop(ports: Vec<MappedPort>) {
 
         for port in &ports {
             if let Err(e) = map_port(&gw, local_ip, port.internal, port.protocol).await {
-                eprintln!(
+                log::warn!(
                     "[UPnP] renewal: failed to renew port {}: {e}",
                     port.internal
                 );

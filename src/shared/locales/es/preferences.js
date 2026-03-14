@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Valores predeterminados restaurados',
   'restart-required': 'Se requiere reiniciar para aplicar todos los cambios',
   'installing': 'Instalando…',
+  'export-diagnostic-logs': 'Exportar registros de diagnóstico',
+  'export-diagnostic-logs-success': 'Registros exportados en {path}',
+  'export-diagnostic-logs-failed': 'Error al exportar los registros',
+  'log-level': 'Nivel de registro',
+  'log-level-restart-confirm': 'El cambio de nivel de registro se aplicará tras reiniciar la aplicación.',
+  'restart-now': 'Reiniciar ahora',
 }

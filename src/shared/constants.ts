@@ -29,7 +29,7 @@ export const TASK_STATUS = {
   SEEDING: 'seeding',
 }
 
-export const LOG_LEVELS = ['error', 'warn', 'info', 'verbose', 'debug', 'silly']
+export const LOG_LEVELS = ['error', 'warn', 'info', 'debug']
 
 export const MAX_NUM_OF_DIRECTORIES = 5
 
@@ -127,7 +127,7 @@ export const DEFAULT_APP_CONFIG = {
   proxy: { enable: false, server: '', bypass: '', scope: [] as string[] },
   protocols: { magnet: false, thunder: false },
   userAgent: '',
-  logLevel: 'warn', // production-standard log level
+  logLevel: 'info', // industry standard: captures significant ops without debug verbosity
   cookie: '',
   runMode: '',
   engineBinPath: '',

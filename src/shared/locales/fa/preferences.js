@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'پیش‌فرض‌ها بازگردانده شدند',
   'restart-required': 'برای اعمال تمام تغییرات نیاز به راه‌اندازی مجدد است',
   'installing': 'در حال نصب…',
+  'export-diagnostic-logs': 'صادرات گزارش‌های تشخیصی',
+  'export-diagnostic-logs-success': 'گزارش‌ها به {path} صادر شدند',
+  'export-diagnostic-logs-failed': 'صادرات گزارش‌ها ناموفق بود',
+  'log-level': 'سطح گزارش',
+  'log-level-restart-confirm': 'تغییر سطح گزارش پس از راه‌اندازی مجدد برنامه اعمال خواهد شد.',
+  'restart-now': 'الان راه‌اندازی مجدد',
 }

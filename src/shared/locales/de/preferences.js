@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Standardeinstellungen wiederhergestellt',
   'restart-required': 'Neustart erforderlich, um alle Änderungen zu übernehmen',
   'installing': 'Installiere…',
+  'export-diagnostic-logs': 'Diagnoseprotokolle exportieren',
+  'export-diagnostic-logs-success': 'Protokolle exportiert nach {path}',
+  'export-diagnostic-logs-failed': 'Export der Protokolle fehlgeschlagen',
+  'log-level': 'Protokollstufe',
+  'log-level-restart-confirm': 'Die Änderung der Protokollstufe wird nach dem Neustart der App wirksam.',
+  'restart-now': 'Jetzt neu starten',
 }

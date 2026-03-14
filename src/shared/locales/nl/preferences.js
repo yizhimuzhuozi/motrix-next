@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Standaardwaarden hersteld',
   'restart-required': 'Herstart vereist om alle wijzigingen toe te passen',
   'installing': 'Installeren…',
+  'export-diagnostic-logs': 'Diagnostische logboeken exporteren',
+  'export-diagnostic-logs-success': 'Logboeken geëxporteerd naar {path}',
+  'export-diagnostic-logs-failed': 'Exporteren van logboeken mislukt',
+  'log-level': 'Logniveau',
+  'log-level-restart-confirm': 'De wijziging van het logniveau wordt toegepast na het herstarten van de app.',
+  'restart-now': 'Nu herstarten',
 }

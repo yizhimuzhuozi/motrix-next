@@ -15,7 +15,54 @@ use upnp::UpnpState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ── Panic hook: route panics through log crate for file persistence ──
+    // Must be set BEFORE Tauri Builder so even plugin init panics are caught.
+    // Without this, panics only reach stderr and are lost on process exit.
+    std::panic::set_hook(Box::new(|info| {
+        log::error!("PANIC: {}", info);
+    }));
+
+    // ── Pre-read log-level from user.json before plugin init ──────────
+    // tauri-plugin-store isn't available until after Builder.build(), so we
+    // read the raw JSON file directly.  Falls back to Info if absent.
+    let log_level = (|| -> Option<log::LevelFilter> {
+        let data_dir = dirs::data_dir()?.join("com.motrix.next");
+        let store_path = data_dir.join("user.json");
+        let content = std::fs::read_to_string(store_path).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+        let level_str = json.get("log-level")?.as_str()?;
+        match level_str {
+            "error" => Some(log::LevelFilter::Error),
+            "warn" => Some(log::LevelFilter::Warn),
+            "info" => Some(log::LevelFilter::Info),
+            "debug" => Some(log::LevelFilter::Debug),
+            _ => None,
+        }
+    })()
+    .unwrap_or(log::LevelFilter::Info);
+
     let mut builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("motrix-next".into()),
+                    }),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                ])
+                .max_file_size(5_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .level(log_level)
+                .level_for("motrix_next_lib", log::LevelFilter::Debug)
+                .level_for("motrix_next_lib::engine", log::LevelFilter::Debug)
+                .filter(|metadata| {
+                    !metadata.target().starts_with("tao")
+                        && !metadata.target().starts_with("tracing")
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
@@ -80,6 +127,7 @@ pub fn run() {
             commands::set_dock_visible,
             commands::probe_trackers,
             commands::is_autostart_launch,
+            commands::export_diagnostic_logs,
         ])
         .setup(|app| {
             let handle = app.handle();

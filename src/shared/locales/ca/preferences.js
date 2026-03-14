@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'S\'han restaurat els valors predeterminats',
   'restart-required': 'Cal reiniciar per aplicar tots els canvis',
   'installing': 'Instal·lant…',
+  'export-diagnostic-logs': 'Exportar registres de diagnòstic',
+  'export-diagnostic-logs-success': 'Registres exportats a {path}',
+  'export-diagnostic-logs-failed': 'Error en exportar els registres',
+  'log-level': 'Nivell de registre',
+  'log-level-restart-confirm': 'El canvi de nivell de registre s\'aplicarà després de reiniciar l\'aplicació.',
+  'restart-now': 'Reiniciar ara',
 }

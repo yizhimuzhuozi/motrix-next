@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': '기본값이 복원되었습니다',
   'restart-required': '모든 변경 사항을 적용하려면 재시작이 필요합니다',
   'installing': '설치 중…',
+  'export-diagnostic-logs': '진단 로그 내보내기',
+  'export-diagnostic-logs-success': '로그가 {path}에 내보내졌습니다',
+  'export-diagnostic-logs-failed': '로그 내보내기 실패',
+  'log-level': '로그 수준',
+  'log-level-restart-confirm': '로그 수준 변경은 앱을 재시작한 후 적용됩니다.',
+  'restart-now': '지금 재시작',
 }

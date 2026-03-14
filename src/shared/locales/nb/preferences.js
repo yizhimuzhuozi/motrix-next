@@ -141,4 +141,10 @@ export default {
   'restore-defaults-success': 'Standardinnstillinger gjenopprettet',
   'restart-required': 'Omstart kreves for å bruke alle endringer',
   'installing': 'Installerer…',
+  'export-diagnostic-logs': 'Eksporter diagnoslogger',
+  'export-diagnostic-logs-success': 'Logger eksportert til {path}',
+  'export-diagnostic-logs-failed': 'Kunne ikke eksportere logger',
+  'log-level': 'Loggnivå',
+  'log-level-restart-confirm': 'Endring av loggnivå vil tre i kraft etter omstart av appen.',
+  'restart-now': 'Start på nytt nå',
 }
