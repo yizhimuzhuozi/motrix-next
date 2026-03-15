@@ -317,14 +317,19 @@ async function handleShowInFolder(task: Aria2Task) {
 async function handleStopSeeding(task: Aria2Task) {
   if (stoppingGids.value.includes(task.gid)) return // prevent double-click
   stoppingGids.value = [...stoppingGids.value, task.gid]
-  message.info(t('task.bt-stopping-seeding-tip'), { duration: 5000, closable: true })
   try {
     await taskStore.stopSeeding(task.gid)
-    // Don't remove from stoppingGids — let the spinner run
-    // until the task transitions to 'complete' and vanishes from the list
+    stoppingGids.value = stoppingGids.value.filter((g) => g !== task.gid)
+    // Persist to history DB before the task vanishes — forceRemove bypasses
+    // the normal onComplete callback that normally handles this.
+    const record = buildHistoryRecord(task)
+    record.status = 'complete'
+    historyStore.addRecord(record).catch((e) => logger.debug('TaskView.stopSeeding.history', e))
+    message.success(t('task.stop-all-seeding-success'))
+    // Refresh list immediately so the task vanishes from the active tab
+    await taskStore.fetchList()
   } catch (e) {
-    console.error(e)
-    // Only clear on error so user can retry
+    logger.warn('[TaskView] stopSeeding failed:', String(e))
     stoppingGids.value = stoppingGids.value.filter((g) => g !== task.gid)
   }
 }

@@ -206,6 +206,15 @@ describe('checkTaskIsSeeder', () => {
     })
     expect(checkTaskIsSeeder(task)).toBe(false)
   })
+
+  it('returns false when seeder is true but task is paused', () => {
+    const task = createMockTask({
+      status: 'paused',
+      bittorrent: { info: { name: 'test' } },
+      seeder: 'true',
+    })
+    expect(checkTaskIsSeeder(task)).toBe(false)
+  })
 })
 
 describe('buildMagnetLink', () => {

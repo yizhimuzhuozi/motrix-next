@@ -519,9 +519,9 @@ describe('TaskActions', () => {
     it('pushes all seeder gids into stoppingGids on positive click', async () => {
       const taskStore = useTaskStore()
       taskStore.taskList = [
-        { gid: 's1', bittorrent: { info: { name: 'a' } }, seeder: 'true' },
+        { gid: 's1', status: 'active', bittorrent: { info: { name: 'a' } }, seeder: 'true' },
         { gid: 'a1' },
-        { gid: 's2', bittorrent: { info: { name: 'b' } }, seeder: 'true' },
+        { gid: 's2', status: 'active', bittorrent: { info: { name: 'b' } }, seeder: 'true' },
       ] as never
 
       const wrapper = createWrapper()
@@ -538,7 +538,9 @@ describe('TaskActions', () => {
 
     it('shows spinning while snapshotted seeder tasks still have seeder=true', async () => {
       const taskStore = useTaskStore()
-      taskStore.taskList = [{ gid: 's1', bittorrent: { info: { name: 'x' } }, seeder: 'true' }] as never
+      taskStore.taskList = [
+        { gid: 's1', status: 'active', bittorrent: { info: { name: 'x' } }, seeder: 'true' },
+      ] as never
 
       const wrapper = createWrapper()
       await clickButton(wrapper, 4)
@@ -560,7 +562,9 @@ describe('TaskActions', () => {
 
     it('ignores new seeders appearing during batch stop', async () => {
       const taskStore = useTaskStore()
-      taskStore.taskList = [{ gid: 's1', bittorrent: { info: { name: 'a' } }, seeder: 'true' }] as never
+      taskStore.taskList = [
+        { gid: 's1', status: 'active', bittorrent: { info: { name: 'a' } }, seeder: 'true' },
+      ] as never
 
       const wrapper = createWrapper()
       await clickButton(wrapper, 4)
@@ -574,7 +578,7 @@ describe('TaskActions', () => {
       // Original seeder exits, but a NEW seeder appears
       taskStore.taskList = [
         { gid: 's1', bittorrent: { info: { name: 'a' } }, seeder: 'false' },
-        { gid: 's_new', bittorrent: { info: { name: 'new' } }, seeder: 'true' },
+        { gid: 's_new', status: 'active', bittorrent: { info: { name: 'new' } }, seeder: 'true' },
       ] as never
       await wrapper.vm.$nextTick()
 
@@ -584,7 +588,9 @@ describe('TaskActions', () => {
 
     it('calls stopAllSeeding store method on confirm', async () => {
       const taskStore = useTaskStore()
-      taskStore.taskList = [{ gid: 's1', bittorrent: { info: { name: 'x' } }, seeder: 'true' }] as never
+      taskStore.taskList = [
+        { gid: 's1', status: 'active', bittorrent: { info: { name: 'x' } }, seeder: 'true' },
+      ] as never
 
       const wrapper = createWrapper()
       await clickButton(wrapper, 4)
@@ -597,7 +603,9 @@ describe('TaskActions', () => {
 
     it('stops spinning after safety timeout even if tasks remain seeding', async () => {
       const taskStore = useTaskStore()
-      taskStore.taskList = [{ gid: 's1', bittorrent: { info: { name: 'x' } }, seeder: 'true' }] as never
+      taskStore.taskList = [
+        { gid: 's1', status: 'active', bittorrent: { info: { name: 'x' } }, seeder: 'true' },
+      ] as never
 
       const wrapper = createWrapper()
       await clickButton(wrapper, 4)

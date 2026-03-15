@@ -61,10 +61,10 @@ export const isMagnetTask = (task: Aria2Task): boolean => {
   return !!bittorrent && !bittorrent.info
 }
 
-/** Returns true if the task is actively seeding (BT upload-only). */
+/** Returns true if the task is actively seeding (BT upload-only, must be running). */
 export const checkTaskIsSeeder = (task: Aria2Task): boolean => {
-  const { bittorrent, seeder } = task
-  return !!bittorrent && seeder === 'true'
+  const { bittorrent, seeder, status } = task
+  return !!bittorrent && seeder === 'true' && status === 'active'
 }
 
 /** Returns true if the task is a BitTorrent download (has bittorrent metadata). */

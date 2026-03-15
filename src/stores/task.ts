@@ -329,7 +329,11 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function stopSeeding(gid: string) {
-    return changeTaskOption({ gid, options: { seedTime: '0' } })
+    // Two-step flow for immediate seeding stop:
+    // 1. forcePause — halts seeding instantly (skips tracker unregistration)
+    // 2. removeTask (forceRemove) — transitions task to 'removed' in stopped list
+    await api.forcePauseTask({ gid })
+    await api.removeTask({ gid })
   }
 
   /** Stops ALL currently seeding tasks. Returns the count of seeding tasks found. */

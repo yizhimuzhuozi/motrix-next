@@ -334,21 +334,44 @@ describe('TaskStore', () => {
 
   // ─── stopSeeding ────────────────────────────────────────
 
-  it('stopSeeding sets seedTime to 0', async () => {
+  it('stopSeeding calls forcePause then removeTask in order', async () => {
+    const callOrder: string[] = []
+    mockApi.forcePauseTask.mockImplementation(() => {
+      callOrder.push('forcePause')
+      return Promise.resolve('OK')
+    })
+    mockApi.removeTask.mockImplementation(() => {
+      callOrder.push('removeTask')
+      return Promise.resolve('OK')
+    })
+
     await store.stopSeeding('gid1')
-    expect(mockApi.changeOption).toHaveBeenCalledWith({ gid: 'gid1', options: { seedTime: '0' } })
+
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 'gid1' })
+    expect(mockApi.removeTask).toHaveBeenCalledWith({ gid: 'gid1' })
+    expect(callOrder).toEqual(['forcePause', 'removeTask'])
+  })
+
+  it('stopSeeding does not call removeTask if forcePause fails', async () => {
+    mockApi.forcePauseTask.mockRejectedValueOnce(new Error('pause failed'))
+
+    await expect(store.stopSeeding('gid1')).rejects.toThrow('pause failed')
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 'gid1' })
+    expect(mockApi.removeTask).not.toHaveBeenCalled()
   })
 
   // ─── stopAllSeeding ─────────────────────────────────────
 
-  it('stopAllSeeding sets seedTime to 0 for every seeding task', async () => {
+  it('stopAllSeeding calls two-step stop for every seeding task', async () => {
     const seeder1 = makeMockTask('s1', 'active', { bittorrent: { info: { name: 'a' } }, seeder: 'true' })
     const seeder2 = makeMockTask('s2', 'active', { bittorrent: { info: { name: 'b' } }, seeder: 'true' })
     store.taskList = [seeder1, seeder2]
     const count = await store.stopAllSeeding()
     expect(count).toBe(2)
-    expect(mockApi.changeOption).toHaveBeenCalledWith({ gid: 's1', options: { seedTime: '0' } })
-    expect(mockApi.changeOption).toHaveBeenCalledWith({ gid: 's2', options: { seedTime: '0' } })
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 's1' })
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 's2' })
+    expect(mockApi.removeTask).toHaveBeenCalledWith({ gid: 's1' })
+    expect(mockApi.removeTask).toHaveBeenCalledWith({ gid: 's2' })
   })
 
   it('stopAllSeeding skips non-seeding tasks', async () => {
@@ -357,25 +380,29 @@ describe('TaskStore', () => {
     store.taskList = [active, seeder]
     const count = await store.stopAllSeeding()
     expect(count).toBe(1)
-    expect(mockApi.changeOption).toHaveBeenCalledTimes(1)
-    expect(mockApi.changeOption).toHaveBeenCalledWith({ gid: 's1', options: { seedTime: '0' } })
+    expect(mockApi.forcePauseTask).toHaveBeenCalledTimes(1)
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 's1' })
+    expect(mockApi.removeTask).toHaveBeenCalledTimes(1)
+    expect(mockApi.removeTask).toHaveBeenCalledWith({ gid: 's1' })
   })
 
   it('stopAllSeeding returns 0 when no seeding tasks exist', async () => {
     store.taskList = [makeMockTask('a1', 'active')]
     const count = await store.stopAllSeeding()
     expect(count).toBe(0)
-    expect(mockApi.changeOption).not.toHaveBeenCalled()
+    expect(mockApi.forcePauseTask).not.toHaveBeenCalled()
+    expect(mockApi.removeTask).not.toHaveBeenCalled()
   })
 
   it('stopAllSeeding continues even if one task fails', async () => {
     const seeder1 = makeMockTask('s1', 'active', { bittorrent: { info: { name: 'a' } }, seeder: 'true' })
     const seeder2 = makeMockTask('s2', 'active', { bittorrent: { info: { name: 'b' } }, seeder: 'true' })
     store.taskList = [seeder1, seeder2]
-    mockApi.changeOption.mockRejectedValueOnce(new Error('fail'))
+    mockApi.forcePauseTask.mockRejectedValueOnce(new Error('fail'))
     const count = await store.stopAllSeeding()
     expect(count).toBe(2)
-    expect(mockApi.changeOption).toHaveBeenCalledTimes(2)
+    // Both tasks attempted — s1 failed at forcePause, s2 succeeded with both steps
+    expect(mockApi.forcePauseTask).toHaveBeenCalledTimes(2)
   })
 
   // ─── removeTaskRecord ───────────────────────────────────
