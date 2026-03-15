@@ -599,15 +599,15 @@ onMounted(() => {
         />
       </NFormItem>
       <NFormItem :show-label="false">
-        <NSpace align="center" :size="8">
+        <div class="ua-preset-row">
           <NButtonGroup size="small">
             <NButton @click="changeUA('aria2')">Aria2</NButton>
             <NButton @click="changeUA('transmission')">Transmission</NButton>
             <NButton @click="changeUA('chrome')">Chrome</NButton>
             <NButton @click="changeUA('du')">du</NButton>
           </NButtonGroup>
-          <NButton size="small" quaternary type="warning" @click="form.userAgent = ''">Reset</NButton>
-        </NSpace>
+          <NButton class="ua-reset-btn" size="small" ghost @click="form.userAgent = ''">Reset</NButton>
+        </div>
       </NFormItem>
 
       <NDivider title-placement="left">{{ t('preferences.developer') }}</NDivider>
@@ -776,6 +776,37 @@ onMounted(() => {
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 .factory-reset-btn :deep(.n-button__state-border) {
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── UA preset row — button group + standalone reset ─────────────── */
+.ua-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── UA Reset — muted ghost that warms on hover ──────────────────── */
+.ua-reset-btn {
+  --btn-muted: var(--m3-on-surface-variant, #9e9e9e);
+  color: var(--btn-muted) !important;
+  transition:
+    color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.ua-reset-btn:hover {
+  color: #cf6b6b !important;
+  background-color: color-mix(in srgb, #cf6b6b 10%, transparent) !important;
+}
+.ua-reset-btn :deep(.n-button__border) {
+  border-color: var(--btn-muted) !important;
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.ua-reset-btn:hover :deep(.n-button__border) {
+  border-color: #cf6b6b !important;
+}
+.ua-reset-btn :deep(.n-button__state-border) {
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
