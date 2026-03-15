@@ -330,6 +330,9 @@ onMounted(async () => {
       <NFormItem v-if="isMacOrWin" :label="t('preferences.show-progress-bar')">
         <NSwitch v-model:value="form.showProgressBar" />
       </NFormItem>
+      <NFormItem v-if="isMac" :label="t('preferences.dock-badge-speed')">
+        <NSwitch v-model:value="form.dockBadgeSpeed" />
+      </NFormItem>
 
       <NDivider title-placement="left">{{ t('preferences.window-and-tray') }}</NDivider>
       <NFormItem :label="t('preferences.minimize-to-tray-on-close')">
@@ -344,9 +347,6 @@ onMounted(async () => {
       <NFormItem v-if="isMac" :label="t('preferences.tray-speedometer')">
         <NSwitch v-model:value="form.traySpeedometer" />
       </NFormItem>
-      <NFormItem v-if="isMac" :label="t('preferences.dock-badge-speed')">
-        <NSwitch v-model:value="form.dockBadgeSpeed" />
-      </NFormItem>
 
       <NDivider title-placement="left">{{ t('preferences.startup') }}</NDivider>
       <NFormItem :show-label="false">
@@ -357,7 +357,7 @@ onMounted(async () => {
         </NSpace>
       </NFormItem>
 
-      <NDivider title-placement="left">{{ t('preferences.default-dir') }}</NDivider>
+      <NDivider title-placement="left">{{ t('preferences.download-path-and-speed') }}</NDivider>
       <NFormItem :label="t('preferences.default-dir')">
         <NInputGroup>
           <NInput v-model:value="form.dir" style="flex: 1" />
@@ -368,8 +368,6 @@ onMounted(async () => {
           </NButton>
         </NInputGroup>
       </NFormItem>
-
-      <NDivider title-placement="left">{{ t('preferences.transfer-settings') }}</NDivider>
       <NFormItem :label="t('preferences.transfer-speed-upload')">
         <NInputGroup>
           <NInputNumber
@@ -420,6 +418,8 @@ onMounted(async () => {
       <NFormItem :label="t('preferences.keep-seeding')">
         <NSwitch v-model:value="form.keepSeeding" @update:value="onKeepSeedingChange" />
       </NFormItem>
+
+      <NDivider v-if="!form.keepSeeding" title-placement="left">{{ t('preferences.seeding') }}</NDivider>
       <template v-if="!form.keepSeeding">
         <NFormItem :label="t('preferences.seed-ratio')">
           <NInputNumber v-model:value="form.seedRatio" :min="1" :max="100" :step="0.1" style="width: 120px" />
@@ -437,8 +437,12 @@ onMounted(async () => {
         <NInputNumber v-model:value="form.maxConnectionPerServer" :min="1" :max="64" style="width: 120px" />
       </NFormItem>
       <NFormItem :show-label="false">
+        <NCheckbox v-model:checked="form.continue">{{ t('preferences.continue') }}</NCheckbox>
+      </NFormItem>
+
+      <NDivider title-placement="left">{{ t('preferences.notification-and-confirm') }}</NDivider>
+      <NFormItem :show-label="false">
         <NSpace vertical>
-          <NCheckbox v-model:checked="form.continue">{{ t('preferences.continue') }}</NCheckbox>
           <NCheckbox v-model:checked="form.newTaskShowDownloading">
             {{ t('preferences.new-task-show-downloading') }}
           </NCheckbox>

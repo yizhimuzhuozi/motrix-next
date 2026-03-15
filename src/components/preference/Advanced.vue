@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview Advanced preference form: proxy, tracker, RPC, port, and user-agent settings. */
-import { ref, h, nextTick, onMounted } from 'vue'
+import { ref, h, computed, nextTick, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import { usePreferenceStore } from '@/stores/preference'
@@ -39,7 +39,11 @@ import {
   NSpace,
   NDivider,
   NIcon,
+  NModal,
+  NDataTable,
+  NEmpty,
   useDialog,
+  type DataTableColumns,
 } from 'naive-ui'
 import { useAppMessage } from '@/composables/useAppMessage'
 import { SyncOutline, DiceOutline, RefreshOutline, DownloadOutline } from '@vicons/ionicons5'
@@ -422,19 +426,78 @@ function handleFactoryReset() {
 }
 
 /** Check download history database integrity via PRAGMA integrity_check. */
-async function handleDbCheck() {
+async function handleDbIntegrityCheck() {
   const historyStore = useHistoryStore()
-  message.info(t('preferences.db-check-running'))
+  message.info(t('preferences.db-integrity-check-running'))
   try {
     const result = await historyStore.checkIntegrity()
     if (result === 'ok') {
-      message.success(t('preferences.db-check-ok'))
+      message.success(t('preferences.db-integrity-check-ok'))
     } else {
-      message.warning(`${t('preferences.db-check-fail')}: ${result}`)
+      message.warning(`${t('preferences.db-integrity-check-fail')}: ${result}`)
     }
   } catch (e) {
-    message.error(`${t('preferences.db-check-fail')}: ${(e as Error).message}`)
-    logger.error('Advanced.dbCheck', e)
+    message.error(`${t('preferences.db-integrity-check-fail')}: ${(e as Error).message}`)
+    logger.error('Advanced.dbIntegrityCheck', e)
+  }
+}
+
+/** Browse database records — open modal with NDataTable. */
+const showDbBrowse = ref(false)
+const dbRecords = ref<import('@shared/types').HistoryRecord[]>([])
+const dbRecordsLoading = ref(false)
+
+function formatFileSize(bytes: number | undefined | null): string {
+  if (!bytes) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024
+    i++
+  }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+const dbBrowseColumns = computed<DataTableColumns<import('@shared/types').HistoryRecord>>(() => [
+  { title: t('task.name') || 'Name', key: 'name', ellipsis: { tooltip: true }, minWidth: 200 },
+  {
+    title: t('task.status') || 'Status',
+    key: 'status',
+    width: 100,
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.status === 'complete' ? 'success' : row.status === 'error' ? 'error' : 'warning', size: 'small' },
+        () => row.status,
+      ),
+  },
+  {
+    title: t('task.size') || 'Size',
+    key: 'total_length',
+    width: 100,
+    render: (row) => formatFileSize(row.total_length),
+  },
+  { title: t('task.type') || 'Type', key: 'task_type', width: 90 },
+  {
+    title: t('task.completed-at') || 'Completed',
+    key: 'completed_at',
+    width: 170,
+    render: (row) => (row.completed_at ? new Date(row.completed_at).toLocaleString() : '—'),
+  },
+])
+
+async function handleDbBrowse() {
+  const historyStore = useHistoryStore()
+  showDbBrowse.value = true
+  dbRecordsLoading.value = true
+  try {
+    dbRecords.value = await historyStore.getRecords()
+  } catch (e) {
+    logger.error('Advanced.dbBrowse', e)
+    message.error((e as Error).message)
+  } finally {
+    dbRecordsLoading.value = false
   }
 }
 
@@ -672,10 +735,13 @@ onMounted(() => {
       <NDivider title-placement="left">{{ t('preferences.db-maintenance') }}</NDivider>
       <NFormItem :show-label="false">
         <NSpace>
-          <NButton class="db-check-btn" type="info" ghost @click="handleDbCheck">
-            {{ t('preferences.db-check') }}
+          <NButton class="db-integrity-check-btn" type="info" ghost @click="handleDbIntegrityCheck">
+            {{ t('preferences.db-integrity-check') }}
           </NButton>
-          <NButton class="db-reset-btn" type="warning" ghost @click="handleDbReset">
+          <NButton class="db-browse-btn" type="info" ghost @click="handleDbBrowse">
+            {{ t('preferences.db-browse') }}
+          </NButton>
+          <NButton class="db-reset-btn" type="error" ghost @click="handleDbReset">
             {{ t('preferences.db-reset') }}
           </NButton>
         </NSpace>
@@ -693,6 +759,32 @@ onMounted(() => {
         </NSpace>
       </NFormItem>
     </NForm>
+
+    <!-- Database records viewer modal -->
+    <NModal
+      v-model:show="showDbBrowse"
+      preset="card"
+      :title="t('preferences.db-browse-title')"
+      style="width: 800px; max-width: 90vw"
+      :mask-closable="true"
+    >
+      <NDataTable
+        :columns="dbBrowseColumns"
+        :data="dbRecords"
+        :loading="dbRecordsLoading"
+        :max-height="400"
+        :scroll-x="700"
+        size="small"
+        striped
+      >
+        <template #empty>
+          <NEmpty :description="t('preferences.db-record-count', { count: 0 })" />
+        </template>
+      </NDataTable>
+      <div v-if="dbRecords.length > 0" style="margin-top: 12px; text-align: right; opacity: 0.6; font-size: 13px">
+        {{ t('preferences.db-record-count', { count: dbRecords.length }) }}
+      </div>
+    </NModal>
     <PreferenceActionBar
       :is-dirty="isDirty"
       @save="handleSave"
