@@ -208,4 +208,5 @@ export default {
   'task-type': 'Tipo',
   'task-completed-at': 'Completado el',
   'restart-not-available': 'No hay enlaces de descarga disponibles para reiniciar',
+  'torrent-trashed': 'Descarga de "{taskName}" completada, el archivo torrent se movió a la papelera',
 }

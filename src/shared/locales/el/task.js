@@ -208,4 +208,5 @@ export default {
   'task-type': 'Τύπος',
   'task-completed-at': 'Ολοκληρώθηκε στις',
   'restart-not-available': 'Δεν υπάρχουν διαθέσιμοι σύνδεσμοι για επανεκκίνηση',
+  'torrent-trashed': 'Η λήψη του "{taskName}" ολοκληρώθηκε, το αρχείο torrent μεταφέρθηκε στον κάδο ανακύκλωσης',
 }

@@ -208,4 +208,5 @@ export default {
   'task-type': 'Tipo',
   'task-completed-at': 'Completato il',
   'restart-not-available': 'Nessun link di download disponibile per il riavvio',
+  'torrent-trashed': 'Download di "{taskName}" completato — file torrent spostato nel cestino',
 }

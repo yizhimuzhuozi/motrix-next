@@ -208,4 +208,5 @@ export default {
   'task-type': 'ประเภท',
   'task-completed-at': 'เสร็จสิ้นเมื่อ',
   'restart-not-available': 'ไม่มี URL ดาวน์โหลดสำหรับเริ่มใหม่',
+  'torrent-trashed': 'ดาวน์โหลด "{taskName}" เสร็จสิ้น ไฟล์ทอร์เรนต์ถูกย้ายไปที่ถังขยะ',
 }

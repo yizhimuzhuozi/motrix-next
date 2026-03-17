@@ -208,4 +208,5 @@ export default {
   'task-type': 'Тип',
   'task-completed-at': 'Завершено',
   'restart-not-available': 'Нет доступных ссылок для повторной загрузки',
+  'torrent-trashed': 'Загрузка "{taskName}" завершена — торрент-файл перемещён в корзину',
 }

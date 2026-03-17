@@ -208,4 +208,5 @@ export default {
   'task-type': 'Típus',
   'task-completed-at': 'Befejezve',
   'restart-not-available': 'Nincs elérhető letöltési link az újraindításhoz',
+  'torrent-trashed': 'A(z) "{taskName}" letöltése kész, a torrent fájl a kukába került',
 }

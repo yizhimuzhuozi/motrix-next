@@ -208,4 +208,5 @@ export default {
   'task-type': 'Type',
   'task-completed-at': 'Completed At',
   'restart-not-available': 'No download URL available for restart',
+  'torrent-trashed': '"{taskName}" download complete — torrent file moved to Trash',
 }

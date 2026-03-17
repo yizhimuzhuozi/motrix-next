@@ -208,4 +208,5 @@ export default {
   'task-type': '유형',
   'task-completed-at': '완료 시간',
   'restart-not-available': '다시 시작할 수 있는 다운로드 URL이 없습니다',
+  'torrent-trashed': '"{taskName}" 다운로드 완료 — 토렌트 파일이 휴지통으로 이동됨',
 }

@@ -142,6 +142,7 @@ describe('submitBatchItems', () => {
   const mockTaskStore = {
     addTorrent: vi.fn().mockResolvedValue('gid1'),
     addMetalink: vi.fn().mockResolvedValue(['gid2']),
+    registerTorrentSource: vi.fn(),
   } as unknown as ReturnType<typeof import('@/stores/task').useTaskStore>
 
   const baseOptions: Aria2EngineOptions = { dir: '/dl', split: '16' }

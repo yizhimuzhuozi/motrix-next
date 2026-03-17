@@ -8,14 +8,17 @@
  * Usage:
  *   const notifier = createTaskNotifier()
  *   // Inside fetchList polling loop:
- *   notifier.scanTasks(tasksToScan, { onTaskError, onTaskComplete })
+ *   notifier.scanTasks(tasksToScan, { onTaskError, onTaskComplete, onBtComplete })
  */
 import { TASK_STATUS } from '@shared/constants'
+import { checkTaskIsSeeder } from '@shared/utils'
 import type { Aria2Task } from '@shared/types'
 
 interface ScanCallbacks {
   onTaskError?: ((task: Aria2Task) => void) | null
   onTaskComplete?: ((task: Aria2Task) => void) | null
+  /** Fires when a BT task first enters seeding state (download phase complete). */
+  onBtComplete?: ((task: Aria2Task) => void) | null
 }
 
 export interface TaskNotifier {
@@ -35,10 +38,11 @@ export interface TaskNotifier {
 export function createTaskNotifier(): TaskNotifier {
   const notifiedErrorGids = new Set<string>()
   const notifiedCompleteGids = new Set<string>()
+  const notifiedBtCompleteGids = new Set<string>()
   let initialScanDone = false
 
   function scanTasks(tasks: Aria2Task[], callbacks: ScanCallbacks): void {
-    const { onTaskError, onTaskComplete } = callbacks
+    const { onTaskError, onTaskComplete, onBtComplete } = callbacks
 
     // Detect newly errored tasks
     if (onTaskError) {
@@ -57,7 +61,7 @@ export function createTaskNotifier(): TaskNotifier {
       }
     }
 
-    // Detect newly completed tasks
+    // Detect newly completed tasks (HTTP/FTP downloads)
     if (onTaskComplete) {
       for (const task of tasks) {
         if (task.status === 'complete' && !notifiedCompleteGids.has(task.gid)) {
@@ -69,13 +73,26 @@ export function createTaskNotifier(): TaskNotifier {
       }
     }
 
-    // Mark initial scan as done AFTER both callbacks — unconditionally.
+    // Detect BT tasks entering seeding state (download phase complete)
+    if (onBtComplete) {
+      for (const task of tasks) {
+        if (checkTaskIsSeeder(task) && !notifiedBtCompleteGids.has(task.gid)) {
+          notifiedBtCompleteGids.add(task.gid)
+          if (initialScanDone) {
+            onBtComplete(task)
+          }
+        }
+      }
+    }
+
+    // Mark initial scan as done AFTER all callbacks — unconditionally.
     initialScanDone = true
   }
 
   function reset(): void {
     notifiedErrorGids.clear()
     notifiedCompleteGids.clear()
+    notifiedBtCompleteGids.clear()
     initialScanDone = false
   }
 

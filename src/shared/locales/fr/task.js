@@ -208,4 +208,5 @@ export default {
   'task-type': 'Type',
   'task-completed-at': 'Terminé le',
   'restart-not-available': 'Aucun lien de téléchargement disponible pour redémarrer',
+  'torrent-trashed': 'Téléchargement de "{taskName}" terminé — fichier torrent déplacé dans la corbeille',
 }

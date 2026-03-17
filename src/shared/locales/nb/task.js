@@ -208,4 +208,5 @@ export default {
   'task-type': 'Type',
   'task-completed-at': 'Fullført',
   'restart-not-available': 'Ingen nedlastingslenker tilgjengelig for omstart',
+  'torrent-trashed': 'Nedlasting av "{taskName}" fullført, torrentfilen er flyttet til papirkurven',
 }

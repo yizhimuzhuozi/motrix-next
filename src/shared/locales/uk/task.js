@@ -208,4 +208,5 @@ export default {
   'task-type': 'Тип',
   'task-completed-at': 'Завершено',
   'restart-not-available': 'Немає доступних посилань для повторного завантаження',
+  'torrent-trashed': 'Завантаження "{taskName}" завершено — торент-файл переміщено до кошика',
 }

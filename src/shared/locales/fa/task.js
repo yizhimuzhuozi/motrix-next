@@ -208,4 +208,5 @@ export default {
   'task-type': 'نوع',
   'task-completed-at': 'زمان اتمام',
   'restart-not-available': 'لینک دانلود برای شروع مجدد موجود نیست',
+  'torrent-trashed': 'دانلود "{taskName}" کامل شد، فایل تورنت به سطل زباله منتقل شد',
 }

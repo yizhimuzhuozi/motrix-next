@@ -208,4 +208,5 @@ export default {
   'task-type': 'Tip',
   'task-completed-at': 'Finalizat la',
   'restart-not-available': 'Nu există linkuri de descărcare disponibile pentru repornire',
+  'torrent-trashed': 'Descărcarea "{taskName}" finalizată, fișierul torrent a fost mutat în coșul de reciclare',
 }

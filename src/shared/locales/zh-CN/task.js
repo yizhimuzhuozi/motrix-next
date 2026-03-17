@@ -208,4 +208,5 @@ export default {
   'task-type': '类型',
   'task-completed-at': '完成时间',
   'restart-not-available': '没有可用的下载链接，无法重新下载',
+  'torrent-trashed': '"{taskName}" 下载完成，种子文件已移至废纸篓',
 }

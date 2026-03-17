@@ -208,4 +208,5 @@ export default {
   'task-type': '種類',
   'task-completed-at': '完了日時',
   'restart-not-available': '再ダウンロードに利用できるURLがありません',
+  'torrent-trashed': '"{taskName}" のダウンロードが完了しました。トレントファイルはゴミ箱に移動されました',
 }

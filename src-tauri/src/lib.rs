@@ -392,6 +392,7 @@ pub fn run() {
             commands::probe_trackers,
             commands::is_autostart_launch,
             commands::export_diagnostic_logs,
+            commands::trash_file,
         ])
         .setup(|app| setup_app(app))
         .build(tauri::generate_context!())

@@ -208,4 +208,5 @@ export default {
   'task-type': 'Loại',
   'task-completed-at': 'Hoàn thành lúc',
   'restart-not-available': 'Không có URL tải xuống để khởi động lại',
+  'torrent-trashed': 'Tải "{taskName}" hoàn tất — tệp torrent đã chuyển vào thùng rác',
 }

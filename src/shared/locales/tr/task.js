@@ -208,4 +208,5 @@ export default {
   'task-type': 'Tür',
   'task-completed-at': 'Tamamlanma Tarihi',
   'restart-not-available': 'Yeniden başlatmak için indirme bağlantısı yok',
+  'torrent-trashed': '"{taskName}" indirmesi tamamlandı, torrent dosyası çöp kutusuna taşındı',
 }

@@ -42,6 +42,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 dirs = "6"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = "0.4"
+trash = "5"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm"] }

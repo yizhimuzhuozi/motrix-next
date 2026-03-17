@@ -14,7 +14,7 @@ import {
   buildStatusAwareConfirmAction,
 } from '@/composables/useMagnetFlow'
 import { buildHistoryRecord, isMetadataTask } from '@/composables/useTaskLifecycle'
-import { shouldDeleteTorrent, deleteTorrentFile } from '@/composables/useDownloadCleanup'
+import { shouldDeleteTorrent, trashTorrentFile, cleanupTorrentMetadataFiles } from '@/composables/useDownloadCleanup'
 import type { MagnetFileItem } from '@/composables/useMagnetFlow'
 import { getTaskName } from '@shared/utils'
 import { ARIA2_ERROR_CODES } from '@shared/aria2ErrorCodes'
@@ -117,19 +117,29 @@ onMounted(() => {
     const errorText = i18nKey ? t(i18nKey) : task.errorMessage || t('task.error-unknown')
     message.error(`${taskName}: ${errorText}`, { duration: 8000, closable: true })
   })
-  // Wire task completion lifecycle: history recording + optional torrent cleanup
+  // Wire task completion lifecycle: history recording
   taskStore.setOnTaskComplete((task) => {
     // Skip BT metadata-only downloads — they are intermediate steps
     if (isMetadataTask(task)) return
     // Record to history DB (fire-and-forget)
     const record = buildHistoryRecord(task)
     historyStore.addRecord(record).catch((e) => logger.debug('TaskView.historyRecord', e))
-    // Auto-delete .torrent file if enabled
-    if (shouldDeleteTorrent(preferenceStore.config)) {
-      const firstPath = task.files?.[0]?.path
-      if (firstPath) {
-        deleteTorrentFile(firstPath).catch((e) => logger.debug('TaskView.torrentCleanup', e))
+  })
+  // Wire BT completion lifecycle: trash original .torrent source file + clean aria2 metadata.
+  taskStore.setOnBtComplete(async (task) => {
+    if (!shouldDeleteTorrent(preferenceStore.config)) return
+    // Trash the original .torrent file the user added (keyed by infoHash to avoid race)
+    const sourcePath = task.infoHash ? taskStore.consumeTorrentSource(task.infoHash) : undefined
+    if (sourcePath) {
+      const ok = await trashTorrentFile(sourcePath)
+      if (ok) {
+        const taskName = getTaskName(task)
+        message.success(t('task.torrent-trashed', { taskName }))
       }
+    }
+    // Clean up aria2's auto-saved metadata copy in the download dir
+    if (task.dir && task.infoHash) {
+      cleanupTorrentMetadataFiles(task.dir, task.infoHash).catch((e) => logger.debug('TaskView.metadataCleanup', e))
     }
   })
 })

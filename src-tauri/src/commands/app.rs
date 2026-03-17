@@ -498,3 +498,14 @@ pub async fn export_diagnostic_logs(app: AppHandle, save_path: String) -> Result
     log::info!("Exported diagnostic logs to {}", zip_path.display());
     Ok(zip_path.to_string_lossy().to_string())
 }
+
+/// Moves a file to the OS trash / recycle bin.
+///
+/// Uses the `trash` crate for cross-platform support:
+/// - macOS: NSFileManager.trashItemAtURL
+/// - Windows: IFileOperation + FOFX_RECYCLEONDELETE
+/// - Linux: FreeDesktop Trash spec (XDG_DATA_HOME/Trash)
+#[tauri::command]
+pub fn trash_file(path: String) -> Result<(), AppError> {
+    trash::delete(&path).map_err(|e| AppError::Io(e.to_string()))
+}

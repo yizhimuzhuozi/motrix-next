@@ -208,4 +208,5 @@ export default {
   'task-type': 'Тип',
   'task-completed-at': 'Завършено на',
   'restart-not-available': 'Няма налични линкове за повторно изтегляне',
+  'torrent-trashed': 'Изтеглянето на "{taskName}" завърши, торент файлът е преместен в кошчето',
 }

@@ -208,4 +208,5 @@ export default {
   'task-type': 'النوع',
   'task-completed-at': 'وقت الاكتمال',
   'restart-not-available': 'لا تتوفر روابط تحميل لإعادة التشغيل',
+  'torrent-trashed': 'اكتمل تنزيل "{taskName}"، تم نقل ملف التورنت إلى سلة المهملات',
 }

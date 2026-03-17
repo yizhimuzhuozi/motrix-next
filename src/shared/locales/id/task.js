@@ -208,4 +208,5 @@ export default {
   'task-type': 'Tipe',
   'task-completed-at': 'Selesai Pada',
   'restart-not-available': 'Tidak ada URL unduhan untuk memulai ulang',
+  'torrent-trashed': 'Unduhan "{taskName}" selesai, file torrent dipindahkan ke tempat sampah',
 }

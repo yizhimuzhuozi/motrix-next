@@ -97,6 +97,11 @@ export async function submitBatchItems(
         ) {
           opts['select-file'] = item.selectedFileIndices.join(',')
         }
+        // Register source path by infoHash BEFORE addTorrent to avoid race:
+        // fast downloads enter seeding before addTorrent promise resolves.
+        if (item.source && item.torrentMeta?.infoHash) {
+          taskStore.registerTorrentSource(item.torrentMeta.infoHash, item.source)
+        }
         await taskStore.addTorrent({ torrent: item.payload, options: opts })
       } else if (item.kind === 'metalink') {
         const opts: Aria2EngineOptions = { ...options }
