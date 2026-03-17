@@ -68,8 +68,8 @@ body:
     attributes:
       label: Diagnostic Logs
       description: |
-        **Required.** Please export logs via **Advanced Settings → Export Diagnostic Logs** and keep the log level at the default `debug`.
-        Attach the exported `.zip` file or paste the relevant log content below.
+        Please export logs via **Advanced Settings → Export Diagnostic Logs** (keep the log level at the default `debug`).
+        You can upload the exported `.zip` file directly here — no need to extract it. Just drag-and-drop and you're all set!
     validations:
       required: true
 
