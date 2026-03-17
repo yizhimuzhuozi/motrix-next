@@ -11,7 +11,7 @@ import { useHistoryStore } from '@/stores/history'
 import { useAdvancedActions } from '@/composables/useAdvancedActions'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { useIpc } from '@/composables/useIpc'
-import { appDataDir, join, resolveResource } from '@tauri-apps/api/path'
+import { appDataDir, appLogDir, join } from '@tauri-apps/api/path'
 import { LOG_LEVELS, PROXY_SCOPE_OPTIONS } from '@shared/constants'
 import { convertTrackerDataToLine } from '@shared/utils/tracker'
 import {
@@ -169,7 +169,7 @@ function loadForm() {
 
 async function loadPaths() {
   try {
-    aria2ConfPath.value = await resolveResource('engine/aria2.conf')
+    aria2ConfPath.value = await invoke<string>('get_engine_conf_path')
   } catch (e) {
     aria2ConfPath.value = ''
     logger.debug('Advanced.loadConf', e)
@@ -177,9 +177,14 @@ async function loadPaths() {
   try {
     const dataDir = await appDataDir()
     sessionPath.value = await join(dataDir, 'download.session')
-    logPath.value = await join(dataDir, 'motrix-next.log')
   } catch (e) {
     logger.debug('Advanced.loadPaths', e)
+  }
+  try {
+    const logDir = await appLogDir()
+    logPath.value = await join(logDir, 'motrix-next.log')
+  } catch (e) {
+    logger.debug('Advanced.loadLogPath', e)
   }
 }
 

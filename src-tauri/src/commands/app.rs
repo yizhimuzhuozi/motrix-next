@@ -140,6 +140,19 @@ fn clear_session_file_inner(app: &AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Returns the absolute path to the bundled aria2.conf file.
+/// Uses the same resolution logic as `start_engine` in lifecycle.rs:
+/// `exe_dir/binaries/aria2.conf`.
+#[tauri::command]
+pub fn get_engine_conf_path() -> Result<String, AppError> {
+    let exe = std::env::current_exe().map_err(|e| AppError::Io(e.to_string()))?;
+    let exe_dir = exe
+        .parent()
+        .ok_or_else(|| AppError::Io("Failed to get exe dir".into()))?;
+    let conf_path = exe_dir.join("binaries").join("aria2.conf");
+    Ok(conf_path.to_string_lossy().to_string())
+}
+
 /// Updates the system tray title text (macOS menu bar display).
 #[tauri::command]
 pub fn update_tray_title(app: AppHandle, title: String) -> Result<(), AppError> {

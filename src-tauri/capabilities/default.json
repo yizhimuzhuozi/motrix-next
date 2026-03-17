@@ -53,6 +53,9 @@
           "path": "$APPDATA/**"
         },
         {
+          "path": "$APPLOG/**"
+        },
+        {
           "path": "$TEMP/**"
         }
       ]

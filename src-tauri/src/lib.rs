@@ -396,6 +396,7 @@ pub fn run() {
             commands::is_autostart_launch,
             commands::export_diagnostic_logs,
             commands::trash_file,
+            commands::get_engine_conf_path,
         ])
         .setup(|app| setup_app(app))
         .build(tauri::generate_context!())

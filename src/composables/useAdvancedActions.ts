@@ -265,7 +265,7 @@ export function useAdvancedActions(deps: AdvancedActionsDeps) {
       onPositiveClick: async () => {
         try {
           const { writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
-          await writeTextFile('motrix-next.log', '', { baseDir: BaseDirectory.AppData })
+          await writeTextFile('motrix-next.log', '', { baseDir: BaseDirectory.AppLog })
           message.success(t('preferences.clear-log-success'))
         } catch (e) {
           logger.error('Advanced.clearLog', e)
@@ -276,23 +276,19 @@ export function useAdvancedActions(deps: AdvancedActionsDeps) {
   }
 
   async function handleRevealPath(filePath: string) {
+    if (!filePath) return
+    const fileExists = await exists(filePath)
+    if (!fileExists) {
+      message.warning(t('task.file-not-exist'))
+      return
+    }
     try {
-      const fileExists = await exists(filePath)
       const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
-      if (fileExists) {
-        await revealItemInDir(filePath)
-      } else {
-        // File doesn't exist yet — open parent directory instead
-        const parentDir =
-          filePath.substring(0, filePath.lastIndexOf('/')) || filePath.substring(0, filePath.lastIndexOf('\\'))
-        if (parentDir) {
-          const { openPath } = await import('@tauri-apps/plugin-opener')
-          await openPath(parentDir)
-        }
-      }
+      await revealItemInDir(filePath)
+      message.success(t('task.open-folder-success'))
     } catch (e) {
       logger.error('Advanced.revealPath', e)
-      message.error(String(e))
+      message.warning(t('task.file-not-exist'))
     }
   }
 
@@ -301,6 +297,7 @@ export function useAdvancedActions(deps: AdvancedActionsDeps) {
       const dir = await appDataDir()
       const { openPath } = await import('@tauri-apps/plugin-opener')
       await openPath(dir)
+      message.success(t('task.open-folder-success'))
     } catch (e) {
       logger.error('Advanced.openConfigFolder', e)
       message.error(String(e))
