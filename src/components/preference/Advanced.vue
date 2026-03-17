@@ -44,7 +44,7 @@ import {
   useDialog,
 } from 'naive-ui'
 import { useAppMessage } from '@/composables/useAppMessage'
-import { SyncOutline, DiceOutline, RefreshOutline, DownloadOutline } from '@vicons/ionicons5'
+import { SyncOutline, DiceOutline, DownloadOutline } from '@vicons/ionicons5'
 import { logger } from '@shared/logger'
 import PreferenceActionBar from './PreferenceActionBar.vue'
 import { trackerSourceOptions } from '@shared/constants/trackerSources'
@@ -387,14 +387,6 @@ onMounted(() => {
           </NButton>
         </NInputGroup>
       </NFormItem>
-      <NFormItem :show-label="false">
-        <NButton class="restart-engine-btn" ghost @click="handleManualRestart">
-          <template #icon>
-            <NIcon><RefreshOutline /></NIcon>
-          </template>
-          {{ t('preferences.engine-restart-btn') }}
-        </NButton>
-      </NFormItem>
 
       <NDivider title-placement="left">{{ t('preferences.port') }}</NDivider>
       <NFormItem label="UPnP/NAT-PMP">
@@ -484,6 +476,9 @@ onMounted(() => {
           <NButton class="session-reset-btn" ghost @click="handleSessionReset">
             {{ t('preferences.session-reset') }}
           </NButton>
+          <NButton class="restore-defaults-btn" ghost @click="handleRestoreDefaults">
+            {{ t('preferences.restore-defaults') }}
+          </NButton>
           <NButton class="factory-reset-btn" ghost @click="handleFactoryReset">
             {{ t('preferences.factory-reset') }}
           </NButton>
@@ -516,12 +511,7 @@ onMounted(() => {
         {{ t('preferences.db-record-count', { count: dbRecords.length }) }}
       </div>
     </NModal>
-    <PreferenceActionBar
-      :is-dirty="isDirty"
-      @save="handleSave"
-      @discard="handleReset"
-      @restore="handleRestoreDefaults"
-    />
+    <PreferenceActionBar :is-dirty="isDirty" @save="handleSave" @discard="handleReset" @restart="handleManualRestart" />
   </div>
 </template>
 
@@ -564,24 +554,24 @@ onMounted(() => {
   padding: 16px 24px 16px 40px;
 }
 
-/* ── Restart Engine — warning-toned ghost button ──────────────────── */
-.restart-engine-btn {
-  color: var(--n-color-target, #d4a04a) !important;
-  border-color: var(--n-color-target, #d4a04a) !important;
-  --btn-warning: #d4a04a;
+/* ── Restore Defaults — warm-gold ghost, same tone as session-reset ── */
+.restore-defaults-btn {
+  --btn-warning: #c9a055;
+  color: var(--btn-warning) !important;
+  border-color: var(--btn-warning) !important;
   transition:
     color 0.35s cubic-bezier(0.2, 0, 0, 1),
     background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
     border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
-.restart-engine-btn:hover {
+.restore-defaults-btn:hover {
   background-color: color-mix(in srgb, var(--btn-warning) 12%, transparent) !important;
 }
-.restart-engine-btn :deep(.n-button__border) {
+.restore-defaults-btn :deep(.n-button__border) {
   border-color: var(--btn-warning) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
-.restart-engine-btn :deep(.n-button__state-border) {
+.restore-defaults-btn :deep(.n-button__state-border) {
   border-color: var(--btn-warning) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }

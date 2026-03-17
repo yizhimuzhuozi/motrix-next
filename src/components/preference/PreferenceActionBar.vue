@@ -1,18 +1,18 @@
 <script setup lang="ts">
-/** @fileoverview Shared save/discard/restore action bar for preference pages. */
+/** @fileoverview Shared save/discard/restart action bar for preference pages. */
 import { useI18n } from 'vue-i18n'
-import { NButton, NSpace } from 'naive-ui'
+import { NButton, NSpace, NIcon } from 'naive-ui'
 import { RefreshOutline } from '@vicons/ionicons5'
 
 defineProps<{ isDirty: boolean }>()
-defineEmits<{ save: []; discard: []; restore: [] }>()
+defineEmits<{ save: []; discard: []; restart: [] }>()
 
 const { t } = useI18n()
 </script>
 
 <template>
   <div class="form-actions">
-    <NSpace :size="12">
+    <NSpace :size="12" align="center">
       <NButton :class="{ 'save-btn-dirty': isDirty }" type="primary" @click="$emit('save')">
         {{ t('preferences.save') }}
       </NButton>
@@ -20,11 +20,11 @@ const { t } = useI18n()
         {{ t('preferences.discard') }}
       </NButton>
     </NSpace>
-    <NButton class="restore-btn" quaternary size="small" @click="$emit('restore')">
+    <NButton class="restart-engine-action-btn" @click="$emit('restart')">
       <template #icon>
-        <RefreshOutline />
+        <NIcon :size="16"><RefreshOutline /></NIcon>
       </template>
-      {{ t('preferences.restore-defaults') }}
+      {{ t('preferences.engine-restart-btn') }}
     </NButton>
   </div>
 </template>
@@ -33,24 +33,38 @@ const { t } = useI18n()
 .form-actions {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 32px;
   padding: 16px 24px 16px 40px;
 }
 
-/* ── Restore Defaults — M3 Standard easing (0.2, 0, 0, 1) ──────── */
-/* Transition all visual properties together for a smooth hover feel */
-.restore-btn {
-  color: var(--m3-outline);
-  font-size: var(--font-size-xs);
+/* ── Restart Engine — warm-amber cautionary button ──────────────── */
+/* Same size/shape as Save & Discard but with extra left gap (32px)  */
+/* from the NSpace group. Amber conveys "proceed with awareness"    */
+/* without the alarm of red/error colors.                           */
+.restart-engine-action-btn {
+  --btn-amber: #c9a055;
+  --btn-amber-bg: color-mix(in srgb, #c9a055 10%, transparent);
+  color: var(--btn-amber) !important;
+  border-color: var(--btn-amber) !important;
   transition:
-    color 0.2s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.2s cubic-bezier(0.2, 0, 0, 1),
-    opacity 0.2s cubic-bezier(0.2, 0, 0, 1);
-  opacity: 0.7;
+    color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.15s cubic-bezier(0.2, 0, 0, 1);
 }
-.restore-btn:hover {
-  color: var(--m3-error);
-  opacity: 1;
+.restart-engine-action-btn:hover {
+  background-color: var(--btn-amber-bg) !important;
+}
+.restart-engine-action-btn:active {
+  transform: scale(0.97);
+}
+.restart-engine-action-btn :deep(.n-button__border) {
+  border-color: var(--btn-amber) !important;
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.restart-engine-action-btn :deep(.n-button__state-border) {
+  border-color: var(--btn-amber) !important;
+  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ── Save — dirty state with M3 emphasized enter (0.2, 0, 0, 1) ── */

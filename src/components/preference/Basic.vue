@@ -4,6 +4,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePreferenceStore } from '@/stores/preference'
 import { usePreferenceForm } from '@/composables/usePreferenceForm'
+import { useEngineRestart } from '@/composables/useEngineRestart'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { useIpc } from '@/composables/useIpc'
 import { platform } from '@tauri-apps/plugin-os'
@@ -11,6 +12,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { downloadDir } from '@tauri-apps/api/path'
 import { extractSpeedUnit } from '@shared/utils'
 import { logger } from '@shared/logger'
+import { ENGINE_RPC_PORT } from '@shared/constants'
 import { useAppMessage } from '@/composables/useAppMessage'
 import { buildBasicForm, buildBasicSystemConfig, transformBasicForStore } from '@/composables/useBasicPreference'
 import {
@@ -222,30 +224,24 @@ function handleCheckUpdate() {
   updateDialogRef.value?.open()
 }
 
-function handleRestoreDefaults() {
-  dialog.warning({
-    title: t('preferences.restore-defaults'),
-    content: t('preferences.restore-defaults-confirm'),
-    positiveText: t('preferences.restore-defaults'),
-    negativeText: t('app.cancel'),
+const { restartEngine } = useEngineRestart()
+
+function handleManualRestart() {
+  const port = (preferenceStore.config.rpcListenPort as number) || ENGINE_RPC_PORT
+  const secret = (preferenceStore.config.rpcSecret as string) || ''
+  const d = dialog.warning({
+    title: t('preferences.engine-restart-title'),
+    content: t('preferences.engine-restart-manual-confirm'),
+    positiveText: t('preferences.engine-restart-now'),
+    negativeText: t('preferences.engine-restart-later'),
+    maskClosable: false,
     onPositiveClick: async () => {
-      const ok = await preferenceStore.resetToDefaults()
-      if (ok) {
-        Object.assign(form.value, buildForm())
-        resetSnapshot()
-        message.success(t('preferences.restore-defaults-success'))
-        dialog.info({
-          title: t('preferences.restore-defaults'),
-          content: t('preferences.restart-required'),
-          positiveText: t('preferences.restart-now'),
-          negativeText: t('app.cancel'),
-          onPositiveClick: async () => {
-            const { stopEngine } = useIpc()
-            await stopEngine()
-            relaunch()
-          },
-        })
-      }
+      d.loading = true
+      d.negativeText = ''
+      d.closable = false
+      message.info(t('preferences.engine-restarting'), { duration: 2000 })
+      await new Promise((r) => requestAnimationFrame(r))
+      await restartEngine({ port, secret })
     },
   })
 }
@@ -465,12 +461,7 @@ onMounted(async () => {
         </NSpace>
       </NFormItem>
     </NForm>
-    <PreferenceActionBar
-      :is-dirty="isDirty"
-      @save="handleSave"
-      @discard="handleReset"
-      @restore="handleRestoreDefaults"
-    />
+    <PreferenceActionBar :is-dirty="isDirty" @save="handleSave" @discard="handleReset" @restart="handleManualRestart" />
   </div>
 </template>
 
