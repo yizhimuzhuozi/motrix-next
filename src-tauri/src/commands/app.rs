@@ -548,3 +548,35 @@ pub async fn export_diagnostic_logs(app: AppHandle, save_path: String) -> Result
 pub fn trash_file(path: String) -> Result<(), AppError> {
     trash::delete(&path).map_err(|e| AppError::Io(e.to_string()))
 }
+
+/// Returns `true` when the WebKitGTK DMABuf renderer has been disabled via
+/// the `WEBKIT_DISABLE_DMABUF_RENDERER` environment variable.
+///
+/// # Context
+///
+/// WORKAROUND for WebKitGTK Bug #262607 (RESOLVED WONTFIX).
+/// <https://bugs.webkit.org/show_bug.cgi?id=262607>
+///
+/// On Linux with NVIDIA proprietary drivers, WebKitGTK's DMABuf renderer
+/// crashes, so users must set `WEBKIT_DISABLE_DMABUF_RENDERER=1` to fall
+/// back to software compositing.  That fallback loses the alpha channel
+/// after a maximize → restore cycle, breaking CSS `border-radius` corners.
+///
+/// The frontend uses this flag to decide:
+/// - `false` → safe to remove border-radius on maximize (normal behavior)
+/// - `true`  → keep border-radius at all times (NVIDIA workaround)
+///
+/// On non-Linux platforms this always returns `false`.
+#[tauri::command]
+pub fn is_dmabuf_renderer_disabled() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}

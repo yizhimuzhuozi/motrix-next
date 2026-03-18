@@ -381,6 +381,7 @@ pub fn run() {
             commands::export_diagnostic_logs,
             commands::trash_file,
             commands::get_engine_conf_path,
+            commands::is_dmabuf_renderer_disabled,
         ])
         // ── Window event interception ─────────────────────────────────
         //

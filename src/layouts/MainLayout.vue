@@ -186,20 +186,31 @@ onMounted(async () => {
   startGlobalPolling()
 
   // Track maximize state to remove border-radius when maximized.
-  // Only Windows needs this: transparent + decorations:false HWNDs leak
-  // transparent pixels through CSS border-radius corners when maximized.
+  // Windows and Linux need this: transparent + decorations:false windows
+  // leak transparent pixels through CSS border-radius corners when maximized.
   //
   // macOS: Native window handles rounding; isMaximized() inside onResized
   // triggers an infinite loop (tauri-apps/tauri#5812).
   //
-  // Linux: Keeping border-radius during maximize avoids a GNOME/Wayland
-  // (Mutter) compositor bug where transparent clip is lost after the
-  // maximize → restore cycle, causing corners to render opaque.
+  // Linux + WEBKIT_DISABLE_DMABUF_RENDERER=1 (typically NVIDIA):
+  // WebKitGTK software compositing loses the alpha channel after a
+  // maximize → restore cycle, breaking border-radius corners.
+  // WORKAROUND: keep border-radius at all times on affected systems.
+  // See: https://bugs.webkit.org/show_bug.cgi?id=262607 (RESOLVED WONTFIX)
   {
     const appWindow = getCurrentWindow()
     const isWindows = navigator.userAgent.includes('Windows')
+    const isLinux = navigator.userAgent.includes('Linux')
 
-    if (isWindows) {
+    let shouldTrackMaximize = isWindows
+
+    if (isLinux) {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const dmabufDisabled = await invoke<boolean>('is_dmabuf_renderer_disabled')
+      shouldTrackMaximize = !dmabufDisabled
+    }
+
+    if (shouldTrackMaximize) {
       isMaximized.value = await appWindow.isMaximized()
       unlistenResize = await appWindow.onResized(() => {
         throttledResizeHandler(async () => {
