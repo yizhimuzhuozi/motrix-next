@@ -276,17 +276,17 @@ export function useAdvancedActions(deps: AdvancedActionsDeps) {
 
   async function handleRevealPath(filePath: string) {
     if (!filePath) return
-    const fileExists = await exists(filePath)
-    if (!fileExists) {
-      message.warning(t('task.file-not-exist'))
-      return
-    }
     try {
+      const fileExists = await exists(filePath)
+      if (!fileExists) {
+        message.warning(t('task.file-not-exist'))
+        return
+      }
       const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
       await revealItemInDir(filePath)
       message.success(t('task.open-folder-success'))
     } catch (e) {
-      logger.error('Advanced.revealPath', e)
+      logger.warn('Advanced.revealPath', String(e))
       message.warning(t('task.file-not-exist'))
     }
   }
