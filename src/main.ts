@@ -12,6 +12,7 @@ import aria2Api, { initClient } from './api/aria2'
 import { ENGINE_RPC_PORT, AUTO_SYNC_TRACKER_INTERVAL, DEFAULT_TRACKER_SOURCE } from '@shared/constants'
 import { convertTrackerDataToLine, convertTrackerDataToComma, reduceTrackerString } from '@shared/utils/tracker'
 import { logger } from '@shared/logger'
+import type { AppConfig } from '@shared/types'
 import App from './App.vue'
 import 'virtual:uno.css'
 import './styles/variables.css'
@@ -143,11 +144,29 @@ window.addEventListener('unhandledrejection', (e) => {
 
   /** Start the aria2 engine, wait for readiness, and connect the RPC client.
    *  Returns `true` if the engine is usable, `false` on failure. */
-  async function initEngine(port: number, secret: string): Promise<boolean> {
+  async function initEngine(port: number, secret: string, config: AppConfig): Promise<boolean> {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
+
+      // Seed system.json with the FULL set of default system config values.
+      // This ensures CLI args include --split, --max-connection-per-server,
+      // --user-agent, etc. even before the user opens the preference page.
+      // On subsequent launches, saved values from Basic/Advanced preferences
+      // already exist in system.json and will be merged (not overwritten).
+      const { buildBasicSystemConfig, buildBasicForm } = await import('@/composables/useBasicPreference')
+      const { buildAdvancedSystemConfig, buildAdvancedForm } = await import('@/composables/useAdvancedPreference')
+      const basicSystem = buildBasicSystemConfig(buildBasicForm(config))
+      const { form: advForm } = buildAdvancedForm(config)
+      const advancedSystem = buildAdvancedSystemConfig(advForm)
+
       await invoke('save_system_config', {
-        config: { 'rpc-secret': secret, 'rpc-listen-port': String(port) },
+        config: {
+          ...basicSystem,
+          ...advancedSystem,
+          // Override with runtime values — secret may have been auto-generated
+          'rpc-secret': secret,
+          'rpc-listen-port': String(port),
+        },
       })
       await invoke('start_engine_command')
     } catch (e) {
@@ -251,7 +270,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
     // Engine initializes in the background — does NOT block the UI.
     // appStore.engineInitializing drives the init banner in MainLayout.
-    const enginePromise = initEngine(port, secret)
+    const enginePromise = initEngine(port, secret, config)
 
     // ── Phase 3: non-critical IPC (parallel) ──────────────────────────────
     Promise.allSettled([setupDeepLinks(), syncAutostart(config)])
@@ -274,6 +293,15 @@ window.addEventListener('unhandledrejection', (e) => {
     try {
       const ok = await enginePromise
       appStore.engineReady = ok
+
+      // Push user-configured options to aria2 global state via RPC.
+      // CLI args already set these at process startup, but this is
+      // defense-in-depth: ensures the runtime global state matches
+      // the user's preferences even if system.json had stale keys.
+      if (ok) {
+        const { syncGlobalOptions } = await import('@/composables/syncGlobalOptions')
+        await syncGlobalOptions(config).catch((e) => logger.warn('Engine', 'global option sync failed: ' + e))
+      }
     } catch (e) {
       logger.error('Engine', 'unexpected startup error: ' + e)
       appStore.engineReady = false

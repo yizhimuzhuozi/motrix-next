@@ -58,6 +58,19 @@ export function useEngineRestart() {
         try {
           await reconnectClient({ port: opts.port, secret: opts.secret })
           appStore.engineReady = true
+
+          // Re-sync global options — new aria2 process resets to compiled
+          // defaults.  CLI args from system.json cover most keys, but this
+          // is defense-in-depth against stale system.json or missed keys.
+          try {
+            const { usePreferenceStore } = await import('@/stores/preference')
+            const prefStore = usePreferenceStore()
+            const { syncGlobalOptions } = await import('@/composables/syncGlobalOptions')
+            await syncGlobalOptions(prefStore.config)
+          } catch (syncErr) {
+            logger.debug('useEngineRestart', 'global option sync after restart failed: ' + syncErr)
+          }
+
           return true
         } catch (e) {
           lastError = e
