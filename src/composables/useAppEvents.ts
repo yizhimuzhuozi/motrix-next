@@ -48,6 +48,7 @@ interface AppEventsDeps {
   showEngineOverlay: Ref<boolean>
   isExiting: Ref<boolean>
   handleExitConfirm: () => Promise<void>
+  onAbout: () => void
 }
 
 interface AppEventsReturn {
@@ -156,6 +157,9 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
     return listen<string>('menu-event', async (event) => {
       const action = event.payload
       switch (action) {
+        case 'about':
+          deps.onAbout()
+          break
         case 'new-task':
           await getCurrentWindow().show()
           await getCurrentWindow().setFocus()

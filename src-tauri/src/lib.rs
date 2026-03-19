@@ -104,6 +104,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 let _ = app.emit("show-exit-dialog", ());
             }
         }
+        "about" => {
+            let _ = app.emit("menu-event", "about");
+        }
         "new-task" => {
             let _ = app.emit("menu-event", "new-task");
         }

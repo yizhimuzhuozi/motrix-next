@@ -197,23 +197,48 @@ pub fn update_tray_menu_labels(app: AppHandle, labels: Value) -> Result<(), AppE
 }
 
 /// Updates localized labels on application menu items by their IDs.
+///
+/// Recursively traverses all submenus so that items nested inside
+/// submenus are found — `Menu::get()` only checks direct children.
 #[tauri::command]
 pub fn update_menu_labels(app: AppHandle, labels: Value) -> Result<(), AppError> {
     use tauri::menu::MenuItemKind;
-    if let Some(menu) = app.menu() {
-        if let Some(obj) = labels.as_object() {
-            for (id, text) in obj {
-                if let Some(item) = menu.get(id) {
-                    match item {
-                        MenuItemKind::MenuItem(mi) => {
-                            let _ = mi.set_text(text.as_str().unwrap_or(id));
-                        }
-                        MenuItemKind::Submenu(sub) => {
-                            let _ = sub.set_text(text.as_str().unwrap_or(id));
-                        }
-                        _ => {}
+
+    fn apply_labels(items: &[MenuItemKind<tauri::Wry>], map: &serde_json::Map<String, Value>) {
+        for item in items {
+            match item {
+                MenuItemKind::MenuItem(mi) => {
+                    if let Some(text) = map.get(mi.id().as_ref()) {
+                        let _ = mi.set_text(text.as_str().unwrap_or_default());
                     }
                 }
+                MenuItemKind::Submenu(sub) => {
+                    if let Some(text) = map.get(sub.id().as_ref()) {
+                        let _ = sub.set_text(text.as_str().unwrap_or_default());
+                    }
+                    if let Ok(children) = sub.items() {
+                        apply_labels(&children, map);
+                    }
+                }
+                // PredefinedMenuItems have auto-generated UUIDs that cannot
+                // be predicted, so we match by their current display text
+                // instead (keyed by the English default in the labels map).
+                MenuItemKind::Predefined(pi) => {
+                    if let Ok(current) = pi.text() {
+                        if let Some(new_text) = map.get(&current) {
+                            let _ = pi.set_text(new_text.as_str().unwrap_or_default());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if let Some(menu) = app.menu() {
+        if let Some(obj) = labels.as_object() {
+            if let Ok(items) = menu.items() {
+                apply_labels(&items, obj);
             }
         }
     }

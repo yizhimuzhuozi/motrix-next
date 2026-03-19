@@ -68,6 +68,9 @@ const { setupListeners } = useAppEvents({
   showEngineOverlay,
   isExiting,
   handleExitConfirm,
+  onAbout: () => {
+    showAbout.value = true
+  },
 })
 
 function startGlobalPolling() {
@@ -277,11 +280,33 @@ onMounted(async () => {
     })
     await invoke('update_menu_labels', {
       labels: {
+        // Custom menu items (matched by ID)
+        about: t('app.menu-about'),
         'new-task': t('app.menu-new-task'),
         'open-torrent': t('app.menu-open-torrent'),
         preferences: t('app.menu-preferences'),
         'release-notes': t('app.menu-release-notes'),
         'report-issue': t('app.menu-report-issue'),
+        'minimize-window': t('app.menu-minimize'),
+        'zoom-window': t('app.menu-zoom'),
+        'close-window': t('app.menu-close-window'),
+        // Submenu titles (matched by ID)
+        'file-menu': t('app.menu-file'),
+        'edit-menu': t('app.menu-edit'),
+        'window-menu': t('app.menu-window'),
+        'help-menu': t('app.menu-help'),
+        // PredefinedMenuItems — keyed by English default text because
+        // their IDs are auto-generated UUIDs that cannot be predicted.
+        Undo: t('app.menu-undo'),
+        Redo: t('app.menu-redo'),
+        Cut: t('app.menu-cut'),
+        Copy: t('app.menu-copy'),
+        Paste: t('app.menu-paste'),
+        'Select All': t('app.menu-select-all'),
+        'Hide MotrixNext': t('app.hide'),
+        'Hide Others': t('app.hide-others'),
+        'Show All': t('app.unhide'),
+        'Quit MotrixNext': t('app.quit'),
       },
     })
   } catch (e) {
