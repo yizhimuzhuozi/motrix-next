@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'RPC dokumentáció megtekintése',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'User-Agent szimulálása',
+  'ua-reset': 'Visszaállítás',
   'aria2-conf-path': 'Motor konfiguráció',
   'factory-reset': 'Gyári visszaállítás',
   'factory-reset-confirm': 'Visszaállítja a gyári beállításokat?',

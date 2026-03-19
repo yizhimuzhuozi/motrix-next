@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'عرض وثائق RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'محاكاة User-Agent',
+  'ua-reset': 'إعادة تعيين',
   'aria2-conf-path': 'ملف تهيئة المحرك',
   'factory-reset': 'استعادة إعدادات المصنع',
   'factory-reset-confirm': 'استعادة إعدادات المصنع؟',

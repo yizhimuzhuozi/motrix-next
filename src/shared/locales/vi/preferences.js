@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Xem tài liệu RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Giả lập User-Agent',
+  'ua-reset': 'Đặt lại',
   'aria2-conf-path': 'Cấu hình công cụ',
   'factory-reset': 'Khôi phục cài đặt gốc',
   'factory-reset-confirm': 'Khôi phục cài đặt gốc?',

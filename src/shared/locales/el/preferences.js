@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Προβολή τεκμηρίωσης RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Προσομοίωση User-Agent',
+  'ua-reset': 'Επαναφορά',
   'aria2-conf-path': 'Ρυθμίσεις μηχανής',
   'factory-reset': 'Εργοστασιακή επαναφορά',
   'factory-reset-confirm': 'Επαναφορά εργοστασιακών ρυθμίσεων;',

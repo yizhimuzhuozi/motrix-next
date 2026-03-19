@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Lihat dokumentasi RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Simulasi User-Agent',
+  'ua-reset': 'Atur ulang',
   'aria2-conf-path': 'Konfigurasi Mesin',
   'factory-reset': 'Reset ke pengaturan pabrik',
   'factory-reset-confirm': 'Pulihkan pengaturan pabrik?',

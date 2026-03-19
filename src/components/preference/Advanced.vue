@@ -441,7 +441,9 @@ onMounted(() => {
             <NButton @click="changeUA('chrome')">Chrome</NButton>
             <NButton @click="changeUA('du')">du</NButton>
           </NButtonGroup>
-          <NButton class="ua-reset-btn" size="small" ghost @click="form.userAgent = ''">Reset</NButton>
+          <NButton class="ua-reset-btn" size="small" ghost @click="form.userAgent = ''">
+            {{ t('preferences.ua-reset') }}
+          </NButton>
         </div>
       </NFormItem>
 

@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'RPC 문서 보기',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'User-Agent 위장',
+  'ua-reset': '재설정',
   'aria2-conf-path': '엔진 설정',
   'factory-reset': '초기화',
   'factory-reset-confirm': '초기 설정으로 복원하시겠습니까?',

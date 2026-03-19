@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'مشاهده مستندات RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'شبیه‌سازی User-Agent',
+  'ua-reset': 'بازنشانی',
   'aria2-conf-path': 'پیکربندی موتور',
   'factory-reset': 'بازگشت به تنظیمات کارخانه',
   'factory-reset-confirm': 'تنظیمات کارخانه بازیابی شود؟',

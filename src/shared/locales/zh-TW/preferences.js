@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': '檢視 RPC 文件',
   'user-agent': 'User-Agent',
   'mock-user-agent': '模擬 User-Agent',
+  'ua-reset': '重置',
   'aria2-conf-path': '引擎設定檔',
   'factory-reset': '還原原廠設定',
   'factory-reset-confirm': '確定要還原原廠設定嗎？',

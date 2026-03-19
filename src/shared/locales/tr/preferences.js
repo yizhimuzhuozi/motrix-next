@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'RPC belgelerini görüntüle',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'User-Agent simüle et',
+  'ua-reset': 'Sıfırla',
   'aria2-conf-path': 'Motor Yapılandırması',
   'factory-reset': 'Fabrika ayarlarına sıfırla',
   'factory-reset-confirm': 'Fabrika ayarlarına dönülsün mü?',

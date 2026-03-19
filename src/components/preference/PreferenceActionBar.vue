@@ -37,16 +37,16 @@ const { t } = useI18n()
   padding: 16px 24px 16px 40px;
 }
 
-/* ── Restart Engine — muted blue-gray cautionary button ─────────── */
+/* ── Restart Engine — soft teal maintenance button ──────────────── */
 /* Same size/shape as Save & Discard but with extra left gap (32px)  */
-/* from the NSpace group. Blue-gray conveys "available maintenance   */
-/* action" without the alarm of amber/warning or red/error colors.   */
+/* from the NSpace group. Teal conveys "maintenance tool" — calm,    */
+/* professional, visible in dark mode without alarm.                 */
 .restart-engine-action-btn {
-  --btn-muted: #8898aa;
-  --btn-muted-bg: color-mix(in srgb, #8898aa 10%, transparent);
-  --btn-muted-hover: #9aacbe;
-  color: var(--btn-muted) !important;
-  border-color: var(--btn-muted) !important;
+  --btn-teal: #6aadad;
+  --btn-teal-bg: color-mix(in srgb, #6aadad 10%, transparent);
+  --btn-teal-hover: #7ebfbf;
+  color: var(--btn-teal) !important;
+  border-color: var(--btn-teal) !important;
   transition:
     color 0.35s cubic-bezier(0.2, 0, 0, 1),
     background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
@@ -54,18 +54,18 @@ const { t } = useI18n()
     transform 0.15s cubic-bezier(0.2, 0, 0, 1);
 }
 .restart-engine-action-btn:hover {
-  color: var(--btn-muted-hover) !important;
-  background-color: var(--btn-muted-bg) !important;
+  color: var(--btn-teal-hover) !important;
+  background-color: var(--btn-teal-bg) !important;
 }
 .restart-engine-action-btn:active {
   transform: scale(0.97);
 }
 .restart-engine-action-btn :deep(.n-button__border) {
-  border-color: var(--btn-muted) !important;
+  border-color: var(--btn-teal) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 .restart-engine-action-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-muted) !important;
+  border-color: var(--btn-teal) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 

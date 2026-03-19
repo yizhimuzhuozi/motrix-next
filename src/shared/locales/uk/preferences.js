@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Документація RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Імітувати User-Agent',
+  'ua-reset': 'Скинути',
   'aria2-conf-path': 'Конфігурація рушія',
   'factory-reset': 'Скидання до заводських налаштувань',
   'factory-reset-confirm': 'Відновити заводські налаштування?',

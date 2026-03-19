@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'RPC ドキュメントを表示',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'User-Agent を偽装',
+  'ua-reset': 'リセット',
   'aria2-conf-path': 'エンジン設定ファイル',
   'factory-reset': '出荷時設定に戻す',
   'factory-reset-confirm': '出荷時設定に戻しますか？',

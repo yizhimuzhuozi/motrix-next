@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Ver documentación RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Simular User-Agent',
+  'ua-reset': 'Restablecer',
   'aria2-conf-path': 'Configuración del motor',
   'factory-reset': 'Restaurar valores de fábrica',
   'factory-reset-confirm': '¿Restaurar los valores de fábrica?',

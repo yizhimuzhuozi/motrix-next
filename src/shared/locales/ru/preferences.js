@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Документация RPC',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Имитировать User-Agent',
+  'ua-reset': 'Сбросить',
   'aria2-conf-path': 'Конфигурация движка',
   'factory-reset': 'Сброс к заводским настройкам',
   'factory-reset-confirm': 'Восстановить заводские настройки?',

@@ -90,6 +90,7 @@ export default {
   'rpc-secret-tips': 'Виж RPC документацията',
   'user-agent': 'User-Agent',
   'mock-user-agent': 'Симулирай User-Agent',
+  'ua-reset': 'Нулиране',
   'aria2-conf-path': 'Конфигурация на двигателя',
   'factory-reset': 'Фабрични настройки',
   'factory-reset-confirm': 'Да се възстановят фабричните настройки?',
