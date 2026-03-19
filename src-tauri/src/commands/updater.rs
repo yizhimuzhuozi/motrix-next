@@ -83,14 +83,6 @@ impl DownloadedUpdate {
     }
 }
 
-/// Applies or clears the proxy environment variable for the HTTP client.
-fn apply_proxy(proxy: &Option<String>) {
-    match proxy {
-        Some(p) if !p.is_empty() => std::env::set_var("HTTPS_PROXY", p),
-        _ => std::env::remove_var("HTTPS_PROXY"),
-    }
-}
-
 /// Returns the update endpoint URL for the given channel.
 fn endpoint_for_channel(channel: &str) -> String {
     let file = if channel == "beta" {
@@ -99,6 +91,44 @@ fn endpoint_for_channel(channel: &str) -> String {
         "latest.json"
     };
     format!("{}/{}", UPDATER_BASE_URL, file)
+}
+
+/// Constructs a configured `Updater` ready to call `.check()`.
+///
+/// Centralises endpoint resolution, proxy configuration, and the
+/// version comparator so that `check_for_update`, `download_update`,
+/// and `apply_update` share a single code-path.
+///
+/// Proxy is applied via `UpdaterBuilder::proxy()` (per-request, thread-safe)
+/// rather than mutating process-level environment variables.
+fn build_updater(
+    app: &AppHandle,
+    channel: &str,
+    proxy: &Option<String>,
+) -> Result<tauri_plugin_updater::Updater, AppError> {
+    let endpoint = Url::parse(&endpoint_for_channel(channel))
+        .map_err(|e| AppError::Updater(e.to_string()))?;
+
+    let mut builder = app
+        .updater_builder()
+        .endpoints(vec![endpoint])
+        .map_err(|e| AppError::Updater(e.to_string()))?;
+
+    // Apply proxy at the HTTP client level — no env var mutation.
+    if let Some(p) = proxy {
+        if !p.is_empty() {
+            if let Ok(proxy_url) = Url::parse(p) {
+                builder = builder.proxy(proxy_url);
+            }
+        }
+    }
+
+    // Allow cross-channel switching (e.g. beta → stable, even if it is
+    // a semver "downgrade"). Any version != current is an update.
+    builder
+        .version_comparator(|current, update| update.version.to_string() != current.to_string())
+        .build()
+        .map_err(|e| AppError::Updater(e.to_string()))
 }
 
 /// Checks for available updates on the specified channel.
@@ -111,20 +141,7 @@ pub async fn check_for_update(
     channel: String,
     proxy: Option<String>,
 ) -> Result<Option<UpdateMetadata>, AppError> {
-    apply_proxy(&proxy);
-
-    let endpoint = Url::parse(&endpoint_for_channel(&channel))
-        .map_err(|e| AppError::Updater(e.to_string()))?;
-
-    let update = app
-        .updater_builder()
-        .endpoints(vec![endpoint])
-        .map_err(|e| AppError::Updater(e.to_string()))?
-        // Allow cross-channel switching (e.g. beta → stable, even if it is
-        // a semver "downgrade"). Any version != current is an update.
-        .version_comparator(|current, update| update.version.to_string() != current.to_string())
-        .build()
-        .map_err(|e| AppError::Updater(e.to_string()))?
+    let update = build_updater(&app, &channel, &proxy)?
         .check()
         .await
         .map_err(|e| AppError::Updater(e.to_string()))?;
@@ -150,20 +167,10 @@ pub async fn download_update(
     channel: String,
     proxy: Option<String>,
 ) -> Result<(), AppError> {
-    apply_proxy(&proxy);
     let cancel_state = app.state::<Arc<UpdateCancelState>>();
     cancel_state.reset();
 
-    let endpoint = Url::parse(&endpoint_for_channel(&channel))
-        .map_err(|e| AppError::Updater(e.to_string()))?;
-
-    let update = app
-        .updater_builder()
-        .endpoints(vec![endpoint])
-        .map_err(|e| AppError::Updater(e.to_string()))?
-        .version_comparator(|current, update| update.version.to_string() != current.to_string())
-        .build()
-        .map_err(|e| AppError::Updater(e.to_string()))?
+    let update = build_updater(&app, &channel, &proxy)?
         .check()
         .await
         .map_err(|e| AppError::Updater(e.to_string()))?;
@@ -245,8 +252,6 @@ pub async fn apply_update(
     channel: String,
     proxy: Option<String>,
 ) -> Result<(), AppError> {
-    apply_proxy(&proxy);
-
     // Take the downloaded bytes from shared state
     let dl_state = app.state::<Arc<DownloadedUpdate>>();
     let bytes = dl_state
@@ -257,16 +262,7 @@ pub async fn apply_update(
         .ok_or_else(|| AppError::Updater("No downloaded update available".into()))?;
 
     // Re-check the update to obtain the Update object for installation
-    let endpoint = Url::parse(&endpoint_for_channel(&channel))
-        .map_err(|e| AppError::Updater(e.to_string()))?;
-
-    let update = app
-        .updater_builder()
-        .endpoints(vec![endpoint])
-        .map_err(|e| AppError::Updater(e.to_string()))?
-        .version_comparator(|current, update| update.version.to_string() != current.to_string())
-        .build()
-        .map_err(|e| AppError::Updater(e.to_string()))?
+    let update = build_updater(&app, &channel, &proxy)?
         .check()
         .await
         .map_err(|e| AppError::Updater(e.to_string()))?
@@ -449,6 +445,102 @@ mod tests {
             !production_code.contains(&banned),
             "production code must NOT call {} — use download() + stop_engine + install() instead",
             banned
+        );
+    }
+
+    // ── Proxy refactor: build_updater helper ────────────────────────
+
+    /// Production code must NOT use `apply_proxy` — proxy is passed via
+    /// `UpdaterBuilder::proxy()` instead of mutating process env vars.
+    #[test]
+    fn no_apply_proxy_function_in_production_code() {
+        let source = include_str!("updater.rs");
+        let production_end = source.find("#[cfg(test)]").unwrap_or(source.len());
+        let production_code = &source[..production_end];
+        assert!(
+            !production_code.contains("fn apply_proxy"),
+            "production code must NOT define apply_proxy — use UpdaterBuilder::proxy() instead"
+        );
+    }
+
+    /// Production code must NOT call `set_var` or `remove_var` — these are
+    /// unsafe in multi-threaded contexts (Rust 2024 edition) and unnecessary
+    /// when `UpdaterBuilder::proxy()` is available.
+    #[test]
+    fn no_env_var_mutation_in_production_code() {
+        let source = include_str!("updater.rs");
+        let production_end = source.find("#[cfg(test)]").unwrap_or(source.len());
+        let production_code = &source[..production_end];
+        assert!(
+            !production_code.contains("set_var"),
+            "production code must NOT call set_var — use UpdaterBuilder::proxy() instead"
+        );
+        assert!(
+            !production_code.contains("remove_var"),
+            "production code must NOT call remove_var — use UpdaterBuilder::proxy() instead"
+        );
+    }
+
+    /// A `build_updater` helper must exist to avoid repeating the builder
+    /// construction in check_for_update, download_update, and apply_update.
+    #[test]
+    fn build_updater_helper_exists() {
+        let source = include_str!("updater.rs");
+        let production_end = source.find("#[cfg(test)]").unwrap_or(source.len());
+        let production_code = &source[..production_end];
+        assert!(
+            production_code.contains("fn build_updater"),
+            "a build_updater helper function must exist for DRY builder construction"
+        );
+    }
+
+    /// All three command functions must delegate to `build_updater` rather
+    /// than constructing the updater inline.
+    #[test]
+    fn all_commands_use_build_updater() {
+        let source = include_str!("updater.rs");
+        let production_end = source.find("#[cfg(test)]").unwrap_or(source.len());
+        let production_code = &source[..production_end];
+
+        for cmd in ["check_for_update", "download_update", "apply_update"] {
+            let fn_start = production_code
+                .find(&format!("pub async fn {}", cmd))
+                .unwrap_or_else(|| panic!("{} function must exist", cmd));
+            // Find next `pub` or end to delimit the function body
+            let rest = &production_code[fn_start + 10..];
+            let fn_end = rest
+                .find("\npub ")
+                .map(|p| fn_start + 10 + p)
+                .unwrap_or(production_end);
+            let fn_body = &production_code[fn_start..fn_end];
+            assert!(
+                fn_body.contains("build_updater"),
+                "{} must call build_updater helper",
+                cmd
+            );
+        }
+    }
+
+    /// `build_updater` must use the `UpdaterBuilder::proxy()` method when
+    /// a proxy URL is provided, not environment variable mutation.
+    #[test]
+    fn build_updater_uses_proxy_method() {
+        let source = include_str!("updater.rs");
+        let fn_start = source
+            .find("fn build_updater")
+            .expect("build_updater function must exist");
+        // Find the closing of the function (next `fn ` or `#[`)
+        let rest = &source[fn_start..];
+        let fn_end = rest[10..]
+            .find("\nfn ")
+            .or_else(|| rest[10..].find("\npub "))
+            .or_else(|| rest[10..].find("\n#["))
+            .map(|p| p + 10)
+            .unwrap_or(rest.len());
+        let fn_body = &rest[..fn_end];
+        assert!(
+            fn_body.contains(".proxy("),
+            "build_updater must call .proxy() on the UpdaterBuilder"
         );
     }
 }

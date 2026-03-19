@@ -181,8 +181,13 @@ function cancelDownload() {
 async function handleInstallAndRelaunch() {
   phase.value = 'installing'
   const ch = activeChannel.value
-  await invoke('apply_update', { channel: ch, proxy: getUpdateProxy() })
-  relaunch()
+  try {
+    await invoke('apply_update', { channel: ch, proxy: getUpdateProxy() })
+    relaunch()
+  } catch (e) {
+    errorMsg.value = formatUpdateError(e)
+    phase.value = 'error'
+  }
 }
 
 function close() {

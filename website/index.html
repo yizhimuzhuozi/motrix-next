@@ -972,7 +972,7 @@
           os: 'Windows',
           arch: 'ARM64',
           fmt: '.exe',
-          match: (n) => n.includes('aarch64') && n.endsWith('-setup.exe'),
+          match: (n) => /(?:aarch64|arm64)/.test(n) && n.endsWith('-setup.exe'),
         },
         {
           key: 'appimage-x64',
@@ -1002,6 +1002,20 @@
           fmt: '.deb',
           match: (n) => /(?:aarch64|arm64)/.test(n) && n.endsWith('.deb'),
         },
+        {
+          key: 'rpm-x64',
+          os: 'Linux',
+          arch: 'x64',
+          fmt: '.rpm',
+          match: (n) => n.includes('x86_64') && n.endsWith('.rpm'),
+        },
+        {
+          key: 'rpm-arm',
+          os: 'Linux',
+          arch: 'ARM64',
+          fmt: '.rpm',
+          match: (n) => n.includes('aarch64') && n.endsWith('.rpm'),
+        },
       ]
 
       /** Architecture choices per OS, shown in the modal. */
@@ -1030,6 +1044,7 @@
         const ua = navigator.userAgent
         if (ua.includes('Mac')) return 'macOS'
         if (ua.includes('Win')) return 'Windows'
+        if (ua.includes('Android') || ua.includes('CrOS')) return null
         if (ua.includes('Linux')) return 'Linux'
         return null
       }
