@@ -400,8 +400,8 @@ function kindTagType(kind: string): 'info' | 'success' | 'warning' {
         maxWidth: '680px',
         minWidth: '380px',
         width: '70vw',
-        marginTop: '5vh',
-        height: '85vh',
+        margin: 'auto',
+        height: '82vh',
         display: 'flex',
         flexDirection: 'column',
       }"

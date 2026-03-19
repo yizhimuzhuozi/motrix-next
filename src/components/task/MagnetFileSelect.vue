@@ -95,13 +95,31 @@ function handleCancel() {
 </script>
 
 <template>
-  <NModal :show="show" :mask-closable="false" @update:show="(v) => !v && handleCancel()">
+  <NModal
+    :show="show"
+    :mask-closable="false"
+    :close-on-esc="true"
+    :auto-focus="false"
+    transform-origin="center"
+    :transition="{ name: 'fade-scale' }"
+    @update:show="(v) => !v && handleCancel()"
+  >
     <NCard
       :title="t('task.select-files') || 'Select Files'"
       :bordered="false"
       closable
       role="dialog"
       class="magnet-file-select-card"
+      :style="{
+        maxWidth: '640px',
+        width: '85vw',
+        margin: 'auto',
+        height: '78vh',
+        display: 'flex',
+        flexDirection: 'column',
+      }"
+      :content-style="{ flex: '1', minHeight: '0', overflowY: 'auto', overflowX: 'hidden' }"
+      :segmented="{ footer: true }"
       @close="handleCancel"
     >
       <!-- Task name subtitle -->
@@ -147,10 +165,7 @@ function handleCancel() {
 </template>
 
 <style scoped>
-.magnet-file-select-card {
-  width: 640px;
-  max-width: 90vw;
-}
+/* Card dimensions are set via inline :style for consistency with AddTask. */
 
 .task-name-subtitle {
   margin-bottom: 12px;
@@ -186,8 +201,8 @@ function handleCancel() {
 .val-down-enter-active,
 .val-down-leave-active {
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.15s ease-out,
+    transform 0.15s ease-out;
 }
 
 /* ↑ increase: enter from below, leave upward */
