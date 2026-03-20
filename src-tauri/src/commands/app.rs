@@ -597,9 +597,9 @@ mod tests {
 
     // ── show_item_in_dir structural tests ──────────────────────────────
 
-    /// Verifies show_item_in_dir calls normalize_path before reveal.
+    /// Verifies show_item_in_dir calls normalize_path then reveal_in_explorer.
     #[test]
-    fn show_item_in_dir_calls_normalize_path() {
+    fn show_item_in_dir_calls_normalize_then_reveal() {
         let source = include_str!("app.rs");
         let fn_start = source
             .find("pub fn show_item_in_dir")
@@ -609,13 +609,91 @@ mod tests {
             .find("normalize_path")
             .expect("show_item_in_dir must call normalize_path");
         let reveal_pos = fn_body
-            .find("reveal_item_in_dir")
-            .expect("show_item_in_dir must call reveal_item_in_dir");
+            .find("reveal_in_explorer")
+            .expect("show_item_in_dir must call reveal_in_explorer");
         assert!(
             norm_pos < reveal_pos,
-            "normalize_path (pos {}) must appear before reveal_item_in_dir (pos {})",
-            norm_pos,
-            reveal_pos
+            "normalize_path must appear before reveal_in_explorer"
+        );
+    }
+
+    /// Verifies Windows cfg-gate exists and bypasses tauri_plugin_opener.
+    #[test]
+    fn reveal_in_explorer_has_windows_cfg_gate() {
+        let source = include_str!("app.rs");
+        // Must have #[cfg(windows)] fn reveal_in_explorer
+        assert!(
+            source.contains("#[cfg(windows)]\nfn reveal_in_explorer"),
+            "reveal_in_explorer must have a #[cfg(windows)] variant"
+        );
+        // Must have #[cfg(not(windows))] fn reveal_in_explorer
+        assert!(
+            source.contains("#[cfg(not(windows))]\nfn reveal_in_explorer"),
+            "reveal_in_explorer must have a #[cfg(not(windows))] fallback"
+        );
+    }
+
+    /// Verifies the Windows implementation uses ILCreateFromPathW (not plugin).
+    #[test]
+    fn windows_reveal_uses_shell_api() {
+        let source = include_str!("app.rs");
+        let cfg_start = source
+            .find("#[cfg(windows)]\nfn reveal_in_explorer")
+            .expect("Windows reveal_in_explorer must exist");
+        let fn_body = &source[cfg_start..cfg_start + 2500];
+        assert!(
+            fn_body.contains("ILCreateFromPathW"),
+            "Windows reveal must use ILCreateFromPathW"
+        );
+        assert!(
+            fn_body.contains("SHOpenFolderAndSelectItems"),
+            "Windows reveal must use SHOpenFolderAndSelectItems"
+        );
+    }
+
+    /// Verifies the Windows implementation strips \\?\UNC\ prefix (issue #3304 fix).
+    #[test]
+    fn windows_reveal_strips_unc_prefix() {
+        let source = include_str!("app.rs");
+        let cfg_start = source
+            .find("#[cfg(windows)]\nfn reveal_in_explorer")
+            .expect("Windows reveal_in_explorer must exist");
+        let fn_body = &source[cfg_start..cfg_start + 2500];
+        assert!(
+            fn_body.contains(r#"starts_with(r"\\?\UNC\")"#),
+            "Windows reveal must check for \\\\?\\UNC\\ prefix"
+        );
+    }
+
+    /// Verifies the Windows implementation has an Electron-style ShellExecuteExW fallback.
+    #[test]
+    fn windows_reveal_has_shell_execute_fallback() {
+        let source = include_str!("app.rs");
+        let cfg_start = source
+            .find("#[cfg(windows)]\nfn reveal_in_explorer")
+            .expect("Windows reveal_in_explorer must exist");
+        let fn_body = &source[cfg_start..cfg_start + 2500];
+        assert!(
+            fn_body.contains("shell_execute_open"),
+            "Windows reveal must have ShellExecuteExW fallback"
+        );
+        assert!(
+            fn_body.contains("ERROR_FILE_NOT_FOUND"),
+            "Windows reveal must handle ERROR_FILE_NOT_FOUND"
+        );
+    }
+
+    /// Verifies non-Windows fallback uses tauri_plugin_opener.
+    #[test]
+    fn non_windows_reveal_uses_plugin_opener() {
+        let source = include_str!("app.rs");
+        let cfg_start = source
+            .find("#[cfg(not(windows))]\nfn reveal_in_explorer")
+            .expect("non-Windows reveal_in_explorer must exist");
+        let fn_body = &source[cfg_start..cfg_start + 300];
+        assert!(
+            fn_body.contains("tauri_plugin_opener::reveal_item_in_dir"),
+            "non-Windows fallback must use tauri_plugin_opener"
         );
     }
 
@@ -630,9 +708,6 @@ mod tests {
         let norm_pos = fn_body
             .find("normalize_path")
             .expect("open_path_normalized must call normalize_path");
-        let _open_pos = fn_body
-            .find("open_path")
-            .expect("open_path_normalized must call open_path");
         // normalize_path appears in the function name itself, so check
         // that there's a second occurrence (the actual call)
         let second_norm = fn_body[norm_pos + 1..]
@@ -644,6 +719,27 @@ mod tests {
         );
     }
 
+    // ── normalize_path tests ──────────────────────────────────────────
+
+    /// Verifies normalize_path uses components().collect() for separator normalization.
+    #[test]
+    fn normalize_path_uses_components_collect() {
+        let source = include_str!("app.rs");
+        let fn_start = source
+            .find("pub(crate) fn normalize_path")
+            .expect("normalize_path function must exist");
+        let fn_end = source[fn_start..]
+            .find("\n/// ")
+            .or_else(|| source[fn_start..].find("\n#["))
+            .map(|p| fn_start + p)
+            .unwrap_or(source.len());
+        let fn_body = &source[fn_start..fn_end];
+        assert!(
+            fn_body.contains("components().collect"),
+            "normalize_path must use components().collect() for separator normalization"
+        );
+    }
+
     /// Verifies normalize_path uses dunce::simplified for prefix stripping.
     #[test]
     fn normalize_path_uses_dunce() {
@@ -652,7 +748,8 @@ mod tests {
             .find("pub(crate) fn normalize_path")
             .expect("normalize_path function must exist");
         let fn_end = source[fn_start..]
-            .find("\npub")
+            .find("\n/// ")
+            .or_else(|| source[fn_start..].find("\n#["))
             .map(|p| fn_start + p)
             .unwrap_or(source.len());
         let fn_body = &source[fn_start..fn_end];
@@ -670,7 +767,8 @@ mod tests {
             .find("pub(crate) fn normalize_path")
             .expect("normalize_path function must exist");
         let fn_end = source[fn_start..]
-            .find("\npub")
+            .find("\n/// ")
+            .or_else(|| source[fn_start..].find("\n#["))
             .map(|p| fn_start + p)
             .unwrap_or(source.len());
         let fn_body = &source[fn_start..fn_end];
@@ -812,24 +910,174 @@ pub fn check_path_is_dir(path: String) -> bool {
 /// 3. **Trailing separators** — Ensures paths ending in `\\` or `/` do not
 ///    confuse shell APIs.
 pub(crate) fn normalize_path(raw: &str) -> String {
-    let normalized = dunce::simplified(Path::new(raw));
+    use std::path::PathBuf;
+    // Step 1: Decompose into components and reassemble with native separators.
+    // On Windows, `Path::new("Z:/file")` understands `/` but `to_string_lossy()`
+    // returns the ORIGINAL string unchanged. `.components().collect::<PathBuf>()`
+    // reconstructs with `\` on Windows, `/` on Unix.
+    let reassembled: PathBuf = Path::new(raw).components().collect();
+    // Step 2: Strip `\\?\` prefix if present (safe for Win32 Shell APIs).
+    let normalized = dunce::simplified(&reassembled);
     log::debug!("normalize_path: raw={raw:?} normalized={normalized:?}");
     normalized.to_string_lossy().to_string()
 }
 
 /// Reveals a file or directory in the system file explorer.
 ///
-/// Normalizes the path before calling `tauri_plugin_opener::reveal_item_in_dir`
-/// to handle mixed separators from aria2 (e.g. `Z:\\/file.exe` → `Z:\\file.exe`).
+/// ## Windows
 ///
-/// This command replaces direct frontend calls to `revealItemInDir` from
-/// `@tauri-apps/plugin-opener`, which passes paths to `ILCreateFromPathW`
-/// without normalization — causing `os error 2` on drive-root paths.
+/// Bypasses `tauri_plugin_opener::reveal_item_in_dir` because that plugin
+/// calls `dunce::canonicalize()` internally (L13 of `reveal_item_in_dir.rs`),
+/// which converts mapped-drive paths (e.g. `Z:\file`) to UNC format
+/// (`\\?\UNC\server\share\file`). `ILCreateFromPathW` cannot handle the
+/// `\\?\UNC\` prefix → returns NULL → os error 2.
+/// See: <https://github.com/tauri-apps/plugins-workspace/issues/3304>
+///
+/// Instead, we call the Windows Shell APIs directly:
+/// 1. Normalize separators via `components().collect()`
+/// 2. Canonicalize via `dunce::canonicalize()` (strips `\\?\` for local drives)
+/// 3. Strip residual `\\?\UNC\` prefix → `\\server\share\...` (for mapped drives)
+/// 4. Call `ILCreateFromPathW` + `SHOpenFolderAndSelectItems`
+/// 5. Fallback: `ShellExecuteExW` on `ERROR_FILE_NOT_FOUND` (Electron pattern)
+///
+/// ## macOS / Linux
+///
+/// Delegates to `tauri_plugin_opener::reveal_item_in_dir` (no UNC bug on these
+/// platforms — macOS uses `NSWorkspace`, Linux uses D-Bus FileManager1).
 #[tauri::command]
 pub fn show_item_in_dir(path: String) -> Result<(), AppError> {
     let normalized = normalize_path(&path);
-    tauri_plugin_opener::reveal_item_in_dir(normalized)
-        .map_err(|e| AppError::Io(format!("Failed to reveal {}: {}", path, e)))
+    log::debug!("show_item_in_dir: original={path:?} normalized={normalized:?}");
+    reveal_in_explorer(&normalized)
+}
+
+/// Platform-dispatched implementation for revealing files in the explorer.
+#[cfg(not(windows))]
+fn reveal_in_explorer(path: &str) -> Result<(), AppError> {
+    tauri_plugin_opener::reveal_item_in_dir(path)
+        .map_err(|e| AppError::Io(format!("Failed to reveal: {e}")))
+}
+
+/// Windows implementation: direct Shell API calls with UNC prefix stripping.
+///
+/// Mirrors the approach used by:
+/// - Electron: `shell/common/platform_util_win.cc` L282-310
+/// - tauri-plugin-opener: `reveal_item_in_dir.rs` L99-160 (but with UNC fix)
+#[cfg(windows)]
+fn reveal_in_explorer(path: &str) -> Result<(), AppError> {
+    use std::path::PathBuf;
+    use windows_sys::Win32::{
+        Foundation::ERROR_FILE_NOT_FOUND,
+        System::Com::CoInitializeEx,
+        UI::Shell::{
+            ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteExW,
+            SHELLEXECUTEINFOW,
+        },
+        UI::WindowsAndMessaging::SW_SHOWNORMAL,
+    };
+
+    // Step 1: Canonicalize to resolve symlinks and normalize the path.
+    // `dunce::canonicalize` strips `\\?\` for local drives (C:, D:, etc.)
+    // but for mapped network drives, it may produce `\\?\UNC\server\share\...`.
+    let canonical = dunce::canonicalize(path)
+        .map_err(|e| AppError::Io(format!("Failed to canonicalize {path:?}: {e}")))?;
+
+    // Step 2: Strip `\\?\UNC\` prefix for mapped drives.
+    // `\\?\UNC\server\share\file` → `\\server\share\file`
+    // This is the fix for GitHub issue #3304.
+    let path_str = canonical.to_string_lossy();
+    let fixed: PathBuf = if path_str.starts_with(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{}", &path_str[r"\\?\UNC\".len()..]))
+    } else if path_str.starts_with(r"\\?\") {
+        // Shouldn't happen (dunce handles this), but defensive
+        PathBuf::from(&path_str[r"\\?\".len()..])
+    } else {
+        canonical.clone()
+    };
+
+    log::debug!("reveal_in_explorer: canonical={canonical:?} fixed={fixed:?}");
+
+    // Step 3: Get the parent directory for SHOpenFolderAndSelectItems.
+    let parent = fixed
+        .parent()
+        .ok_or_else(|| AppError::Io(format!("No parent directory for {path:?}")))?;
+
+    // Step 4: Convert paths to wide strings (null-terminated UTF-16).
+    let parent_wide = to_wide(parent.to_string_lossy().as_ref());
+    let file_wide = to_wide(fixed.to_string_lossy().as_ref());
+
+    unsafe {
+        // Initialize COM (required for Shell APIs, idempotent).
+        let _ = CoInitializeEx(std::ptr::null(), 0);
+
+        // Convert parent directory to ITEMIDLIST.
+        let parent_pidl = ILCreateFromPathW(parent_wide.as_ptr());
+        if parent_pidl.is_null() {
+            // Fallback: open the parent directory directly.
+            return shell_execute_open(parent.to_string_lossy().as_ref());
+        }
+
+        // Convert target file to ITEMIDLIST.
+        let file_pidl = ILCreateFromPathW(file_wide.as_ptr());
+        if file_pidl.is_null() {
+            ILFree(parent_pidl);
+            return shell_execute_open(parent.to_string_lossy().as_ref());
+        }
+
+        // Open folder and select the file.
+        let items = [file_pidl];
+        let result = SHOpenFolderAndSelectItems(parent_pidl, 1, items.as_ptr(), 0);
+
+        // Electron-style fallback: on ERROR_FILE_NOT_FOUND, use ShellExecuteExW.
+        // "On some systems, the above call mysteriously fails with 'file not found'
+        //  even though the file is there." — Electron source
+        if result != 0 && (result as u32) == ERROR_FILE_NOT_FOUND {
+            ILFree(file_pidl);
+            ILFree(parent_pidl);
+            return shell_execute_open(parent.to_string_lossy().as_ref());
+        }
+
+        ILFree(file_pidl);
+        ILFree(parent_pidl);
+
+        if result != 0 {
+            return Err(AppError::Io(format!(
+                "SHOpenFolderAndSelectItems failed: HRESULT 0x{result:08X}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Fallback: open a directory with `ShellExecuteExW("explore")`.
+#[cfg(windows)]
+fn shell_execute_open(dir: &str) -> Result<(), AppError> {
+    use windows_sys::Win32::UI::{
+        Shell::ShellExecuteExW, Shell::SHELLEXECUTEINFOW, WindowsAndMessaging::SW_SHOWNORMAL,
+    };
+
+    let dir_wide = to_wide(dir);
+    let verb_wide = to_wide("explore");
+
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.nShow = SW_SHOWNORMAL;
+    info.lpFile = dir_wide.as_ptr();
+    info.lpVerb = verb_wide.as_ptr();
+
+    let ok = unsafe { ShellExecuteExW(&mut info) };
+    if ok == 0 {
+        Err(AppError::Io(format!("ShellExecuteExW failed for {dir:?}")))
+    } else {
+        Ok(())
+    }
+}
+
+/// Convert a &str to a null-terminated Vec<u16> for Win32 wide-string APIs.
+#[cfg(windows)]
+fn to_wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 /// Opens a file or directory with the system's default application.

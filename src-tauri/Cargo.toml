@@ -1,6 +1,6 @@
 [package]
 name = "motrix-next"
-version = "3.4.7-beta.3"
+version = "3.4.7-beta.4"
 description = "A full-featured download manager"
 authors = ["AnInsomniacy"]
 edition = "2021"
@@ -46,7 +46,13 @@ trash = "5"
 dunce = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm"] }
+windows-sys = { version = "0.59", features = [
+    "Win32_Graphics_Dwm",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [lints.clippy]
 unwrap_used = "deny"

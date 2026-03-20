@@ -189,7 +189,7 @@ export function useTaskActions(deps: TaskActionsDeps) {
       await invoke('show_item_in_dir', { path: filePath })
       message.success(t('task.open-folder-success'))
     } catch (e) {
-      logger.warn('TaskView.showInFolder', String(e))
+      logger.warn('TaskView.showInFolder', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))
     }
   }
@@ -207,7 +207,7 @@ export function useTaskActions(deps: TaskActionsDeps) {
       await invoke('open_path_normalized', { path: target })
       message.success(t(isDir ? 'task.open-folder-success' : 'task.open-file-success'))
     } catch (e) {
-      logger.warn('TaskView.openFile error', String(e))
+      logger.warn('TaskView.openFile error', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))
     }
   }

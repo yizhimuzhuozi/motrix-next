@@ -292,7 +292,7 @@ export function useAdvancedActions(deps: AdvancedActionsDeps) {
       await invoke('show_item_in_dir', { path: filePath })
       message.success(t('task.open-folder-success'))
     } catch (e) {
-      logger.warn('Advanced.revealPath', String(e))
+      logger.warn('Advanced.revealPath', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))
     }
   }
