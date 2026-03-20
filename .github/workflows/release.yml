@@ -192,40 +192,25 @@ jobs:
           gh release upload updater "$JSON_FILE" --clobber -R "${{ github.repository }}"
           echo "Uploaded $JSON_FILE to 'updater' release"
 
-      - name: Generate and upload website download JSON
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
+          # Also push to 'data' branch for CORS-friendly website access.
+          # raw.githubusercontent.com serves files with proper CORS headers,
+          # unlike GitHub Release asset downloads which redirect to Azure Blob
+          # Storage without Access-Control-Allow-Origin.
           REPO="${{ github.repository }}"
+          CONTENT=$(base64 -w 0 "$JSON_FILE")
 
-          # Determine website JSON filename from channel
-          if [[ "$TAG" == *"-beta"* ]] || [[ "$TAG" == *"-alpha"* ]] || [[ "$TAG" == *"-rc"* ]]; then
-            WEBSITE_JSON="website-beta.json"
-          else
-            WEBSITE_JSON="website-stable.json"
+          # Get current file SHA if it exists (required for updates)
+          SHA=$(gh api "repos/$REPO/contents/$JSON_FILE?ref=data" --jq '.sha' 2>/dev/null || echo "")
+
+          SHA_ARG=""
+          if [ -n "$SHA" ]; then
+            SHA_ARG="--field sha=$SHA"
           fi
 
-          # Construct the HTML release page URL directly from the tag
-          RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
-
-          # Build website JSON: version + html_url + installer-only assets
-          gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[] | {name: .name, url: .browser_download_url}' \
-            | jq -s --arg version "$TAG" --arg html_url "$RELEASE_URL" \
-              '{
-                version: $version,
-                html_url: $html_url,
-                assets: [ .[] | select(
-                  (.name | endswith(".dmg")) or
-                  (.name | endswith("-setup.exe")) or
-                  (.name | endswith(".AppImage")) or
-                  (.name | endswith(".deb")) or
-                  (.name | endswith(".rpm"))
-                )]
-              }' > "$WEBSITE_JSON"
-
-          echo "Generated $WEBSITE_JSON:"
-          cat "$WEBSITE_JSON"
-
-          gh release upload updater "$WEBSITE_JSON" --clobber -R "$REPO"
-          echo "Uploaded $WEBSITE_JSON to 'updater' release"
+          gh api "repos/$REPO/contents/$JSON_FILE" \
+            --method PUT \
+            --field message="ci: update $JSON_FILE" \
+            --field content="$CONTENT" \
+            --field branch="data" \
+            $SHA_ARG
+          echo "Pushed $JSON_FILE to 'data' branch"

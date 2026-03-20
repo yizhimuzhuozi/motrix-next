@@ -3,41 +3,165 @@
  *
  * Written BEFORE implementation (TDD RED phase).
  * Tests cover:
- * - Channel JSON URL construction
+ * - Channel JSON URL construction (now uses updater JSON directly)
  * - Download URL resolution from asset data
+ * - Updater JSON → website URL derivation (dmg from .app.tar.gz)
  * - Platform matching against real filenames
  * - Edge cases: missing assets, empty data, unknown formats
  */
 import { describe, expect, it } from 'vitest'
 
 import type { Platform } from '@website/download.js'
-import { channelJsonUrl, PLATFORMS, resolveDownloadUrls, UPDATER_BASE_URL } from '@website/download.js'
+import {
+  channelJsonUrl,
+  deriveDmgUrl,
+  PLATFORMS,
+  resolveDownloadUrls,
+  resolveFromUpdaterJson,
+  UPDATER_BASE_URL,
+} from '@website/download.js'
 
 // ─── channelJsonUrl ──────────────────────────────────────────────────────────
 
 describe('channelJsonUrl', () => {
-  it('returns website-stable.json URL for the stable channel', () => {
+  it('returns latest.json URL for the stable channel', () => {
     const url = channelJsonUrl('stable')
-    expect(url).toBe(`${UPDATER_BASE_URL}/website-stable.json`)
+    expect(url).toBe(`${UPDATER_BASE_URL}/latest.json`)
   })
 
-  it('returns website-beta.json URL for the beta channel', () => {
+  it('returns beta.json URL for the beta channel', () => {
     const url = channelJsonUrl('beta')
-    expect(url).toBe(`${UPDATER_BASE_URL}/website-beta.json`)
+    expect(url).toBe(`${UPDATER_BASE_URL}/beta.json`)
   })
 
   it('defaults to stable for unknown channel names', () => {
     const url = channelJsonUrl('nightly')
-    expect(url).toBe(`${UPDATER_BASE_URL}/website-stable.json`)
+    expect(url).toBe(`${UPDATER_BASE_URL}/latest.json`)
   })
 
   it('defaults to stable for empty string', () => {
     const url = channelJsonUrl('')
-    expect(url).toBe(`${UPDATER_BASE_URL}/website-stable.json`)
+    expect(url).toBe(`${UPDATER_BASE_URL}/latest.json`)
   })
 })
 
-// ─── resolveDownloadUrls ─────────────────────────────────────────────────────
+// ─── deriveDmgUrl ────────────────────────────────────────────────────────────
+
+describe('deriveDmgUrl', () => {
+  it('derives aarch64 .dmg URL from .app.tar.gz updater URL', () => {
+    const updaterUrl = 'https://github.com/example/releases/download/v3.4.6/MotrixNext_aarch64.app.tar.gz'
+    const result = deriveDmgUrl(updaterUrl, '3.4.6')
+    expect(result).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_aarch64.dmg')
+  })
+
+  it('derives x64 .dmg URL from .app.tar.gz updater URL', () => {
+    const updaterUrl = 'https://github.com/example/releases/download/v3.4.6/MotrixNext_x64.app.tar.gz'
+    const result = deriveDmgUrl(updaterUrl, '3.4.6')
+    expect(result).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_x64.dmg')
+  })
+
+  it('handles beta version strings correctly', () => {
+    const updaterUrl = 'https://github.com/example/releases/download/v3.4.6-beta.8/MotrixNext_aarch64.app.tar.gz'
+    const result = deriveDmgUrl(updaterUrl, '3.4.6-beta.8')
+    expect(result).toBe(
+      'https://github.com/example/releases/download/v3.4.6-beta.8/MotrixNext_3.4.6-beta.8_aarch64.dmg',
+    )
+  })
+
+  it('returns original URL if filename pattern does not match', () => {
+    const updaterUrl = 'https://example.com/something-unexpected.zip'
+    const result = deriveDmgUrl(updaterUrl, '3.4.6')
+    expect(result).toBe(updaterUrl)
+  })
+})
+
+// ─── resolveFromUpdaterJson ──────────────────────────────────────────────────
+
+/** Realistic updater JSON platforms object matching a v3.4.6 release. */
+const MOCK_UPDATER_PLATFORMS = {
+  'darwin-aarch64': {
+    signature: 'sig1',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_aarch64.app.tar.gz',
+  },
+  'darwin-x86_64': {
+    signature: 'sig2',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_x64.app.tar.gz',
+  },
+  'windows-x86_64': {
+    signature: 'sig3',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_x64-setup.exe',
+  },
+  'windows-aarch64': {
+    signature: 'sig4',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_arm64-setup.exe',
+  },
+  'linux-x86_64': {
+    signature: 'sig5',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_amd64.AppImage',
+  },
+  'linux-aarch64': {
+    signature: 'sig6',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_aarch64.AppImage',
+  },
+  'linux-x86_64-deb': {
+    signature: 'sig7',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_amd64.deb',
+  },
+  'linux-aarch64-deb': {
+    signature: 'sig8',
+    url: 'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_arm64.deb',
+  },
+}
+
+describe('resolveFromUpdaterJson', () => {
+  it('resolves all 8 platform download URLs from updater platforms', () => {
+    const urls = resolveFromUpdaterJson(MOCK_UPDATER_PLATFORMS, '3.4.6')
+
+    // macOS: derived .dmg URLs (not .app.tar.gz)
+    expect(urls['dmg-arm']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_aarch64.dmg')
+    expect(urls['dmg-x64']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_x64.dmg')
+
+    // Windows: direct URLs
+    expect(urls['exe-x64']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_x64-setup.exe')
+    expect(urls['exe-arm']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_arm64-setup.exe')
+
+    // Linux: direct URLs
+    expect(urls['appimage-x64']).toBe(
+      'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_amd64.AppImage',
+    )
+    expect(urls['appimage-arm']).toBe(
+      'https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_aarch64.AppImage',
+    )
+    expect(urls['deb-x64']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_amd64.deb')
+    expect(urls['deb-arm']).toBe('https://github.com/example/releases/download/v3.4.6/MotrixNext_3.4.6_arm64.deb')
+  })
+
+  it('returns empty object for empty platforms', () => {
+    const urls = resolveFromUpdaterJson({}, '3.4.6')
+    expect(urls).toEqual({})
+  })
+
+  it('handles partial platforms gracefully', () => {
+    const partial = {
+      'windows-x86_64': {
+        signature: 'sig',
+        url: 'https://example.com/MotrixNext_3.4.6_x64-setup.exe',
+      },
+    }
+    const urls = resolveFromUpdaterJson(partial, '3.4.6')
+    expect(urls['exe-x64']).toBe('https://example.com/MotrixNext_3.4.6_x64-setup.exe')
+    expect(urls['dmg-arm']).toBeUndefined()
+    expect(urls['appimage-x64']).toBeUndefined()
+  })
+
+  it('does not include rpm keys (not in updater JSON)', () => {
+    const urls = resolveFromUpdaterJson(MOCK_UPDATER_PLATFORMS, '3.4.6')
+    expect(urls['rpm-x64']).toBeUndefined()
+    expect(urls['rpm-arm']).toBeUndefined()
+  })
+})
+
+// ─── resolveDownloadUrls (legacy, still exported) ────────────────────────────
 
 /** Realistic asset data matching a v3.4.6 release. */
 const MOCK_ASSETS = [

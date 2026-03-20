@@ -906,8 +906,9 @@
     </footer>
 
     <script type="module">
-      import { PLATFORMS } from './download.js'
+      import { PLATFORMS, resolveFromUpdaterJson } from './download.js'
       globalThis.__DL_PLATFORMS = PLATFORMS
+      globalThis.__resolveFromUpdaterJson = resolveFromUpdaterJson
     </script>
     <script src="i18n.js"></script>
     <script>
@@ -984,9 +985,9 @@
         Linux: 'dl.modal.help.linux',
       }
 
-      /** CDN base for website JSON files on the permanent `updater` Release tag. */
+      /** CDN base for channel JSON files served from the `data` branch via raw.githubusercontent.com (CORS-friendly). */
       const UPDATER_CDN =
-        'https://github.com/AnInsomniacy/motrix-next/releases/download/updater'
+        'https://raw.githubusercontent.com/AnInsomniacy/motrix-next/data'
 
       function detectOS() {
         const ua = navigator.userAgent
@@ -1111,23 +1112,27 @@
           fetchFailed = false
           grid.innerHTML = ''
 
-          const jsonUrl = UPDATER_CDN + '/website-' + channel + '.json'
+          // Read the same JSON the Tauri in-app updater uses
+          const jsonFile = channel === 'beta' ? 'beta.json' : 'latest.json'
+          const jsonUrl = UPDATER_CDN + '/' + jsonFile
 
           try {
             const res = await fetch(jsonUrl)
             if (!res.ok) throw new Error(res.status)
             const data = await res.json()
-            const assets = data.assets || []
             const ver = data.version || ''
             cachedVer = ver
-            releaseUrl = data.html_url || releaseUrl
+
+            // Construct release page URL from version (no extra API call needed)
+            const tag = ver.includes('-') ? 'v' + ver : 'v' + ver
+            releaseUrl = 'https://github.com/AnInsomniacy/motrix-next/releases/tag/' + tag
 
             versionEl.textContent = i18n.t('dl.version', { ver })
 
-            // Resolve platform URLs using shared PLATFORMS matchers
-            for (const p of globalThis.__DL_PLATFORMS || []) {
-              const a = assets.find((a) => p.match(a.name))
-              if (a) resolvedUrls[p.key] = a.url
+            // Derive installer URLs from updater JSON platforms
+            const platforms = data.platforms || {}
+            if (globalThis.__resolveFromUpdaterJson) {
+              resolvedUrls = globalThis.__resolveFromUpdaterJson(platforms, ver)
             }
 
             // Update primary button

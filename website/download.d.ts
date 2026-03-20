@@ -13,7 +13,17 @@ export interface Asset {
   url: string
 }
 
+export interface UpdaterPlatformEntry {
+  signature: string
+  url: string
+}
+
 export declare const UPDATER_BASE_URL: string
 export declare const PLATFORMS: Platform[]
 export declare function channelJsonUrl(channel: string): string
 export declare function resolveDownloadUrls(assets: Asset[]): Record<string, string>
+export declare function deriveDmgUrl(updaterUrl: string, version: string): string
+export declare function resolveFromUpdaterJson(
+  platforms: Record<string, UpdaterPlatformEntry>,
+  version: string,
+): Record<string, string>
