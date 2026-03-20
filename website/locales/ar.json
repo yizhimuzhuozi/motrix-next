@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "شغّل <code>uname -m</code> في الطرفية",
   "theme.system": "النظام",
   "theme.light": "فاتح",
-  "theme.dark": "داكن",
-  "dl.channel.stable": "مستقر",
-  "dl.channel.beta": "تجريبي"
+  "theme.dark": "داكن"
 }

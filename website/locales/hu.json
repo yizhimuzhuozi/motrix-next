@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Futtassa a <code>uname -m</code> parancsot a terminálban",
   "theme.system": "Rendszer",
   "theme.light": "Világos",
-  "theme.dark": "Sötét",
-  "dl.channel.stable": "Stabil",
-  "dl.channel.beta": "Béta"
+  "theme.dark": "Sötét"
 }

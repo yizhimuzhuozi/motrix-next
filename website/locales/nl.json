@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Voer <code>uname -m</code> uit in de terminal",
   "theme.system": "Systeem",
   "theme.light": "Licht",
-  "theme.dark": "Donker",
-  "dl.channel.stable": "Stabiel",
-  "dl.channel.beta": "Bèta"
+  "theme.dark": "Donker"
 }

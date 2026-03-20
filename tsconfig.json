@@ -28,9 +28,6 @@
       ],
       "@shared/*": [
         "src/shared/*"
-      ],
-      "@website/*": [
-        "website/*"
       ]
     }
   },
@@ -38,9 +35,7 @@
     "src/**/*.ts",
     "src/**/*.d.ts",
     "src/**/*.tsx",
-    "src/**/*.vue",
-    "website/**/*.js",
-    "website/**/*.d.ts"
+    "src/**/*.vue"
   ],
   "references": [
     {

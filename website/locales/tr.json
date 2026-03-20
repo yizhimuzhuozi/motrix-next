@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Terminalde <code>uname -m</code> komutunu çalıştırın",
   "theme.system": "Sistem",
   "theme.light": "Açık",
-  "theme.dark": "Koyu",
-  "dl.channel.stable": "Kararlı",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Koyu"
 }

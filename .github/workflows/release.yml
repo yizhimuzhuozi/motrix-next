@@ -191,30 +191,3 @@ jobs:
           # Upload (overwrite) the channel JSON to the fixed 'updater' tag
           gh release upload updater "$JSON_FILE" --clobber -R "${{ github.repository }}"
           echo "Uploaded $JSON_FILE to 'updater' release"
-
-          # Also push to 'release-data' branch for CORS-friendly website access.
-          # raw.githubusercontent.com serves files with proper CORS headers,
-          # unlike GitHub Release asset downloads which redirect to Azure Blob
-          # Storage without Access-Control-Allow-Origin.
-          REPO="${{ github.repository }}"
-          CONTENT=$(base64 -w 0 "$JSON_FILE")
-
-          # Get current file SHA if it exists (required for updates).
-          # Returns empty string if the branch or file doesn't exist yet.
-          SHA=$(gh api "repos/$REPO/contents/$JSON_FILE?ref=release-data" --jq '.sha' 2>/dev/null || true)
-
-          # Build JSON body with jq to avoid shell quoting issues with large base64 content
-          if [ -n "$SHA" ]; then
-            jq -n --arg msg "ci: update $JSON_FILE" \
-                  --arg content "$CONTENT" \
-                  --arg branch "release-data" \
-                  --arg sha "$SHA" \
-                  '{message: $msg, content: $content, branch: $branch, sha: $sha}'
-          else
-            jq -n --arg msg "ci: update $JSON_FILE" \
-                  --arg content "$CONTENT" \
-                  --arg branch "release-data" \
-                  '{message: $msg, content: $content, branch: $branch}'
-          fi | gh api "repos/$REPO/contents/$JSON_FILE" --method PUT --input -
-
-          echo "Pushed $JSON_FILE to 'data' branch"

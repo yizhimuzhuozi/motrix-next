@@ -12,7 +12,7 @@ import {
   timeFormat,
   checkTaskIsBT,
 } from '@shared/utils'
-import { invoke } from '@tauri-apps/api/core'
+import { exists } from '@tauri-apps/plugin-fs'
 import { logger } from '@shared/logger'
 import { NProgress, NIcon } from 'naive-ui'
 import {
@@ -153,7 +153,7 @@ async function checkFileExists() {
     const selected = files.filter((f) => f.selected === 'true')
     const target = (selected.length > 0 ? selected[0] : files[0])?.path
     if (target) {
-      fileMissing.value = !(await invoke<boolean>('path_exists', { path: target }))
+      fileMissing.value = !(await exists(target))
     }
   } catch (e) {
     logger.debug('TaskItem.fileCheck', e)

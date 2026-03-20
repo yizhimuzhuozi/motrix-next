@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "<code>uname -m</code> im Terminal ausführen",
   "theme.system": "System",
   "theme.light": "Hell",
-  "theme.dark": "Dunkel",
-  "dl.channel.stable": "Stabil",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Dunkel"
 }

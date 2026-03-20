@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Rulați <code>uname -m</code> în terminal",
   "theme.system": "Sistem",
   "theme.light": "Deschis",
-  "theme.dark": "Întunecat",
-  "dl.channel.stable": "Stabil",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Întunecat"
 }

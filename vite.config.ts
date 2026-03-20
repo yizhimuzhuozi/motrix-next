@@ -19,7 +19,6 @@ export default defineConfig(async () => ({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@shared': resolve(__dirname, 'src/shared'),
-      '@website': resolve(__dirname, 'website'),
     },
   },
   clearScreen: false,

@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Kjør <code>uname -m</code> i terminalen",
   "theme.system": "System",
   "theme.light": "Lys",
-  "theme.dark": "Mørk",
-  "dl.channel.stable": "Stabil",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Mørk"
 }

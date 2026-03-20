@@ -22,16 +22,6 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
     if let Some(dir) = config.get("dir").and_then(|v| v.as_str()) {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create download directory '{}': {}", dir, e))?;
-
-        // Dynamically expand the frontend FS scope to include the download
-        // directory.  Without this, `@tauri-apps/plugin-fs` operations
-        // (exists, stat) fail with "forbidden path" on non-standard Windows
-        // drives (RAM disks, network shares) because the static `fs:scope`
-        // glob `**` only matches paths relative to predefined base directories.
-        use tauri_plugin_fs::FsExt;
-        if let Err(e) = app.fs_scope().allow_directory(dir, true) {
-            log::warn!("failed to expand fs scope for '{}': {}", dir, e);
-        }
     }
 
     // Kill any leftover aria2c process on the RPC port before starting
@@ -229,12 +219,6 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
     if let Some(dir) = config.get("dir").and_then(|v| v.as_str()) {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create download directory '{}': {}", dir, e))?;
-
-        // Expand FS scope for the (possibly changed) download directory.
-        use tauri_plugin_fs::FsExt;
-        if let Err(e) = app.fs_scope().allow_directory(dir, true) {
-            log::warn!("failed to expand fs scope for '{}': {}", dir, e);
-        }
     }
 
     let conf_path = app

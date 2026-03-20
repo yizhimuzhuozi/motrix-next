@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "รัน <code>uname -m</code> ในเทอร์มินัล",
   "theme.system": "ระบบ",
   "theme.light": "สว่าง",
-  "theme.dark": "มืด",
-  "dl.channel.stable": "เสถียร",
-  "dl.channel.beta": "เบต้า"
+  "theme.dark": "มืด"
 }

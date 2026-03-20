@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Виконайте <code>uname -m</code> у терміналі",
   "theme.system": "Системна",
   "theme.light": "Світла",
-  "theme.dark": "Темна",
-  "dl.channel.stable": "Стабільна",
-  "dl.channel.beta": "Бета"
+  "theme.dark": "Темна"
 }

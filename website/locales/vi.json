@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Chạy <code>uname -m</code> trong terminal",
   "theme.system": "Hệ thống",
   "theme.light": "Sáng",
-  "theme.dark": "Tối",
-  "dl.channel.stable": "Ổn định",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Tối"
 }

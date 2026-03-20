@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "Jalankan <code>uname -m</code> di terminal",
   "theme.system": "Sistem",
   "theme.light": "Terang",
-  "theme.dark": "Gelap",
-  "dl.channel.stable": "Stabil",
-  "dl.channel.beta": "Beta"
+  "theme.dark": "Gelap"
 }

@@ -99,7 +99,5 @@
   "dl.modal.help.linux": "在终端运行 <code>uname -m</code>",
   "theme.system": "跟随系统",
   "theme.light": "浅色",
-  "theme.dark": "深色",
-  "dl.channel.stable": "正式版",
-  "dl.channel.beta": "测试版"
+  "theme.dark": "深色"
 }
