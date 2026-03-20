@@ -199,21 +199,22 @@ jobs:
           REPO="${{ github.repository }}"
           CONTENT=$(base64 -w 0 "$JSON_FILE")
 
-          # Get current file SHA if it exists (required for updates)
-          SHA=$(gh api "repos/$REPO/contents/$JSON_FILE?ref=data" --jq '.sha' 2>/dev/null || echo "")
+          # Get current file SHA if it exists (required for updates).
+          # Returns empty string if the branch or file doesn't exist yet.
+          SHA=$(gh api "repos/$REPO/contents/$JSON_FILE?ref=data" --jq '.sha' 2>/dev/null || true)
 
+          # Build JSON body with jq to avoid shell quoting issues with large base64 content
           if [ -n "$SHA" ]; then
-            gh api "repos/$REPO/contents/$JSON_FILE" \
-              --method PUT \
-              --field message="ci: update $JSON_FILE" \
-              --field content="$CONTENT" \
-              --field branch="data" \
-              --field sha="$SHA"
+            jq -n --arg msg "ci: update $JSON_FILE" \
+                  --arg content "$CONTENT" \
+                  --arg branch "data" \
+                  --arg sha "$SHA" \
+                  '{message: $msg, content: $content, branch: $branch, sha: $sha}'
           else
-            gh api "repos/$REPO/contents/$JSON_FILE" \
-              --method PUT \
-              --field message="ci: update $JSON_FILE" \
-              --field content="$CONTENT" \
-              --field branch="data"
-          fi
+            jq -n --arg msg "ci: update $JSON_FILE" \
+                  --arg content "$CONTENT" \
+                  --arg branch "data" \
+                  '{message: $msg, content: $content, branch: $branch}'
+          fi | gh api "repos/$REPO/contents/$JSON_FILE" --method PUT --input -
+
           echo "Pushed $JSON_FILE to 'data' branch"
