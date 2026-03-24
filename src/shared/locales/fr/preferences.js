@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informations système',
   'system-arch': 'Architecture',
   'system-runtime': 'Environnement d\'exécution',
+  'clipboard-detection': 'Détection du presse-papiers',
+  'clipboard-auto-detect': 'Détecter automatiquement les liens de téléchargement depuis le presse-papiers',
+  'clipboard-http': 'Liens HTTP / HTTPS',
+  'clipboard-ftp': 'Liens FTP',
+  'clipboard-magnet': 'Liens Magnet',
+  'clipboard-thunder': 'Liens Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

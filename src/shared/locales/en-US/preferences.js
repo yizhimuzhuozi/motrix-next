@@ -194,4 +194,11 @@ export default {
   'system-info': 'System Information',
   'system-arch': 'Architecture',
   'system-runtime': 'Runtime',
+  'clipboard-detection': 'Clipboard Detection',
+  'clipboard-auto-detect': 'Auto-detect download links from clipboard',
+  'clipboard-http': 'HTTP / HTTPS links',
+  'clipboard-ftp': 'FTP links',
+  'clipboard-magnet': 'Magnet links',
+  'clipboard-thunder': 'Thunder links',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

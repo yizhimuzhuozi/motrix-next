@@ -194,4 +194,11 @@ export default {
   'system-info': 'Rendszerinformáció',
   'system-arch': 'Architektúra',
   'system-runtime': 'Futtatókörnyezet',
+  'clipboard-detection': 'Vágólap-érzékelés',
+  'clipboard-auto-detect': 'Letöltési hivatkozások automatikus felismerése a vágólapról',
+  'clipboard-http': 'HTTP / HTTPS hivatkozások',
+  'clipboard-ftp': 'FTP hivatkozások',
+  'clipboard-magnet': 'Magnet hivatkozások',
+  'clipboard-thunder': 'Thunder (迅雷) hivatkozások',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

@@ -114,6 +114,23 @@ export interface ProtocolsConfig {
   thunder: boolean
 }
 
+/** Clipboard auto-detection filter: controls which protocol families
+ *  trigger the "new task" dialog when a URL is detected in the clipboard. */
+export interface ClipboardConfig {
+  /** Master switch — when false, clipboard detection is fully disabled. */
+  enable: boolean
+  /** Detect http:// and https:// URLs. */
+  http: boolean
+  /** Detect ftp:// URLs. */
+  ftp: boolean
+  /** Detect magnet: URIs. */
+  magnet: boolean
+  /** Detect thunder:// (迅雷) links. */
+  thunder: boolean
+  /** Detect bare BitTorrent v1 info hashes (40-char hex / 32-char Base32). */
+  btHash: boolean
+}
+
 /** Application user preferences with full type coverage. */
 export interface AppConfig {
   /** Schema version for config migration. Absent in pre-migration configs (treated as 0). */
@@ -152,6 +169,7 @@ export interface AppConfig {
   cookie: string
   proxy: ProxyConfig
   protocols: ProtocolsConfig
+  clipboard: ClipboardConfig
   trackerSource: string[]
   historyDirectories: string[]
   favoriteDirectories: string[]

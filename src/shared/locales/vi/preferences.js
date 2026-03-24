@@ -194,4 +194,11 @@ export default {
   'system-info': 'Thông tin hệ thống',
   'system-arch': 'Kiến trúc',
   'system-runtime': 'Môi trường chạy',
+  'clipboard-detection': 'Phát hiện bảng nhớ tạm',
+  'clipboard-auto-detect': 'Tự động phát hiện liên kết tải xuống từ bảng nhớ tạm',
+  'clipboard-http': 'Liên kết HTTP / HTTPS',
+  'clipboard-ftp': 'Liên kết FTP',
+  'clipboard-magnet': 'Liên kết Magnet',
+  'clipboard-thunder': 'Liên kết Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

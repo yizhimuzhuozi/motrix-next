@@ -194,4 +194,11 @@ export default {
   'system-info': 'Systeminformationen',
   'system-arch': 'Architektur',
   'system-runtime': 'Laufzeitumgebung',
+  'clipboard-detection': 'Zwischenablage-Erkennung',
+  'clipboard-auto-detect': 'Download-Links automatisch aus der Zwischenablage erkennen',
+  'clipboard-http': 'HTTP / HTTPS-Links',
+  'clipboard-ftp': 'FTP-Links',
+  'clipboard-magnet': 'Magnet-Links',
+  'clipboard-thunder': 'Thunder (迅雷)-Links',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informações do sistema',
   'system-arch': 'Arquitetura',
   'system-runtime': 'Runtime',
+  'clipboard-detection': 'Detecção da área de transferência',
+  'clipboard-auto-detect': 'Detectar automaticamente links de download da área de transferência',
+  'clipboard-http': 'Links HTTP / HTTPS',
+  'clipboard-ftp': 'Links FTP',
+  'clipboard-magnet': 'Links Magnet',
+  'clipboard-thunder': 'Links Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

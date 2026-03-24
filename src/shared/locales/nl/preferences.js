@@ -194,4 +194,11 @@ export default {
   'system-info': 'Systeeminformatie',
   'system-arch': 'Architectuur',
   'system-runtime': 'Runtime',
+  'clipboard-detection': 'Klemborddetectie',
+  'clipboard-auto-detect': 'Downloadlinks automatisch detecteren vanuit het klembord',
+  'clipboard-http': 'HTTP / HTTPS-links',
+  'clipboard-ftp': 'FTP-links',
+  'clipboard-magnet': 'Magnet-links',
+  'clipboard-thunder': 'Thunder (迅雷)-links',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

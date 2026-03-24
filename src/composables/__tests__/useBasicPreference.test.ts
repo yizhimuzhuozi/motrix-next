@@ -144,6 +144,12 @@ describe('buildBasicSystemConfig', () => {
     continue: true,
     deleteTorrentAfterComplete: false,
     autoDeleteStaleRecords: false,
+    clipboardEnable: true,
+    clipboardHttp: true,
+    clipboardFtp: true,
+    clipboardMagnet: true,
+    clipboardThunder: true,
+    clipboardBtHash: true,
   }
 
   it('maps all required aria2 config keys', () => {
@@ -244,6 +250,12 @@ describe('transformBasicForStore', () => {
     continue: true,
     deleteTorrentAfterComplete: false,
     autoDeleteStaleRecords: false,
+    clipboardEnable: true,
+    clipboardHttp: true,
+    clipboardFtp: true,
+    clipboardMagnet: true,
+    clipboardThunder: true,
+    clipboardBtHash: true,
   }
 
   it('expands btAutoDownloadContent=true into follow+resume', () => {

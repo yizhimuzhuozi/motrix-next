@@ -590,6 +590,28 @@ onMounted(async () => {
       <NFormItem :label="t('preferences.auto-delete-stale-records')">
         <NSwitch v-model:value="form.autoDeleteStaleRecords" />
       </NFormItem>
+
+      <NDivider title-placement="left">{{ t('preferences.clipboard-detection') }}</NDivider>
+      <NFormItem :label="t('preferences.clipboard-auto-detect')">
+        <NSwitch v-model:value="form.clipboardEnable" />
+      </NFormItem>
+      <NCollapseTransition :show="form.clipboardEnable">
+        <NFormItem :label="t('preferences.clipboard-http')">
+          <NSwitch v-model:value="form.clipboardHttp" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-ftp')">
+          <NSwitch v-model:value="form.clipboardFtp" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-magnet')">
+          <NSwitch v-model:value="form.clipboardMagnet" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-thunder')">
+          <NSwitch v-model:value="form.clipboardThunder" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-bt-hash')">
+          <NSwitch v-model:value="form.clipboardBtHash" />
+        </NFormItem>
+      </NCollapseTransition>
     </NForm>
     <PreferenceActionBar :is-dirty="isDirty" @save="handleSave" @discard="handleReset" @restart="handleManualRestart" />
   </div>

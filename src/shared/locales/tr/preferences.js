@@ -194,4 +194,11 @@ export default {
   'system-info': 'Sistem Bilgileri',
   'system-arch': 'Mimari',
   'system-runtime': 'Çalışma Ortamı',
+  'clipboard-detection': 'Pano Algılama',
+  'clipboard-auto-detect': 'Panodan indirme bağlantılarını otomatik algıla',
+  'clipboard-http': 'HTTP / HTTPS bağlantıları',
+  'clipboard-ftp': 'FTP bağlantıları',
+  'clipboard-magnet': 'Magnet bağlantıları',
+  'clipboard-thunder': 'Thunder (迅雷) bağlantıları',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

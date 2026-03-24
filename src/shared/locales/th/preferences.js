@@ -194,4 +194,11 @@ export default {
   'system-info': 'ข้อมูลระบบ',
   'system-arch': 'สถาปัตยกรรม',
   'system-runtime': 'รันไทม์',
+  'clipboard-detection': 'ตรวจจับคลิปบอร์ด',
+  'clipboard-auto-detect': 'ตรวจจับลิงก์ดาวน์โหลดจากคลิปบอร์ดโดยอัตโนมัติ',
+  'clipboard-http': 'ลิงก์ HTTP / HTTPS',
+  'clipboard-ftp': 'ลิงก์ FTP',
+  'clipboard-magnet': 'ลิงก์ Magnet',
+  'clipboard-thunder': 'ลิงก์ Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

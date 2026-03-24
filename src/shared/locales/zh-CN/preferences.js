@@ -194,4 +194,11 @@ export default {
   'system-info': '系统信息',
   'system-arch': '架构',
   'system-runtime': '运行环境',
+  'clipboard-detection': '剪贴板检测',
+  'clipboard-auto-detect': '自动检测剪贴板中的下载链接',
+  'clipboard-http': 'HTTP / HTTPS 链接',
+  'clipboard-ftp': 'FTP 链接',
+  'clipboard-magnet': '磁力链接 (Magnet)',
+  'clipboard-thunder': '迅雷链接 (Thunder)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

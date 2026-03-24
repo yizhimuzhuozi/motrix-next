@@ -194,4 +194,11 @@ export default {
   'system-info': '系統資訊',
   'system-arch': '架構',
   'system-runtime': '執行環境',
+  'clipboard-detection': '剪貼簿偵測',
+  'clipboard-auto-detect': '自動偵測剪貼簿中的下載連結',
+  'clipboard-http': 'HTTP / HTTPS 連結',
+  'clipboard-ftp': 'FTP 連結',
+  'clipboard-magnet': '磁力連結 (Magnet)',
+  'clipboard-thunder': '迅雷連結 (Thunder)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

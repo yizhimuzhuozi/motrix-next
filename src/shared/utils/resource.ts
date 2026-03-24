@@ -3,6 +3,7 @@ import { compact } from 'lodash-es'
 import { RESOURCE_TAGS, BARE_INFO_HASH_RE } from '@shared/constants'
 import { splitTextRows } from './format'
 import { isAudioOrVideo } from './file'
+import type { ClipboardConfig } from '@shared/types'
 
 /** Decodes a Thunder (迅雷) protocol link to its original HTTP/FTP URL. */
 export const decodeThunderLink = (url = ''): string => {
@@ -20,6 +21,29 @@ export const splitTaskLinks = (links = ''): string[] => {
 }
 
 /**
+ * Builds the list of allowed protocol prefixes based on a ClipboardConfig filter.
+ * When no filter is provided, returns all recognized protocol tags (backward compat).
+ */
+function buildAllowedTags(filter?: ClipboardConfig): string[] {
+  if (!filter) return RESOURCE_TAGS
+
+  const tags: string[] = []
+  if (filter.http) {
+    tags.push('http://', 'https://')
+  }
+  if (filter.ftp) {
+    tags.push('ftp://')
+  }
+  if (filter.magnet) {
+    tags.push('magnet:')
+  }
+  if (filter.thunder) {
+    tags.push('thunder://')
+  }
+  return tags
+}
+
+/**
  * Returns true if the clipboard content represents downloadable resource(s).
  *
  * Detection rules (all must hold):
@@ -29,10 +53,14 @@ export const splitTaskLinks = (links = ''): string[] => {
  *    (`http://`, `https://`, `ftp://`, `magnet:`, `thunder://`)
  *    OR be a bare BitTorrent v1 info hash (SHA-1 hex / Base32).
  *
+ * When a `filter` is provided, only the enabled protocol families are matched.
+ * The `enable` master switch short-circuits to false when off.
+ *
  * This rejects embedded URLs inside prose, code comments, JSON, HTML,
  * log lines, and mixed multi-line content.
  */
-export const detectResource = (content: string): boolean => {
+export const detectResource = (content: string, filter?: ClipboardConfig): boolean => {
+  if (filter && !filter.enable) return false
   if (!content || content.length > 2048) return false
 
   const lines = content
@@ -42,7 +70,12 @@ export const detectResource = (content: string): boolean => {
 
   if (lines.length === 0) return false
 
-  return lines.every((line) => RESOURCE_TAGS.some((tag) => line.startsWith(tag)) || BARE_INFO_HASH_RE.test(line))
+  const allowedTags = buildAllowedTags(filter)
+  const allowHash = filter ? filter.btHash : true
+
+  return lines.every(
+    (line) => allowedTags.some((tag) => line.startsWith(tag)) || (allowHash && BARE_INFO_HASH_RE.test(line)),
+  )
 }
 
 export const needCheckCopyright = (links = ''): boolean => {

@@ -194,4 +194,11 @@ export default {
   'system-info': 'Systeminformasjon',
   'system-arch': 'Arkitektur',
   'system-runtime': 'Kjøretidsmiljø',
+  'clipboard-detection': 'Utklippstavle-deteksjon',
+  'clipboard-auto-detect': 'Oppdage nedlastingslenker automatisk fra utklippstavlen',
+  'clipboard-http': 'HTTP / HTTPS-lenker',
+  'clipboard-ftp': 'FTP-lenker',
+  'clipboard-magnet': 'Magnet-lenker',
+  'clipboard-thunder': 'Thunder (迅雷)-lenker',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

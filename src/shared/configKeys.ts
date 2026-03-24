@@ -5,6 +5,7 @@ const userKeys = [
   'auto-hide-window',
   'auto-sync-tracker',
   'cookie',
+  'clipboard',
   'delete-torrent-after-complete',
   'enable-upnp',
   'engine-bin-path',

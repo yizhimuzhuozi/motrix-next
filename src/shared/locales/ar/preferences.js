@@ -194,4 +194,11 @@ export default {
   'system-info': 'معلومات النظام',
   'system-arch': 'البنية',
   'system-runtime': 'بيئة التشغيل',
+  'clipboard-detection': 'كشف الحافظة',
+  'clipboard-auto-detect': 'كشف روابط التحميل تلقائياً من الحافظة',
+  'clipboard-http': 'روابط HTTP / HTTPS',
+  'clipboard-ftp': 'روابط FTP',
+  'clipboard-magnet': 'روابط Magnet',
+  'clipboard-thunder': 'روابط Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

@@ -370,12 +370,14 @@ window.addEventListener('unhandledrejection', (e) => {
     getCurrentWindow().onFocusChanged(async ({ payload: focused }) => {
       if (!focused) return
       if (appStore.addTaskVisible) return
+      const clipboardConfig = preferenceStore.config.clipboard
+      if (!clipboardConfig?.enable) return
       try {
         const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
         const text = ((await readText()) || '').trim()
         if (!text || text === lastClipboardText) return
         const { detectResource } = await import('@shared/utils')
-        if (detectResource(text)) {
+        if (detectResource(text, clipboardConfig)) {
           lastClipboardText = text
           const { createBatchItem } = await import('@shared/utils/batchHelpers')
           appStore.enqueueBatch([createBatchItem('uri', text)])

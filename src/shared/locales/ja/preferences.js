@@ -194,4 +194,11 @@ export default {
   'system-info': 'システム情報',
   'system-arch': 'アーキテクチャ',
   'system-runtime': 'ランタイム',
+  'clipboard-detection': 'クリップボード検出',
+  'clipboard-auto-detect': 'クリップボードからダウンロードリンクを自動検出',
+  'clipboard-http': 'HTTP / HTTPS リンク',
+  'clipboard-ftp': 'FTP リンク',
+  'clipboard-magnet': 'Magnet リンク',
+  'clipboard-thunder': 'Thunder（迅雷）リンク',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

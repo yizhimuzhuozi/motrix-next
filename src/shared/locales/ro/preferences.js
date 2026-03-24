@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informații despre sistem',
   'system-arch': 'Arhitectură',
   'system-runtime': 'Mediu de execuție',
+  'clipboard-detection': 'Detectare clipboard',
+  'clipboard-auto-detect': 'Detectează automat linkuri de descărcare din clipboard',
+  'clipboard-http': 'Linkuri HTTP / HTTPS',
+  'clipboard-ftp': 'Linkuri FTP',
+  'clipboard-magnet': 'Linkuri Magnet',
+  'clipboard-thunder': 'Linkuri Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

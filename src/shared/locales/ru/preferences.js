@@ -194,4 +194,11 @@ export default {
   'system-info': 'Информация о системе',
   'system-arch': 'Архитектура',
   'system-runtime': 'Среда выполнения',
+  'clipboard-detection': 'Обнаружение буфера обмена',
+  'clipboard-auto-detect': 'Автоматически обнаруживать ссылки для скачивания из буфера обмена',
+  'clipboard-http': 'Ссылки HTTP / HTTPS',
+  'clipboard-ftp': 'Ссылки FTP',
+  'clipboard-magnet': 'Ссылки Magnet',
+  'clipboard-thunder': 'Ссылки Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

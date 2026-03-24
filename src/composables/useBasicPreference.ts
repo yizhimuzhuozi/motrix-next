@@ -43,6 +43,12 @@ export interface BasicForm {
   continue: boolean
   deleteTorrentAfterComplete: boolean
   autoDeleteStaleRecords: boolean
+  clipboardEnable: boolean
+  clipboardHttp: boolean
+  clipboardFtp: boolean
+  clipboardMagnet: boolean
+  clipboardThunder: boolean
+  clipboardBtHash: boolean
 }
 
 // ── Pure Functions ──────────────────────────────────────────────────
@@ -90,6 +96,12 @@ export function buildBasicForm(config: AppConfig, defaultDir: string = ''): Basi
     continue: config.continue ?? D.continue,
     deleteTorrentAfterComplete: config.deleteTorrentAfterComplete ?? false,
     autoDeleteStaleRecords: config.autoDeleteStaleRecords ?? false,
+    clipboardEnable: config.clipboard?.enable ?? D.clipboard.enable,
+    clipboardHttp: config.clipboard?.http ?? D.clipboard.http,
+    clipboardFtp: config.clipboard?.ftp ?? D.clipboard.ftp,
+    clipboardMagnet: config.clipboard?.magnet ?? D.clipboard.magnet,
+    clipboardThunder: config.clipboard?.thunder ?? D.clipboard.thunder,
+    clipboardBtHash: config.clipboard?.btHash ?? D.clipboard.btHash,
   }
 }
 
@@ -140,5 +152,20 @@ export function transformBasicForStore(f: BasicForm): Partial<AppConfig> {
     data.followMetalink = false
     data.pauseMetadata = true
   }
+  // Collapse flattened clipboard fields back into nested ClipboardConfig object
+  data.clipboard = {
+    enable: f.clipboardEnable,
+    http: f.clipboardHttp,
+    ftp: f.clipboardFtp,
+    magnet: f.clipboardMagnet,
+    thunder: f.clipboardThunder,
+    btHash: f.clipboardBtHash,
+  }
+  delete data.clipboardEnable
+  delete data.clipboardHttp
+  delete data.clipboardFtp
+  delete data.clipboardMagnet
+  delete data.clipboardThunder
+  delete data.clipboardBtHash
   return data
 }

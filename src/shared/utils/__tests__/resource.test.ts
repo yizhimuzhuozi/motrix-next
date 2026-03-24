@@ -1,6 +1,7 @@
 /** @fileoverview Tests for resource detection utilities. */
 import { describe, it, expect } from 'vitest'
 import { decodeThunderLink, splitTaskLinks, detectResource, needCheckCopyright } from '../resource'
+import type { ClipboardConfig } from '@shared/types'
 
 describe('decodeThunderLink', () => {
   it('returns non-thunder links unchanged', () => {
@@ -187,6 +188,157 @@ describe('detectResource', () => {
 
     it('returns false for email addresses', () => {
       expect(detectResource('user@http://example.com')).toBe(false)
+    })
+  })
+})
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// detectResource — ClipboardConfig filter parameter (TDD RED phase)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+describe('detectResource with ClipboardConfig filter', () => {
+  /** Factory for a fully-enabled filter (all protocols on). */
+  const allEnabled = (): ClipboardConfig => ({
+    enable: true,
+    http: true,
+    ftp: true,
+    magnet: true,
+    thunder: true,
+    btHash: true,
+  })
+
+  // ── Backward compatibility ────────────────────────────────────────
+
+  describe('backward compatibility (no filter)', () => {
+    it('detects http URL without filter argument', () => {
+      expect(detectResource('https://example.com/file.zip')).toBe(true)
+    })
+
+    it('detects magnet link without filter argument', () => {
+      expect(detectResource('magnet:?xt=urn:btih:abc123')).toBe(true)
+    })
+
+    it('rejects plain text without filter argument', () => {
+      expect(detectResource('hello world')).toBe(false)
+    })
+  })
+
+  // ── Total enable switch ───────────────────────────────────────────
+
+  describe('total enable switch', () => {
+    it('rejects all content when enable is false', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), enable: false }
+      expect(detectResource('https://example.com/file.zip', filter)).toBe(false)
+    })
+
+    it('rejects magnet link when enable is false', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), enable: false }
+      expect(detectResource('magnet:?xt=urn:btih:abc123', filter)).toBe(false)
+    })
+
+    it('detects http URL when enable is true with all protocols on', () => {
+      expect(detectResource('https://example.com/file.zip', allEnabled())).toBe(true)
+    })
+  })
+
+  // ── Per-protocol toggles ──────────────────────────────────────────
+
+  describe('per-protocol toggles', () => {
+    it('rejects http URL when http is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), http: false }
+      expect(detectResource('http://example.com/file.zip', filter)).toBe(false)
+    })
+
+    it('rejects https URL when http is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), http: false }
+      expect(detectResource('https://cdn.example.com/release.tar.gz', filter)).toBe(false)
+    })
+
+    it('still detects magnet link when http is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), http: false }
+      expect(detectResource('magnet:?xt=urn:btih:abc123def456', filter)).toBe(true)
+    })
+
+    it('rejects ftp URL when ftp is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), ftp: false }
+      expect(detectResource('ftp://mirror.example.com/pub/file.iso', filter)).toBe(false)
+    })
+
+    it('still detects http URL when ftp is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), ftp: false }
+      expect(detectResource('https://example.com/file.zip', filter)).toBe(true)
+    })
+
+    it('rejects magnet link when magnet is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), magnet: false }
+      expect(detectResource('magnet:?xt=urn:btih:abc123def456', filter)).toBe(false)
+    })
+
+    it('still detects http URL when magnet is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), magnet: false }
+      expect(detectResource('https://example.com/file.zip', filter)).toBe(true)
+    })
+
+    it('rejects thunder link when thunder is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), thunder: false }
+      expect(detectResource('thunder://QUFodHRwOi8vZXhhbXBsZS5jb20vZmlsZS56aXBaWg==', filter)).toBe(false)
+    })
+
+    it('rejects bare SHA-1 info hash when btHash is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), btHash: false }
+      expect(detectResource('d8988e034cb5de79d319242e3365bf30a7741a6e', filter)).toBe(false)
+    })
+
+    it('rejects bare Base32 info hash when btHash is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), btHash: false }
+      expect(detectResource('TCIY4A2MWXPHTUYZEQUOMNS7GCDXOQTG', filter)).toBe(false)
+    })
+
+    it('still detects magnet link when btHash is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), btHash: false }
+      expect(detectResource('magnet:?xt=urn:btih:abc123def456', filter)).toBe(true)
+    })
+  })
+
+  // ── Multi-line mixed content with partial disables ────────────────
+
+  describe('multi-line content with partial protocol disables', () => {
+    it('rejects multi-line when one line uses a disabled protocol', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), magnet: false }
+      const content = 'https://example.com/file.zip\nmagnet:?xt=urn:btih:abc'
+      expect(detectResource(content, filter)).toBe(false)
+    })
+
+    it('accepts multi-line when all lines use enabled protocols', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), magnet: false }
+      const content = 'https://a.com/1.zip\nftp://b.com/2.iso'
+      expect(detectResource(content, filter)).toBe(true)
+    })
+
+    it('rejects multi-line with hash when btHash is disabled', () => {
+      const filter: ClipboardConfig = { ...allEnabled(), btHash: false }
+      const content = 'https://example.com/file.zip\nd8988e034cb5de79d319242e3365bf30a7741a6e'
+      expect(detectResource(content, filter)).toBe(false)
+    })
+  })
+
+  // ── All protocols disabled ────────────────────────────────────────
+
+  describe('all protocols disabled', () => {
+    it('rejects everything when all protocol toggles are off', () => {
+      const filter: ClipboardConfig = {
+        enable: true,
+        http: false,
+        ftp: false,
+        magnet: false,
+        thunder: false,
+        btHash: false,
+      }
+      expect(detectResource('https://example.com/file.zip', filter)).toBe(false)
+      expect(detectResource('ftp://mirror.com/file.iso', filter)).toBe(false)
+      expect(detectResource('magnet:?xt=urn:btih:abc', filter)).toBe(false)
+      expect(detectResource('thunder://QUFodHRwOi8vZmlsZS56aXBaWg==', filter)).toBe(false)
+      expect(detectResource('d8988e034cb5de79d319242e3365bf30a7741a6e', filter)).toBe(false)
     })
   })
 })

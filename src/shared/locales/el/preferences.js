@@ -194,4 +194,11 @@ export default {
   'system-info': 'Πληροφορίες συστήματος',
   'system-arch': 'Αρχιτεκτονική',
   'system-runtime': 'Περιβάλλον εκτέλεσης',
+  'clipboard-detection': 'Ανίχνευση Πρόχειρου',
+  'clipboard-auto-detect': 'Αυτόματη ανίχνευση συνδέσμων λήψης από το πρόχειρο',
+  'clipboard-http': 'Σύνδεσμοι HTTP / HTTPS',
+  'clipboard-ftp': 'Σύνδεσμοι FTP',
+  'clipboard-magnet': 'Σύνδεσμοι Magnet',
+  'clipboard-thunder': 'Σύνδεσμοι Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

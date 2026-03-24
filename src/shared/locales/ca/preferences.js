@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informació del sistema',
   'system-arch': 'Arquitectura',
   'system-runtime': 'Entorn d\'execució',
+  'clipboard-detection': 'Detecció del porta-retalls',
+  'clipboard-auto-detect': 'Detecta automàticament els enllaços de descàrrega del porta-retalls',
+  'clipboard-http': 'Enllaços HTTP / HTTPS',
+  'clipboard-ftp': 'Enllaços FTP',
+  'clipboard-magnet': 'Enllaços Magnet',
+  'clipboard-thunder': 'Enllaços Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

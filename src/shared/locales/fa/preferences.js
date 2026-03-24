@@ -194,4 +194,11 @@ export default {
   'system-info': 'اطلاعات سیستم',
   'system-arch': 'معماری',
   'system-runtime': 'محیط اجرا',
+  'clipboard-detection': 'تشخیص کلیپ‌بورد',
+  'clipboard-auto-detect': 'تشخیص خودکار لینک‌های دانلود از کلیپ‌بورد',
+  'clipboard-http': 'لینک‌های HTTP / HTTPS',
+  'clipboard-ftp': 'لینک‌های FTP',
+  'clipboard-magnet': 'لینک‌های Magnet',
+  'clipboard-thunder': 'لینک‌های Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

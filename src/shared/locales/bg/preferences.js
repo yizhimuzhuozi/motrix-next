@@ -194,4 +194,11 @@ export default {
   'system-info': 'Системна информация',
   'system-arch': 'Архитектура',
   'system-runtime': 'Среда за изпълнение',
+  'clipboard-detection': 'Откриване от клипборда',
+  'clipboard-auto-detect': 'Автоматично откриване на линкове от клипборда',
+  'clipboard-http': 'HTTP / HTTPS линкове',
+  'clipboard-ftp': 'FTP линкове',
+  'clipboard-magnet': 'Magnet линкове',
+  'clipboard-thunder': 'Thunder (迅雷) линкове',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

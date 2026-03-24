@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informacje o systemie',
   'system-arch': 'Architektura',
   'system-runtime': 'Środowisko uruchomieniowe',
+  'clipboard-detection': 'Wykrywanie schowka',
+  'clipboard-auto-detect': 'Automatycznie wykrywaj linki do pobrania ze schowka',
+  'clipboard-http': 'Linki HTTP / HTTPS',
+  'clipboard-ftp': 'Linki FTP',
+  'clipboard-magnet': 'Linki Magnet',
+  'clipboard-thunder': 'Linki Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

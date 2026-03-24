@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informasi Sistem',
   'system-arch': 'Arsitektur',
   'system-runtime': 'Runtime',
+  'clipboard-detection': 'Deteksi Papan Klip',
+  'clipboard-auto-detect': 'Otomatis mendeteksi tautan unduhan dari papan klip',
+  'clipboard-http': 'Tautan HTTP / HTTPS',
+  'clipboard-ftp': 'Tautan FTP',
+  'clipboard-magnet': 'Tautan Magnet',
+  'clipboard-thunder': 'Tautan Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

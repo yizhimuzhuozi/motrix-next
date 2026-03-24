@@ -194,4 +194,11 @@ export default {
   'system-info': 'Informazioni di sistema',
   'system-arch': 'Architettura',
   'system-runtime': 'Runtime',
+  'clipboard-detection': 'Rilevamento appunti',
+  'clipboard-auto-detect': 'Rileva automaticamente i link di download dagli appunti',
+  'clipboard-http': 'Link HTTP / HTTPS',
+  'clipboard-ftp': 'Link FTP',
+  'clipboard-magnet': 'Link Magnet',
+  'clipboard-thunder': 'Link Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }

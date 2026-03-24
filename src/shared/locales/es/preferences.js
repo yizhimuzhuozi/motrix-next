@@ -194,4 +194,11 @@ export default {
   'system-info': 'Información del sistema',
   'system-arch': 'Arquitectura',
   'system-runtime': 'Entorno de ejecución',
+  'clipboard-detection': 'Detección del portapapeles',
+  'clipboard-auto-detect': 'Detectar automáticamente enlaces de descarga del portapapeles',
+  'clipboard-http': 'Enlaces HTTP / HTTPS',
+  'clipboard-ftp': 'Enlaces FTP',
+  'clipboard-magnet': 'Enlaces Magnet',
+  'clipboard-thunder': 'Enlaces Thunder (迅雷)',
+  'clipboard-bt-hash': 'BT Info Hash',
 }
