@@ -235,6 +235,34 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Log autostart detection for all platforms.
+    //
+    // The frontend (MainLayout.vue) uses this same check to decide whether
+    // to skip window.show().  Logging the values here at INFO level ensures
+    // that user-submitted logs always contain the data needed to diagnose
+    // autostart-related bugs (e.g. --autostart flag missing from the
+    // Windows registry entry — auto-launch crate #771).
+    {
+        let is_autostart = std::env::args().any(|a| a == "--autostart");
+        let auto_hide = app
+            .store("config.json")
+            .ok()
+            .and_then(|s| s.get("preferences"))
+            .and_then(|p| p.get("autoHideWindow")?.as_bool())
+            .unwrap_or(false);
+
+        log::info!(
+            "setup: is_autostart={} auto_hide_window={} (window will {})",
+            is_autostart,
+            auto_hide,
+            if is_autostart && auto_hide {
+                "stay hidden"
+            } else {
+                "be shown by frontend"
+            }
+        );
+    }
+
     Ok(())
 }
 

@@ -5,9 +5,20 @@ use tauri::Manager;
 
 /// Returns `true` when the current process was launched by the OS
 /// autostart mechanism (the Tauri autostart plugin appends `--autostart`).
+///
+/// Emits an INFO log with the full argument list on every call so that
+/// autostart-related bugs can be diagnosed from user-submitted logs
+/// without requiring manual registry inspection.
 #[tauri::command]
 pub fn is_autostart_launch() -> bool {
-    std::env::args().any(|a| a == "--autostart")
+    let args: Vec<String> = std::env::args().collect();
+    let result = args.iter().any(|a| a == "--autostart");
+    log::info!(
+        "is_autostart_launch: args={:?} result={}",
+        args,
+        result
+    );
+    result
 }
 
 /// Truncates the application log file to zero bytes.

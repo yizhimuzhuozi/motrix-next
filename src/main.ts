@@ -236,15 +236,29 @@ window.addEventListener('unhandledrejection', (e) => {
     }
   }
 
-  /** Sync autostart state with persisted preference. */
+  /**
+   * Sync autostart state with persisted preference.
+   *
+   * When `openAtLogin` is true we **always** call `enable()`, even if
+   * `isEnabled()` reports true.  This is a deliberate workaround for
+   * auto-launch crate v0.5.0 bug: on Windows the registry entry under
+   * `HKCU\...\Run` is sometimes removed after the first successful
+   * launch (tauri-apps/plugins-workspace#771).  Re-calling `enable()`
+   * is idempotent and guarantees the entry + `--autostart` args are
+   * present for the next boot.
+   */
   async function syncAutostart(config: typeof preferenceStore.config): Promise<void> {
     try {
       const { isEnabled, enable, disable } = await import('@tauri-apps/plugin-autostart')
       const currentlyEnabled = await isEnabled()
-      if (config.openAtLogin && !currentlyEnabled) {
+
+      if (config.openAtLogin) {
+        // Always re-enable to self-heal the registry (#771 workaround).
         await enable()
-      } else if (!config.openAtLogin && currentlyEnabled) {
+        logger.info('main.autostart', `ensured enabled (was=${currentlyEnabled} openAtLogin=${config.openAtLogin})`)
+      } else if (currentlyEnabled) {
         await disable()
+        logger.info('main.autostart', 'disabled (openAtLogin=false)')
       }
     } catch (e) {
       logger.debug('main.autostart', e)

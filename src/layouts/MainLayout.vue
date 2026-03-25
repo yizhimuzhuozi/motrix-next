@@ -214,10 +214,19 @@ onMounted(async () => {
   //
   // Skip show when the app was launched by OS autostart AND the user has
   // opted into "minimize to tray on autostart" — the window stays hidden.
+  //
+  // NOTE: The Rust backend logs the same detection at INFO level in
+  // setup_app().  Both logs together provide a full diagnostic trace for
+  // autostart bugs (e.g. --autostart flag missing on Windows cold boot).
   {
     const { invoke } = await import('@tauri-apps/api/core')
     const isAutostart: boolean = await invoke('is_autostart_launch')
-    const shouldHide = isAutostart && !!preferenceStore.config.autoHideWindow
+    const autoHide = !!preferenceStore.config.autoHideWindow
+    const shouldHide = isAutostart && autoHide
+    logger.info(
+      'MainLayout.windowVisibility',
+      `autostart=${isAutostart} autoHide=${autoHide} → shouldHide=${shouldHide}`,
+    )
     if (!shouldHide) {
       const appWindow = getCurrentWindow()
       await appWindow.show()
