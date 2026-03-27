@@ -85,7 +85,7 @@ describe('P0.1: updater.rs lifecycle logging', () => {
 
     it('logs download completion with byte count', () => {
       // Must reference bytes/len in a log statement
-      expect(fnBody).toMatch(/log::(info|debug)!.*bytes|log::(info|debug)!.*len/)
+      expect(fnBody).toMatch(/log::(info|debug)![\s\S]*bytes|log::(info|debug)![\s\S]*len/)
     })
 
     it('logs cancellation as a warning', () => {

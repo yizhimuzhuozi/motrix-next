@@ -5,7 +5,6 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
-
 /// Reads all system-level configuration from the `system.json` store.
 #[tauri::command]
 pub fn get_system_config(app: AppHandle) -> Result<Value, AppError> {

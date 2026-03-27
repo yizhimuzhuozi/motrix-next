@@ -262,7 +262,10 @@ pub async fn download_update(
         downloaded_version: update.version.clone(),
         bytes,
     });
-    log::info!("updater:download complete version={} bytes={byte_count}", update.version);
+    log::info!(
+        "updater:download complete version={} bytes={byte_count}",
+        update.version
+    );
 
     // Emit download-finished (NOT Finished — that signals post-install)
     if !cancel_state.is_cancelled() {
