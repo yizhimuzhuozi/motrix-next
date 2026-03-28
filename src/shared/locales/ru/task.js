@@ -1,4 +1,5 @@
 export default {
+  'all': 'Все',
   'active': 'Загрузка',
   'waiting': 'Ожидание',
   'stopped': 'Завершено',

@@ -1,4 +1,5 @@
 export default {
+  'all': 'Alles',
   'active': 'Downloaden',
   'waiting': 'Wachtend',
   'stopped': 'Voltooid',

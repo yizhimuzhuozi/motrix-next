@@ -324,7 +324,7 @@ export interface HistoryRecord {
 
 /** Aria2 JSON-RPC client API surface consumed by the task store. */
 export interface TaskApi {
-  fetchTaskList: (params: { type: string }) => Promise<Aria2Task[]>
+  fetchTaskList: (params: { type: string; limit?: number }) => Promise<Aria2Task[]>
   fetchTaskItem: (params: { gid: string }) => Promise<Aria2Task>
   fetchTaskItemWithPeers: (params: { gid: string }) => Promise<Aria2Task & { peers: Aria2Peer[] }>
   fetchActiveTaskList: () => Promise<Aria2Task[]>

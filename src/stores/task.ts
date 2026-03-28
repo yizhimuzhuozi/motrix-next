@@ -6,7 +6,7 @@ import { intersection } from '@shared/utils'
 import { logger } from '@shared/logger'
 import type { Aria2Task, Aria2File, Aria2Peer, Aria2EngineOptions, AddMetalinkParams, TaskApi } from '@shared/types'
 
-import { historyRecordToTask } from '@/composables/useTaskLifecycle'
+import { historyRecordToTask, mergeHistoryIntoTasks } from '@/composables/useTaskLifecycle'
 import { shouldShowFileSelection } from '@/composables/useMagnetFlow'
 import { useHistoryStore } from '@/stores/history'
 
@@ -62,11 +62,22 @@ export const useTaskStore = defineStore('task', () => {
     try {
       // Stopped tab is DB-primary: history.db is the single source of truth.
       // Active tab reads from aria2 (tellActive + tellWaiting).
+      // All tab merges: aria2 active + aria2 stopped (bridge) + history DB.
       let data: Aria2Task[]
       if (currentList.value === 'stopped') {
         const historyStore = useHistoryStore()
         const records = await historyStore.getRecords()
         data = records.map(historyRecordToTask)
+      } else if (currentList.value === 'all') {
+        const ALL_STOPPED_LIMIT = 128
+        const ALL_HISTORY_LIMIT = 256
+        const [activeTasks, stoppedTasks, historyRecords] = await Promise.all([
+          api.fetchTaskList({ type: 'active' }),
+          api.fetchTaskList({ type: 'stopped', limit: ALL_STOPPED_LIMIT }),
+          useHistoryStore().getRecords(undefined, ALL_HISTORY_LIMIT),
+        ])
+        data = mergeHistoryIntoTasks([...activeTasks, ...stoppedTasks], historyRecords)
+        data.sort((a, b) => b.gid.localeCompare(a.gid))
       } else {
         data = await api.fetchTaskList({ type: currentList.value })
       }

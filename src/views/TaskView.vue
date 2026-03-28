@@ -48,6 +48,7 @@ const {
 })
 
 const subnavs = computed(() => [
+  { key: 'all', title: t('task.all') || 'All' },
   { key: 'active', title: t('task.active') || 'Active' },
   { key: 'stopped', title: t('task.stopped') || 'Completed' },
 ])

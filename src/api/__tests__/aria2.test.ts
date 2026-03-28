@@ -309,6 +309,29 @@ describe('aria2 API', () => {
       expect(poll1.map((t) => t.gid)).toEqual(['c', 'b', 'a'])
       expect(poll2.map((t) => t.gid)).toEqual(['c', 'b', 'a'])
     })
+
+    // ── Limit parameter for stopped type ───────────────────────────
+
+    it('fetchTaskList passes limit to tellStopped when provided', async () => {
+      mockCall.mockResolvedValueOnce([])
+      await fetchTaskList({ type: 'stopped', limit: 128 })
+      // tellStopped(offset, num) — limit should be used as num
+      expect(mockCall).toHaveBeenCalledWith('tellStopped', 0, 128)
+    })
+
+    it('fetchTaskList uses default 1000 for tellStopped when limit is undefined', async () => {
+      mockCall.mockResolvedValueOnce([])
+      await fetchTaskList({ type: 'stopped' })
+      expect(mockCall).toHaveBeenCalledWith('tellStopped', 0, 1000)
+    })
+
+    it('fetchTaskList ignores limit for active type', async () => {
+      mockCall.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      await fetchTaskList({ type: 'active', limit: 50 })
+      // tellActive has no parameters, tellWaiting uses hardcoded 1000
+      expect(mockCall).toHaveBeenCalledWith('tellActive')
+      expect(mockCall).toHaveBeenCalledWith('tellWaiting', 0, 1000)
+    })
   })
 
   // ── Task Creation ───────────────────────────────────────────────

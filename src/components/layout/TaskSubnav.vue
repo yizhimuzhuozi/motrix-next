@@ -3,7 +3,7 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon } from 'naive-ui'
-import { PlayOutline, CheckmarkDoneOutline } from '@vicons/ionicons5'
+import { PlayOutline, CheckmarkDoneOutline, ListOutline } from '@vicons/ionicons5'
 import { type Component } from 'vue'
 
 const { t } = useI18n()
@@ -11,6 +11,7 @@ const router = useRouter()
 const route = useRoute()
 
 const items: { key: string; icon: Component; route: string }[] = [
+  { key: 'all', icon: ListOutline, route: '/task/all' },
   { key: 'active', icon: PlayOutline, route: '/task/active' },
   { key: 'stopped', icon: CheckmarkDoneOutline, route: '/task/stopped' },
 ]

@@ -1,4 +1,5 @@
 export default {
+  'all': 'Összes',
   'active': 'Letöltés',
   'waiting': 'Várakozás',
   'stopped': 'Befejezve',

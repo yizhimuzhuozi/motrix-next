@@ -1,4 +1,5 @@
 export default {
+  'all': 'Tất cả',
   'active': 'Đang tải',
   'waiting': 'Đang chờ',
   'stopped': 'Hoàn thành',

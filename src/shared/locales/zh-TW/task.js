@@ -1,4 +1,5 @@
 export default {
+  'all': '全部',
   'active': '下載中',
   'waiting': '等待中',
   'stopped': '已完成',

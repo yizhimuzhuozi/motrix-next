@@ -373,7 +373,7 @@ async function handleSubmit() {
     } else {
       handleClose()
       if (preferenceStore.config.newTaskShowDownloading !== false) {
-        router.push({ path: '/task/active' }).catch(() => {})
+        router.push({ path: '/task/all' }).catch(() => {})
       }
     }
   } catch (e: unknown) {

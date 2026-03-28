@@ -64,7 +64,7 @@ function showAddTask() {
                 type="button"
                 class="menu-button non-draggable"
                 :aria-label="t('app.task-list')"
-                @click="nav('/task/active')"
+                @click="nav('/task/all')"
               >
                 <NIcon :size="20"><ListOutline /></NIcon>
               </button>

@@ -1,4 +1,5 @@
 export default {
+  'all': 'Όλα',
   'active': 'Λήψη',
   'waiting': 'Αναμονή',
   'stopped': 'Ολοκληρώθηκε',

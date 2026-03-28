@@ -1,4 +1,5 @@
 export default {
+  'all': 'همه',
   'active': 'در حال دانلود',
   'waiting': 'در انتظار',
   'stopped': 'تکمیل شده',

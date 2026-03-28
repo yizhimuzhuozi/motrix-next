@@ -50,6 +50,23 @@ const hasPausedTasks = computed(() =>
   taskStore.taskList.some((t: { status: string }) => t.status === TASK_STATUS.PAUSED),
 )
 
+/** active and all views show Resume/Pause/StopSeed/Delete buttons */
+const showActiveActions = computed(() => currentList.value === 'active' || currentList.value === 'all')
+
+/** stopped and all views show Purge Records button */
+const showStoppedActions = computed(() => currentList.value === 'stopped' || currentList.value === 'all')
+
+/** GIDs of live (aria2-managed) tasks only — used by Delete All in 'all' view */
+const LIVE_STATUSES = new Set([TASK_STATUS.ACTIVE, TASK_STATUS.WAITING, TASK_STATUS.PAUSED])
+const liveGids = computed(() =>
+  taskStore.taskList.filter((t: { status: string }) => LIVE_STATUSES.has(t.status)).map((t: { gid: string }) => t.gid),
+)
+
+/** Delete All disabled state: in 'all' view, check live tasks; otherwise check all tasks */
+const deleteAllDisabled = computed(() =>
+  currentList.value === 'all' ? liveGids.value.length === 0 : allGids.value.length === 0,
+)
+
 function showAddTask() {
   appStore.showAddTaskDialog()
 }
@@ -67,8 +84,10 @@ function onRefresh() {
 }
 
 function onDeleteAll() {
-  if (allGids.value.length === 0) return
-  const gids = [...allGids.value]
+  // In 'all' view: only delete live (aria2-managed) tasks, not DB-only history items
+  const targetGids = currentList.value === 'all' ? [...liveGids.value] : [...allGids.value]
+  if (targetGids.length === 0) return
+  const gids = targetGids
   const deleteFiles = ref(false)
   const d = dialog.warning({
     title: t('task.delete-task'),
@@ -351,7 +370,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.refresh-list') || 'Refresh' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -370,7 +389,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.resume-all-task') || 'Resume All' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -389,7 +408,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.pause-all-task') || 'Pause All' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -411,13 +430,13 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.stop-all-seeding') }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
           circle
           size="small"
-          :disabled="allGids.length === 0"
+          :disabled="deleteAllDisabled"
           @pointerdown="onBtnPress"
           @pointerup="onBtnRelease"
           @pointerleave="onBtnRelease"
@@ -430,7 +449,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.delete-all-task') }}
     </MTooltip>
-    <MTooltip v-if="currentList === 'stopped'">
+    <MTooltip v-if="showStoppedActions">
       <template #trigger>
         <NButton
           quaternary

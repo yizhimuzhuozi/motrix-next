@@ -1,4 +1,5 @@
 export default {
+  'all': 'الكل',
   'active': 'جارٍ التنزيل',
   'waiting': 'في الانتظار',
   'stopped': 'مكتمل',

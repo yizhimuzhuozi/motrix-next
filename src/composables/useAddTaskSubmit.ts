@@ -253,7 +253,7 @@ export function useAddTaskSubmit({ form, onClose }: UseAddTaskSubmitOptions) {
       } else {
         onClose()
         if (preferenceStore.config.newTaskShowDownloading !== false) {
-          router.push({ path: '/task/active' }).catch(() => {})
+          router.push({ path: '/task/all' }).catch(() => {})
         }
       }
     } catch (e: unknown) {

@@ -135,15 +135,21 @@ export const useHistoryStore = defineStore('history', () => {
     )
   }
 
-  /** Retrieve records, optionally filtered by status. Sorted by completed_at DESC. */
-  async function getRecords(status?: string): Promise<HistoryRecord[]> {
+  /** Retrieve records, optionally filtered by status and/or limited in count.
+   *  Sorted by completed_at DESC. Limit is clamped to [0, 10000]. */
+  async function getRecords(status?: string, limit?: number): Promise<HistoryRecord[]> {
+    // Normalize limit: floor → clamp to [0, 10000] → append only if finite
+    const limitClause = limit != null ? ` LIMIT ${Math.min(Math.max(0, Math.floor(limit)), 10_000)}` : ''
     if (status) {
       return (await getDb()).select<HistoryRecord[]>(
-        'SELECT * FROM download_history WHERE status = $1 ORDER BY completed_at DESC',
+        `SELECT * FROM download_history WHERE status = $1 ORDER BY completed_at DESC${limitClause}`,
         [status],
       )
     }
-    return (await getDb()).select<HistoryRecord[]>('SELECT * FROM download_history ORDER BY completed_at DESC', [])
+    return (await getDb()).select<HistoryRecord[]>(
+      `SELECT * FROM download_history ORDER BY completed_at DESC${limitClause}`,
+      [],
+    )
   }
 
   /** Remove a single record by GID. */

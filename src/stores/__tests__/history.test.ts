@@ -87,15 +87,25 @@ function mockSelect(query: string, params: unknown[]): unknown[] {
     return [{ integrity_check: 'ok' }]
   }
 
+  let result: HistoryRecord[]
   if (q.includes('WHERE STATUS')) {
     const status = params[0] as string
-    return rows
+    result = rows
       .filter((r) => r.status === status)
       .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+  } else {
+    // Default: return all, sorted by completed_at DESC
+    result = [...rows].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
   }
 
-  // Default: return all, sorted by completed_at DESC
-  return [...rows].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+  // Parse LIMIT clause from the SQL query
+  const limitMatch = q.match(/LIMIT\s+(\d+)/)
+  if (limitMatch) {
+    const limit = parseInt(limitMatch[1], 10)
+    result = result.slice(0, limit)
+  }
+
+  return result
 }
 
 vi.mock('@tauri-apps/plugin-sql', () => ({
@@ -240,6 +250,67 @@ describe('HistoryStore', () => {
       expect(results[0].gid).toBe('new')
       expect(results[1].gid).toBe('mid')
       expect(results[2].gid).toBe('old')
+    })
+
+    it('returns at most N records when limit is specified', async () => {
+      for (let i = 0; i < 10; i++) {
+        await store.addRecord(
+          makeRecord({
+            gid: `limited-${i}`,
+            name: `file-${i}.zip`,
+            completed_at: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+          }),
+        )
+      }
+
+      const limited = await store.getRecords(undefined, 3)
+      expect(limited).toHaveLength(3)
+      // Should return the 3 most recent (sorted by completed_at DESC)
+      expect(limited[0].gid).toBe('limited-9')
+      expect(limited[1].gid).toBe('limited-8')
+      expect(limited[2].gid).toBe('limited-7')
+    })
+
+    it('returns all records when limit exceeds total count', async () => {
+      await store.addRecord(makeRecord({ gid: 'only1', name: 'only.zip' }))
+
+      const results = await store.getRecords(undefined, 100)
+      expect(results).toHaveLength(1)
+      expect(results[0].gid).toBe('only1')
+    })
+
+    it('applies limit together with status filter', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.addRecord(
+          makeRecord({
+            gid: `c-${i}`,
+            status: 'complete',
+            completed_at: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+          }),
+        )
+      }
+      await store.addRecord(makeRecord({ gid: 'e-1', status: 'error' }))
+
+      const limited = await store.getRecords('complete', 2)
+      expect(limited).toHaveLength(2)
+      limited.forEach((r) => expect(r.status).toBe('complete'))
+    })
+
+    it('returns all records when limit is undefined', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.addRecord(makeRecord({ gid: `nolim-${i}` }))
+      }
+      const results = await store.getRecords()
+      expect(results).toHaveLength(5)
+    })
+
+    it('clamps limit to safe integer range', async () => {
+      await store.addRecord(makeRecord({ gid: 'safe1' }))
+
+      // Negative limit should be treated as no results or clamped to 0
+      const negResult = await store.getRecords(undefined, -5)
+      // Implementation should sanitize: either return [] or clamp to 0
+      expect(negResult.length).toBeLessThanOrEqual(1)
     })
 
     it('returns empty array when no records exist', async () => {

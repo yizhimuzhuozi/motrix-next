@@ -1,4 +1,5 @@
 export default {
+  'all': 'Tümü',
   'active': 'İndiriliyor',
   'waiting': 'Bekliyor',
   'stopped': 'Tamamlandı',

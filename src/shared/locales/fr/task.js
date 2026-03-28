@@ -1,4 +1,5 @@
 export default {
+  'all': 'Tout',
   'active': 'En cours',
   'waiting': 'En attente',
   'stopped': 'Terminé',

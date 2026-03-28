@@ -150,16 +150,18 @@ export async function fetchActiveTaskList(): Promise<Aria2Task[]> {
   return tellActive()
 }
 
-/** Fetches task list by status type: active+waiting or stopped. */
-export async function fetchTaskList(params: { type: string }): Promise<Aria2Task[]> {
-  const { type } = params
+/** Fetches task list by status type: active+waiting or stopped.
+ *  For stopped type, an optional limit controls the maximum number of entries
+ *  retrieved from aria2 (defaults to 1000). Active type ignores limit. */
+export async function fetchTaskList(params: { type: string; limit?: number }): Promise<Aria2Task[]> {
+  const { type, limit } = params
   switch (type) {
     case TASK_STATUS.ACTIVE: {
       const [active, waiting] = await Promise.all([tellActive(), tellWaiting(0, 1000)])
       return [...active, ...waiting].sort((a, b) => b.gid.localeCompare(a.gid))
     }
     default:
-      return (await tellStopped(0, 1000)).sort((a, b) => b.gid.localeCompare(a.gid))
+      return (await tellStopped(0, limit ?? 1000)).sort((a, b) => b.gid.localeCompare(a.gid))
   }
 }
 

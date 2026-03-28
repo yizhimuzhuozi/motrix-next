@@ -1,4 +1,5 @@
 export default {
+  'all': 'Toate',
   'active': 'Se descarcă',
   'waiting': 'În așteptare',
   'stopped': 'Finalizat',

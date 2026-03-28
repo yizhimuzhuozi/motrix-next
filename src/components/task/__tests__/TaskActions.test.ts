@@ -624,4 +624,88 @@ describe('TaskActions', () => {
       expect(wrapper.find('.stop-all-spinning').exists()).toBe(false)
     })
   })
+
+  // ── All View Toolbar ────────────────────────────────────────────
+
+  describe('all view toolbar', () => {
+    it('renders all 7 buttons (6 active + 1 purge) when currentList is all', () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      const wrapper = createWrapper()
+      const buttons = wrapper.findAll('button')
+      // Add + Refresh + ResumeAll + PauseAll + StopAllSeed + DeleteAll + Purge = 7
+      expect(buttons.length).toBe(7)
+    })
+
+    it('Delete All in all view only targets live tasks (active/paused/waiting)', async () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      taskStore.taskList = [
+        { gid: 'a1', status: 'active' },
+        { gid: 'p1', status: 'paused' },
+        { gid: 'c1', status: 'complete' }, // DB-only — must NOT be in batch
+        { gid: 'e1', status: 'error' }, // DB-only — must NOT be in batch
+      ] as never
+
+      const wrapper = createWrapper()
+      // Button order in 'all': [0]Add [1]Refresh [2]ResumeAll [3]PauseAll [4]StopAllSeed [5]DeleteAll [6]Purge
+      await clickButton(wrapper, 5) // Delete All
+
+      expect(mockDialogWarning).toHaveBeenCalledOnce()
+
+      const onPositiveClick = lastDialogOptions!.onPositiveClick as () => Promise<void>
+      const promise = onPositiveClick()
+      await vi.advanceTimersByTimeAsync(100)
+      await promise
+
+      // Only live tasks should be removed
+      expect(mockBatchRemoveTask).toHaveBeenCalledWith(['a1', 'p1'])
+    })
+
+    it('Delete All button is disabled in all view when only stopped tasks exist', () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      taskStore.taskList = [
+        { gid: 'c1', status: 'complete' },
+        { gid: 'e1', status: 'error' },
+      ] as never
+      const wrapper = createWrapper()
+      // Delete All button: index 5 in 'all' view
+      const deleteBtn = wrapper.findAll('button')[5]
+      expect(deleteBtn.attributes('disabled')).toBeDefined()
+    })
+
+    it('Delete All button is enabled in all view when at least one live task exists', () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      taskStore.taskList = [
+        { gid: 'a1', status: 'active' },
+        { gid: 'c1', status: 'complete' },
+      ] as never
+      const wrapper = createWrapper()
+      const deleteBtn = wrapper.findAll('button')[5]
+      expect(deleteBtn.attributes('disabled')).toBeUndefined()
+    })
+
+    it('Purge Records button is visible in all view', () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      const wrapper = createWrapper()
+      // Last button = Purge
+      const purgeBtn = wrapper.findAll('button')[6]
+      expect(purgeBtn).toBeDefined()
+    })
+
+    it('Resume All works in all view when paused tasks exist', async () => {
+      const taskStore = useTaskStore()
+      taskStore.currentList = 'all'
+      taskStore.taskList = [
+        { gid: 'p1', status: 'paused' },
+        { gid: 'c1', status: 'complete' },
+      ] as never
+      const wrapper = createWrapper()
+      await clickButton(wrapper, 2) // Resume All
+      expect(mockDialogWarning).toHaveBeenCalledOnce()
+    })
+  })
 })

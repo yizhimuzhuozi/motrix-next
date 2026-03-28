@@ -102,6 +102,160 @@ describe('TaskStore', () => {
     expect(store.selectedGidList).toEqual(['gid1'])
   })
 
+  // ─── fetchList: 'all' branch — 3-source merge ──────────────────
+
+  describe('fetchList all branch', () => {
+    beforeEach(() => {
+      // Reset mock to avoid interference from the default setup
+      mockApi.fetchTaskList.mockReset()
+    })
+
+    it('merges active + stopped + history records', async () => {
+      await store.changeCurrentList('all')
+
+      // Setup: active returns 1 task, stopped returns 1 task, history returns 1 record
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('aaa', 'active')]) // active
+        .mockResolvedValueOnce([makeMockTask('bbb', 'complete')]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        { gid: 'ccc', name: 'old.zip', status: 'complete' } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      // All 3 tasks should be present
+      expect(store.taskList).toHaveLength(3)
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      expect(gids).toContain('aaa')
+      expect(gids).toContain('bbb')
+      expect(gids).toContain('ccc')
+    })
+
+    it('deduplicates GIDs: aria2 data takes priority over history', async () => {
+      await store.changeCurrentList('all')
+
+      // Same GID 'dup1' exists in both aria2 stopped and history DB
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([makeMockTask('dup1', 'complete')]) // stopped (aria2)
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        { gid: 'dup1', name: 'history-version.zip', status: 'complete' } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      // Only one entry for 'dup1' — aria2 version wins
+      expect(store.taskList).toHaveLength(1)
+      expect(store.taskList[0].gid).toBe('dup1')
+    })
+
+    it('sorts merged result by GID descending', async () => {
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('0000000000000001', 'active')]) // active
+        .mockResolvedValueOnce([makeMockTask('0000000000000003', 'complete')]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        { gid: '0000000000000002', name: 'mid.zip', status: 'complete' } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      expect(gids).toEqual(['0000000000000003', '0000000000000002', '0000000000000001'])
+    })
+
+    it('calls fetchTaskList for active and stopped concurrently', async () => {
+      // changeCurrentList('all') internally calls fetchList, so we set up returns for that first
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active (consumed by changeCurrentList)
+        .mockResolvedValueOnce([]) // stopped (consumed by changeCurrentList)
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.changeCurrentList('all')
+
+      // Reset to count only the explicit fetchList call
+      mockApi.fetchTaskList.mockReset()
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // Should call fetchTaskList twice: once for active, once for stopped
+      expect(mockApi.fetchTaskList).toHaveBeenCalledTimes(2)
+      expect(mockApi.fetchTaskList).toHaveBeenCalledWith({ type: 'active' })
+      expect(mockApi.fetchTaskList).toHaveBeenCalledWith(expect.objectContaining({ type: 'stopped' }))
+    })
+
+    it('passes limit for stopped and history queries', async () => {
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // The stopped call should have a limit
+      const stoppedCall = mockApi.fetchTaskList.mock.calls.find(
+        (c: unknown[]) => (c[0] as { type: string }).type === 'stopped',
+      )
+      expect(stoppedCall).toBeDefined()
+      expect((stoppedCall![0] as { limit?: number }).limit).toBeDefined()
+      expect(typeof (stoppedCall![0] as { limit?: number }).limit).toBe('number')
+
+      // History should also be called with a limit
+      expect(mockHistoryFns.getRecords).toHaveBeenCalledWith(undefined, expect.any(Number))
+    })
+
+    it('handles empty data from all sources gracefully', async () => {
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      expect(store.taskList).toEqual([])
+    })
+
+    it('active tasks remain at correct position when transitioning to stopped', async () => {
+      // Simulate the critical scenario: task 'bbb' completes.
+      // Poll 1: 'bbb' still active
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('bbb', 'active'), makeMockTask('aaa', 'active')])
+        .mockResolvedValueOnce([])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+      const poll1Gids = store.taskList.map((t: { gid: string }) => t.gid)
+
+      // Poll 2: 'bbb' moved to stopped (but not yet in DB)
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('aaa', 'active')])
+        .mockResolvedValueOnce([makeMockTask('bbb', 'complete')])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+      const poll2Gids = store.taskList.map((t: { gid: string }) => t.gid)
+
+      // Position must not change — GID sort guarantees stability
+      expect(poll1Gids).toEqual(['bbb', 'aaa'])
+      expect(poll2Gids).toEqual(['bbb', 'aaa'])
+    })
+  })
+
+  it('fetchList prunes selectedGidList to valid gids only', async () => {
+    store.selectTasks(['gid1', 'gid_invalid'])
+    await store.fetchList()
+    expect(store.selectedGidList).toEqual(['gid1'])
+  })
+
   // ─── selectTasks / selectAllTask ────────────────────────
 
   it('selectAllTask selects all gids in current list', async () => {

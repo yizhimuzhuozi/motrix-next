@@ -10,7 +10,7 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: '/task/active',
+          redirect: '/task/all',
         },
         {
           path: '/task/:status?',

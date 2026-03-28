@@ -64,7 +64,7 @@ describe('keyboard-accessible navigation', () => {
     expect(buttons).toHaveLength(4)
 
     await buttons[0].trigger('click')
-    expect(pushMock).toHaveBeenCalledWith({ path: '/task/active' })
+    expect(pushMock).toHaveBeenCalledWith({ path: '/task/all' })
 
     await buttons[1].trigger('click')
     expect(showAddTaskDialogMock).toHaveBeenCalledTimes(1)
@@ -74,10 +74,12 @@ describe('keyboard-accessible navigation', () => {
     const wrapper = mount(TaskSubnav)
     const buttons = wrapper.findAll('button')
 
-    expect(buttons).toHaveLength(2)
-    expect(buttons[0].attributes('aria-current')).toBe('page')
+    // 3 buttons: all, active, stopped
+    expect(buttons).toHaveLength(3)
+    // Route is /task/active, so the 'active' button (index 1) is current
+    expect(buttons[1].attributes('aria-current')).toBe('page')
 
-    await buttons[1].trigger('click')
+    await buttons[2].trigger('click')
     expect(pushMock).toHaveBeenCalledWith({ path: '/task/stopped' })
   })
 
