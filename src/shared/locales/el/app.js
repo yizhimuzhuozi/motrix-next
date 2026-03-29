@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Ο μηχανισμός λήψης aria2 ξεκίνησε, επαλήθευση σταθερότητας...',
   'engine-retrying': 'Επανάληψη...',
   'engine-manual-retry': 'Χειροκίνητη επανάληψη',
-  'migration-success': 'Η μορφή δεδομένων αναβαθμίστηκε σε {version}',
-  'migration-incomplete': 'Η μορφή δεδομένων δεν ήταν δυνατό να αναβαθμιστεί πλήρως σε {version}',
+  'migration-success': 'Η δομή ρυθμίσεων χρήστη αναβαθμίστηκε σε {version}',
+  'migration-incomplete': 'Η δομή ρυθμίσεων χρήστη δεν αναβαθμίστηκε πλήρως σε {version}',
+  'db-upgraded': 'Η δομή βάσης δεδομένων αναβαθμίστηκε σε {version}',
 }

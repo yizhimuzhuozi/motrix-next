@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 다운로드 엔진이 시작되었습니다. 안정성 확인 중...',
   'engine-retrying': '재시도 중...',
   'engine-manual-retry': '수동 재시도',
-  'migration-success': '데이터 형식이 {version}(으)로 업그레이드되었습니다',
-  'migration-incomplete': '데이터 형식을 {version}(으)로 완전히 업그레이드할 수 없습니다',
+  'migration-success': '사용자 설정 구조가 {version}으로 업그레이드되었습니다',
+  'migration-incomplete': '사용자 설정 구조를 {version}으로 완전히 업그레이드할 수 없습니다',
+  'db-upgraded': '데이터베이스 구조가 {version}으로 업그레이드되었습니다',
 }

@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 nedlastingsmotor startet, verifiserer stabilitet...',
   'engine-retrying': 'Prover igjen...',
   'engine-manual-retry': 'Manuelt forsok',
-  'migration-success': 'Dataformat oppgradert til {version}',
-  'migration-incomplete': 'Dataformat kunne ikke fullstendig oppgraderes til {version}',
+  'migration-success': 'Brukerinnstillingsstruktur oppgradert til {version}',
+  'migration-incomplete': 'Brukerinnstillingsstruktur kunne ikke oppgraderes fullstendig til {version}',
+  'db-upgraded': 'Databasestruktur oppgradert til {version}',
 }

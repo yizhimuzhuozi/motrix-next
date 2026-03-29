@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Dong co tai xuong aria2 da khoi dong, dang xac minh tinh on dinh...',
   'engine-retrying': 'Dang thu lai...',
   'engine-manual-retry': 'Thu lai thu cong',
-  'migration-success': 'Định dạng dữ liệu đã nâng cấp lên {version}',
-  'migration-incomplete': 'Không thể nâng cấp đầy đủ định dạng dữ liệu lên {version}',
+  'migration-success': 'Cấu trúc cài đặt người dùng đã nâng cấp lên {version}',
+  'migration-incomplete': 'Cấu trúc cài đặt người dùng không thể nâng cấp hoàn toàn lên {version}',
+  'db-upgraded': 'Cấu trúc cơ sở dữ liệu đã nâng cấp lên {version}',
 }

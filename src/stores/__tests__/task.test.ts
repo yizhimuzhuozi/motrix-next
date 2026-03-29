@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useTaskStore } from '../task'
 import type { Aria2Task, Aria2Peer, TaskStatus, HistoryRecord } from '@shared/types'
+import { _resetForTesting, registerAddedAt } from '@/composables/useTaskOrder'
 
 // ── Mock history store (DB-primary architecture) ─────────────────────
 const mockHistoryFns = {
@@ -14,6 +15,10 @@ const mockHistoryFns = {
   removeStaleRecords: vi.fn().mockResolvedValue(undefined),
   checkIntegrity: vi.fn().mockResolvedValue('ok'),
   closeConnection: vi.fn().mockResolvedValue(undefined),
+  recordTaskBirth: vi.fn().mockResolvedValue(undefined),
+  loadBirthRecords: vi.fn().mockResolvedValue([]),
+  getSchemaVersion: vi.fn().mockResolvedValue(2),
+  removeByInfoHash: vi.fn().mockResolvedValue(undefined),
 }
 vi.mock('@/stores/history', () => ({
   useHistoryStore: () => mockHistoryFns,
@@ -85,6 +90,9 @@ describe('TaskStore', () => {
     // Reset history mock between tests
     Object.values(mockHistoryFns).forEach((fn) => fn.mockClear())
     mockHistoryFns.getRecords.mockResolvedValue([])
+    mockHistoryFns.recordTaskBirth.mockResolvedValue(undefined)
+    // Reset in-memory task order state
+    _resetForTesting()
   })
 
   // ─── fetchList ──────────────────────────────────────────
@@ -149,20 +157,32 @@ describe('TaskStore', () => {
       expect(store.taskList[0].gid).toBe('dup1')
     })
 
-    it('sorts merged result by GID descending', async () => {
+    it('sorts all tasks by added_at DESC regardless of status', async () => {
+      // Pre-register birth timestamps to control sort order
+      registerAddedAt('active-1', '2024-01-01T10:00:00Z') // oldest
+      registerAddedAt('stopped-1', '2024-01-01T10:01:00Z') // middle
+
       await store.changeCurrentList('all')
 
+      // Live active task + completed stopped task
       mockApi.fetchTaskList
-        .mockResolvedValueOnce([makeMockTask('0000000000000001', 'active')]) // active
-        .mockResolvedValueOnce([makeMockTask('0000000000000003', 'complete')]) // stopped
+        .mockResolvedValueOnce([makeMockTask('active-1', 'active')]) // active
+        .mockResolvedValueOnce([makeMockTask('stopped-1', 'complete')]) // stopped
+      // History record with added_at — newest
       mockHistoryFns.getRecords.mockResolvedValueOnce([
-        { gid: '0000000000000002', name: 'mid.zip', status: 'complete' } as HistoryRecord,
+        {
+          gid: 'hist-1',
+          name: 'old.zip',
+          status: 'complete',
+          added_at: '2024-01-01T10:02:00Z',
+        } as HistoryRecord,
       ])
 
       await store.fetchList()
 
       const gids = store.taskList.map((t: { gid: string }) => t.gid)
-      expect(gids).toEqual(['0000000000000003', '0000000000000002', '0000000000000001'])
+      // Sorted by added_at DESC: hist-1 (newest), stopped-1, active-1 (oldest)
+      expect(gids).toEqual(['hist-1', 'stopped-1', 'active-1'])
     })
 
     it('calls fetchTaskList for active and stopped concurrently', async () => {
@@ -222,11 +242,15 @@ describe('TaskStore', () => {
       expect(store.taskList).toEqual([])
     })
 
-    it('active tasks remain at correct position when transitioning to stopped', async () => {
-      // Simulate the critical scenario: task 'bbb' completes.
-      // Poll 1: 'bbb' still active
+    it('preserves position when task transitions from active to stopped', async () => {
+      // Simulate: task 'bbb' completes between polls.
+      // Both tasks pre-registered with birth timestamps
+      registerAddedAt('bbb', '2024-01-01T10:01:00Z') // added second (newer)
+      registerAddedAt('aaa', '2024-01-01T10:00:00Z') // added first (older)
+
       await store.changeCurrentList('all')
 
+      // Poll 1: both active
       mockApi.fetchTaskList
         .mockResolvedValueOnce([makeMockTask('bbb', 'active'), makeMockTask('aaa', 'active')])
         .mockResolvedValueOnce([])
@@ -234,8 +258,10 @@ describe('TaskStore', () => {
 
       await store.fetchList()
       const poll1Gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // Sorted by added_at DESC: bbb (newer) then aaa (older)
+      expect(poll1Gids).toEqual(['bbb', 'aaa'])
 
-      // Poll 2: 'bbb' moved to stopped (but not yet in DB)
+      // Poll 2: 'bbb' moved to stopped, 'aaa' still active
       mockApi.fetchTaskList
         .mockResolvedValueOnce([makeMockTask('aaa', 'active')])
         .mockResolvedValueOnce([makeMockTask('bbb', 'complete')])
@@ -243,10 +269,32 @@ describe('TaskStore', () => {
 
       await store.fetchList()
       const poll2Gids = store.taskList.map((t: { gid: string }) => t.gid)
-
-      // Position must not change — GID sort guarantees stability
-      expect(poll1Gids).toEqual(['bbb', 'aaa'])
+      // Position unchanged: bbb still before aaa (sorted by added_at)
       expect(poll2Gids).toEqual(['bbb', 'aaa'])
+    })
+
+    it('newly tracked tasks (no pre-registered added_at) sort above old DB records', async () => {
+      // Edge case: a task appears in aria2 tellStopped before addedAtMap is populated.
+      // trackFirstSeen assigns a current timestamp → sorts above old DB records.
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([makeMockTask('fresh', 'complete')]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        {
+          gid: 'old',
+          name: 'old.zip',
+          status: 'complete',
+          added_at: '2024-01-01T00:00:00Z',
+        } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // 'fresh' gets current time from trackFirstSeen → sorts first
+      expect(gids).toEqual(['fresh', 'old'])
     })
 
     it('filters out completed metadata tasks from the stopped source', async () => {

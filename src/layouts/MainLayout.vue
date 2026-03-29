@@ -39,6 +39,7 @@ import { useAppMessage } from '@/composables/useAppMessage'
 import { NModal, NButton, NSpace, NIcon, NCheckbox, useDialog } from 'naive-ui'
 import { WarningOutline } from '@vicons/ionicons5'
 import { useAppEvents } from '@/composables/useAppEvents'
+import { loadAddedAtFromRecords } from '@/composables/useTaskOrder'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -95,7 +96,7 @@ const { setupListeners } = useAppEvents({
   },
 })
 
-// ── Migration toast ─────────────────────────────────────────────────
+// ── Config migration toast ──────────────────────────────────────────
 watch(
   () => preferenceStore.migrationResult,
   (result) => {
@@ -107,6 +108,30 @@ watch(
       message.warning(t('app.migration-incomplete', { version: v }))
     }
     preferenceStore.migrationResult = null
+  },
+  { immediate: true },
+)
+
+// ── DB schema migration toast ───────────────────────────────────────
+// Uses the same reactive pattern as config migration toast above.
+// loadPreference() sets dbUpgradeVersion when it detects an existing user
+// whose config.json has no dbSchemaVersion field (backfilled to 1).
+// Fresh installs: DEFAULT_APP_CONFIG.dbSchemaVersion = 2 → no signal fired.
+watch(
+  () => preferenceStore.dbUpgradeVersion,
+  async (savedDbVersion) => {
+    if (savedDbVersion === null) return
+    try {
+      const historyStore = useHistoryStore()
+      const currentDbVersion = await historyStore.getSchemaVersion()
+      if (savedDbVersion < currentDbVersion) {
+        message.info(t('app.db-upgraded', { version: `v${currentDbVersion}` }))
+        await preferenceStore.updateAndSave({ dbSchemaVersion: currentDbVersion })
+      }
+    } catch (e) {
+      logger.debug('DbMigration.toast', e)
+    }
+    preferenceStore.dbUpgradeVersion = null
   },
   { immediate: true },
 )
@@ -423,6 +448,20 @@ onMounted(async () => {
   // state, ensuring completion/error/BT-seeding detection works even
   // when the user is on Settings or About pages.
   const historyStore = useHistoryStore()
+
+  // ── Pre-populate task birth timestamps from DB ──────────────────
+  // Ensures position-stable ordering survives app restarts.
+  try {
+    const birthRecords = await historyStore.loadBirthRecords()
+    loadAddedAtFromRecords(birthRecords)
+    // Also load from download_history.added_at for completed tasks
+    // whose task_birth entry may have been cleaned up.
+    const historyRecords = await historyStore.getRecords()
+    loadAddedAtFromRecords(historyRecords)
+  } catch (e) {
+    logger.debug('TaskOrder.loadBirthRecords', e)
+  }
+
   lifecycleService = createTaskLifecycleService(aria2Api, {
     onTaskError: (task) => {
       if (isMetadataTask(task)) return

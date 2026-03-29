@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 download engine started, verifying stability...',
   'engine-retrying': 'Retrying...',
   'engine-manual-retry': 'Manual Retry',
-  'migration-success': 'Data format upgraded to {version}',
-  'migration-incomplete': 'Data format could not be fully upgraded to {version}',
+  'migration-success': 'User settings schema upgraded to {version}',
+  'migration-incomplete': 'User settings schema could not be fully upgraded to {version}',
+  'db-upgraded': 'Database schema upgraded to {version}',
 }

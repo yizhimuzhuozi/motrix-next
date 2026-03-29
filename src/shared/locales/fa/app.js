@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'موتور دانلود aria2 راه‌اندازی شد، در حال بررسی پایداری...',
   'engine-retrying': 'در حال تلاش مجدد...',
   'engine-manual-retry': 'تلاش مجدد دستی',
-  'migration-success': 'قالب داده\u200cها به {version} ارتقا یافت',
-  'migration-incomplete': 'قالب داده\u200cها نتوانست به\u200cطور کامل به {version} ارتقا یابد',
+  'migration-success': 'ساختار تنظیمات کاربر به {version} ارتقا یافت',
+  'migration-incomplete': 'ساختار تنظیمات کاربر به طور کامل به {version} ارتقا نیافت',
+  'db-upgraded': 'ساختار پایگاه داده به {version} ارتقا یافت',
 }

@@ -85,6 +85,7 @@ export const UPDATE_CHANNELS = ['stable', 'beta'] as const
  */
 export const DEFAULT_APP_CONFIG = {
   configVersion: 2,
+  dbSchemaVersion: 2,
   // ── Appearance ──────────────────────────────────────────────────
   theme: 'auto' as const,
   locale: '',

@@ -135,6 +135,10 @@ export interface ClipboardConfig {
 export interface AppConfig {
   /** Schema version for config migration. Absent in pre-migration configs (treated as 0). */
   configVersion: number
+  /** Last known DB schema version for upgrade toast detection.
+   *  Stored in config.json so that existing users (who already have config data)
+   *  can be distinguished from fresh installs (who have empty config). */
+  dbSchemaVersion: number
   theme: 'auto' | 'light' | 'dark'
   locale: string
   dir: string
@@ -314,6 +318,9 @@ export interface HistoryRecord {
   status: string
   /** Download type: 'uri', 'torrent', or 'metalink'. */
   task_type?: string
+  /** ISO 8601 timestamp when the task was first added to the download queue.
+   *  Once set, never changes — used for position-stable ordering across all tabs. */
+  added_at?: string
   /** ISO 8601 timestamp when the record was created. */
   created_at?: string
   /** ISO 8601 timestamp when the download finished. */

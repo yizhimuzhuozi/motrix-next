@@ -8,6 +8,13 @@ import type { Aria2Task, Aria2File, Aria2Peer, Aria2EngineOptions, AddMetalinkPa
 
 import { historyRecordToTask, mergeHistoryIntoTasks, isMetadataTask } from '@/composables/useTaskLifecycle'
 import { shouldShowFileSelection } from '@/composables/useMagnetFlow'
+import {
+  registerAddedAt,
+  getAddedAt,
+  trackFirstSeen,
+  loadAddedAtFromRecords,
+  buildSortableAddedAtMap,
+} from '@/composables/useTaskOrder'
 import { useHistoryStore } from '@/stores/history'
 
 import { restartTask as restartTaskImpl } from './taskRestart'
@@ -81,7 +88,35 @@ export const useTaskStore = defineStore('task', () => {
         // actively-downloading metadata visible so users see the progress.
         const LIVE_TASK_STATUSES = new Set(['active', 'waiting', 'paused'])
         data = data.filter((t) => LIVE_TASK_STATUSES.has(t.status) || !isMetadataTask(t))
-        data.sort((a, b) => b.gid.localeCompare(a.gid))
+
+        // Position-stable ordering: all tasks sorted by added_at DESC.
+        // No partitioning — tasks stay at their original position regardless
+        // of status transitions (seeding → stopped, active → complete).
+        //
+        // Load DB-persisted added_at FIRST so that trackFirstSeen does not
+        // overwrite completed tasks' timestamps with Date.now().
+        loadAddedAtFromRecords(historyRecords)
+
+        // Inherit added_at from parent task for aria2 "followedBy" GIDs.
+        // When a magnet resolves, aria2 auto-creates a new GID for the real
+        // download. This GID never goes through addUri/addTorrent, so it has
+        // no birth timestamp. Without inheritance it gets Date.now() from
+        // trackFirstSeen and jumps to the top of the list.
+        for (const t of data) {
+          if (t.following && !getAddedAt(t.gid)) {
+            const parentAt = getAddedAt(t.following)
+            if (parentAt) registerAddedAt(t.gid, parentAt)
+          }
+        }
+        trackFirstSeen(data)
+
+        const addedAtIndex = buildSortableAddedAtMap(data, historyRecords)
+
+        data.sort((a, b) => {
+          const ta = addedAtIndex.get(a.gid) ?? ''
+          const tb = addedAtIndex.get(b.gid) ?? ''
+          return tb.localeCompare(ta) // DESC: most recently added first
+        })
       } else {
         data = await api.fetchTaskList({ type: currentList.value })
       }
@@ -144,7 +179,13 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function addUri(data: { uris: string[]; outs: string[]; options: Aria2EngineOptions }) {
-    await api.addUri(data)
+    const gids = await api.addUri(data)
+    const now = new Date().toISOString()
+    const historyStore = useHistoryStore()
+    for (const gid of gids) {
+      registerAddedAt(gid, now)
+      historyStore.recordTaskBirth(gid, now).catch((e) => logger.debug('taskBirth.write', e))
+    }
     await fetchList()
   }
 
@@ -169,6 +210,12 @@ export const useTaskStore = defineStore('task', () => {
       options: magnetOptions,
     })
     const gid = gids[0]
+
+    // Register birth timestamp
+    const now = new Date().toISOString()
+    registerAddedAt(gid, now)
+    const historyStore = useHistoryStore()
+    historyStore.recordTaskBirth(gid, now).catch((e) => logger.debug('taskBirth.write', e))
 
     // Only register for file selection polling when pause-metadata is enabled.
     // When btAutoDownloadContent=true (pauseMetadata=false), aria2 starts the
@@ -197,12 +244,22 @@ export const useTaskStore = defineStore('task', () => {
 
   async function addTorrent(data: { torrent: string; options: Aria2EngineOptions }) {
     const gid = await api.addTorrent(data)
+    const now = new Date().toISOString()
+    registerAddedAt(gid, now)
+    const historyStore = useHistoryStore()
+    historyStore.recordTaskBirth(gid, now).catch((e) => logger.debug('taskBirth.write', e))
     await fetchList()
     return gid
   }
 
   async function addMetalink(data: AddMetalinkParams) {
-    await api.addMetalink(data)
+    const gids = await api.addMetalink(data)
+    const now = new Date().toISOString()
+    const historyStore = useHistoryStore()
+    for (const gid of gids) {
+      registerAddedAt(gid, now)
+      historyStore.recordTaskBirth(gid, now).catch((e) => logger.debug('taskBirth.write', e))
+    }
     await fetchList()
   }
 

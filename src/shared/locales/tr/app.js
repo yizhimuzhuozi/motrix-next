@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 indirme motoru baslatildi, kararlilik dogrulaniyor...',
   'engine-retrying': 'Tekrar deneniyor...',
   'engine-manual-retry': 'Manuel olarak tekrar dene',
-  'migration-success': 'Veri biçimi {version} sürümüne yükseltildi',
-  'migration-incomplete': 'Veri biçimi {version} sürümüne tam olarak yükseltilemedi',
+  'migration-success': 'Kullanıcı ayarları yapısı {version} sürümüne yükseltildi',
+  'migration-incomplete': 'Kullanıcı ayarları yapısı {version} sürümüne tam olarak yükseltilemedi',
+  'db-upgraded': 'Veritabanı yapısı {version} sürümüne yükseltildi',
 }

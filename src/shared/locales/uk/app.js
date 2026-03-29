@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Рушій завантаження aria2 запущено, перевірка стабільності...',
   'engine-retrying': 'Повторна спроба...',
   'engine-manual-retry': 'Повторити вручну',
-  'migration-success': 'Формат даних оновлено до {version}',
-  'migration-incomplete': 'Не вдалося повністю оновити формат даних до {version}',
+  'migration-success': 'Структуру налаштувань користувача оновлено до {version}',
+  'migration-incomplete': 'Структуру налаштувань користувача не вдалося повністю оновити до {version}',
+  'db-upgraded': 'Структуру бази даних оновлено до {version}',
 }

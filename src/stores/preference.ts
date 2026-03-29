@@ -20,6 +20,9 @@ export const usePreferenceStore = defineStore('preference', () => {
   const config = ref<AppConfig>({ ...DEFAULT_APP_CONFIG } as AppConfig)
   /** Result from the last migration run (null = no migration attempted yet). */
   const migrationResult = ref<MigrationResult | null>(null)
+  /** Set when DB schema upgrade is detected during loadPreference.
+   *  MainLayout watches this to show an info toast. Null = no upgrade detected. */
+  const dbUpgradeVersion = ref<number | null>(null)
 
   const theme = computed(() => config.value.theme)
   const locale = computed(() => config.value.locale)
@@ -34,6 +37,18 @@ export const usePreferenceStore = defineStore('preference', () => {
       const store = await getStore()
       const saved = await store.get<Partial<AppConfig>>(STORE_KEY)
       if (saved && !isEmpty(saved)) {
+        // Backfill dbSchemaVersion for existing users upgrading to a version
+        // that includes this field. saved being non-empty proves this is NOT
+        // a fresh install — fresh installs have empty config.json and take
+        // the DEFAULT_APP_CONFIG path (which already has dbSchemaVersion = 2).
+        if (saved.dbSchemaVersion === undefined) {
+          saved.dbSchemaVersion = 1
+        }
+        // Always signal the saved version so the MainLayout watch can
+        // compare it against the live DB version. Fresh installs never
+        // reach here (saved is null), so no false toast.
+        dbUpgradeVersion.value = saved.dbSchemaVersion
+
         const result = runMigrations(saved)
         config.value = { ...config.value, ...saved }
         if (result.migrated) {
@@ -161,6 +176,7 @@ export const usePreferenceStore = defineStore('preference', () => {
     saveBeforeLeave,
     config,
     migrationResult,
+    dbUpgradeVersion,
     theme,
     locale,
     direction,

@@ -5,6 +5,7 @@
  */
 import type { Aria2Task, Aria2File, HistoryRecord, HistoryMeta, HistoryFileSnapshot } from '@shared/types'
 import { decodePathSegment } from '@shared/utils/batchHelpers'
+import { getAddedAt } from '@/composables/useTaskOrder'
 
 /** Detect BT metadata-only downloads (the intermediate magnet resolution phase).
  *
@@ -103,6 +104,7 @@ export function buildHistoryRecord(task: Aria2Task): HistoryRecord {
     total_length: task.totalLength ? Number(task.totalLength) : undefined,
     status: task.status,
     task_type: taskType,
+    added_at: getAddedAt(task.gid),
     completed_at: new Date().toISOString(),
     meta: Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined,
   }
@@ -209,10 +211,13 @@ export function mergeHistoryIntoTasks(aria2Tasks: Aria2Task[], historyRecords: H
   // Primary dedup key: GID (handles same-session tasks)
   const seenGids = new Set(aria2Tasks.map((t) => t.gid))
 
-  // Secondary dedup key: infoHash (handles cross-session BT tasks)
+  // Secondary dedup key: infoHash (handles cross-session BT tasks).
+  // Metadata tasks are excluded — their infoHash is identical to the real
+  // download task's, and including it would incorrectly suppress the download
+  // task's history record when the metadata task lingers in tellStopped.
   const seenInfoHashes = new Set<string>()
   for (const t of aria2Tasks) {
-    if (t.infoHash) seenInfoHashes.add(t.infoHash)
+    if (t.infoHash && !isMetadataTask(t)) seenInfoHashes.add(t.infoHash)
   }
 
   const historyOnly = historyRecords.filter((r) => {

@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'تم تشغيل محرك التنزيل aria2، جارٍ التحقق من الاستقرار...',
   'engine-retrying': 'جارٍ إعادة المحاولة...',
   'engine-manual-retry': 'إعادة المحاولة يدوياً',
-  'migration-success': 'تمت ترقية تنسيق البيانات إلى {version}',
-  'migration-incomplete': 'تعذّرت ترقية تنسيق البيانات بالكامل إلى {version}',
+  'migration-success': 'تم ترقية هيكل إعدادات المستخدم إلى {version}',
+  'migration-incomplete': 'لم يكتمل ترقية هيكل إعدادات المستخدم إلى {version}',
+  'db-upgraded': 'تم ترقية هيكل قاعدة البيانات إلى {version}',
 }

@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Az aria2 letoltomotor elindult, stabilitas ellenorzese...',
   'engine-retrying': 'Ujraproba...',
   'engine-manual-retry': 'Manualis ujraproba',
-  'migration-success': 'Adatformátum frissítve: {version}',
-  'migration-incomplete': 'Az adatformátum nem frissíthető teljesen: {version}',
+  'migration-success': 'Felhasználói beállítások struktúrája frissítve a(z) {version} verzióra',
+  'migration-incomplete': 'A felhasználói beállítások struktúrája nem frissíthető teljesen a(z) {version} verzióra',
+  'db-upgraded': 'Adatbázis struktúra frissítve a(z) {version} verzióra',
 }

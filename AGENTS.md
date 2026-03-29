@@ -137,6 +137,53 @@ Follow this exact checklist:
 
 ---
 
+## C″. Database Schema Migration
+
+`tauri_plugin_sql` manages versioned SQL migrations for `sqlite:history.db`. Migrations run automatically on app launch when the stored version is behind the latest.
+
+> **This is separate from Config Schema Migration (Section C′).** Config migrations handle `config.json` (JSON key-value preferences) in the frontend. DB migrations handle `history.db` (SQLite relational tables) in the backend. They manage different data stores in different runtimes — merging them is not practical.
+
+### How It Works
+
+- SQL migration files live in `src-tauri/migrations/` with `NNN_description.sql` naming
+- Each migration is registered as a `tauri_plugin_sql::Migration` struct in the `.add_migrations()` call in `lib.rs`
+- The plugin tracks executed versions in an internal `_sqlite_migrations` table
+- Old users receive new migrations transparently on upgrade — no manual action needed
+
+### Adding a New Migration
+
+1. Create `src-tauri/migrations/NNN_description.sql` with the SQL statements
+2. Append a `Migration` struct to the `vec![]` in `lib.rs`:
+   ```rust
+   tauri_plugin_sql::Migration {
+       version: N,
+       description: "short description",
+       sql: include_str!("../migrations/NNN_description.sql"),
+       kind: tauri_plugin_sql::MigrationKind::Up,
+   },
+   ```
+3. If the migration adds/renames columns used by the frontend, update `HistoryRecord` in `src/shared/types.ts`
+4. Update relevant SQL queries in `src/stores/history.ts`
+5. Run `cargo check` to verify the Rust compiles
+
+### Rules
+
+- Migrations **must be additive** — never DROP columns that old code may still reference
+- Use `ALTER TABLE ... ADD COLUMN` with defaults for backward compatibility
+- Use `COALESCE` in queries to handle NULL values from old rows gracefully
+- Test with both a fresh DB AND an existing DB to verify both paths work
+
+### Toast Differentiation
+
+Both migration systems show upgrade toasts on the UI, but with distinct messages:
+
+| System | i18n Key | Example (en-US) | Toast Type |
+| ------ | -------- | --------------- | ---------- |
+| Config (C′) | `app.migration-success` | "User settings schema upgraded to v2" | `success` (green) |
+| DB (C″) | `app.db-upgraded` | "Database schema upgraded to v2" | `info` (blue) |
+
+---
+
 ## D. i18n / Locale Operations
 
 ### Rules

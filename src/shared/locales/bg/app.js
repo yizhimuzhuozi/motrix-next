@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Двигателят за изтегляне aria2 е стартиран, проверка на стабилността...',
   'engine-retrying': 'Повторен опит...',
   'engine-manual-retry': 'Ръчен повторен опит',
-  'migration-success': 'Форматът на данните е надграден до {version}',
-  'migration-incomplete': 'Форматът на данните не можа да бъде напълно надграден до {version}',
+  'migration-success': 'Структурата на потребителските настройки е надстроена до {version}',
+  'migration-incomplete': 'Структурата на потребителските настройки не беше напълно надстроена до {version}',
+  'db-upgraded': 'Структурата на базата данни е надстроена до {version}',
 }

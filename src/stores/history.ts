@@ -113,14 +113,28 @@ export const useHistoryStore = defineStore('history', () => {
     return db!
   }
 
-  /** Insert or update a download record (upsert by GID). */
+  /** Insert or update a download record (upsert by GID).
+   *
+   *  Uses ON CONFLICT instead of INSERT OR REPLACE to preserve
+   *  the immutable added_at timestamp. REPLACE = DELETE + INSERT
+   *  which would reset added_at; ON CONFLICT DO UPDATE keeps it. */
   async function addRecord(record: HistoryRecord): Promise<void> {
     await (
       await getDb()
     ).execute(
-      `INSERT OR REPLACE INTO download_history
-        (gid, name, uri, dir, total_length, status, task_type, completed_at, meta)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO download_history
+        (gid, name, uri, dir, total_length, status, task_type, added_at, completed_at, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT(gid) DO UPDATE SET
+         name = excluded.name,
+         uri = excluded.uri,
+         dir = excluded.dir,
+         total_length = excluded.total_length,
+         status = excluded.status,
+         task_type = excluded.task_type,
+         added_at = COALESCE(download_history.added_at, excluded.added_at),
+         completed_at = excluded.completed_at,
+         meta = excluded.meta`,
       [
         record.gid,
         record.name,
@@ -129,6 +143,7 @@ export const useHistoryStore = defineStore('history', () => {
         record.total_length ?? null,
         record.status,
         record.task_type ?? null,
+        record.added_at ?? null,
         record.completed_at ?? null,
         record.meta ?? null,
       ],
@@ -136,20 +151,19 @@ export const useHistoryStore = defineStore('history', () => {
   }
 
   /** Retrieve records, optionally filtered by status and/or limited in count.
-   *  Sorted by completed_at DESC. Limit is clamped to [0, 10000]. */
+   *  Sorted by added_at DESC for position-stable ordering.
+   *  Falls back to completed_at DESC for records without added_at (pre-migration). */
   async function getRecords(status?: string, limit?: number): Promise<HistoryRecord[]> {
     // Normalize limit: floor → clamp to [0, 10000] → append only if finite
     const limitClause = limit != null ? ` LIMIT ${Math.min(Math.max(0, Math.floor(limit)), 10_000)}` : ''
+    const orderBy = 'ORDER BY COALESCE(added_at, completed_at) DESC'
     if (status) {
       return (await getDb()).select<HistoryRecord[]>(
-        `SELECT * FROM download_history WHERE status = $1 ORDER BY completed_at DESC${limitClause}`,
+        `SELECT * FROM download_history WHERE status = $1 ${orderBy}${limitClause}`,
         [status],
       )
     }
-    return (await getDb()).select<HistoryRecord[]>(
-      `SELECT * FROM download_history ORDER BY completed_at DESC${limitClause}`,
-      [],
-    )
+    return (await getDb()).select<HistoryRecord[]>(`SELECT * FROM download_history ${orderBy}${limitClause}`, [])
   }
 
   /** Remove a single record by GID. */
@@ -215,6 +229,35 @@ export const useHistoryStore = defineStore('history', () => {
     initPromise = null
   }
 
+  /** Persist task birth timestamp to the task_birth table.
+   *  INSERT OR IGNORE ensures the first write wins — added_at is immutable. */
+  async function recordTaskBirth(gid: string, addedAt?: string): Promise<void> {
+    await (
+      await getDb()
+    ).execute(`INSERT OR IGNORE INTO task_birth (gid, added_at) VALUES ($1, $2)`, [
+      gid,
+      addedAt ?? new Date().toISOString(),
+    ])
+  }
+
+  /** Load all birth records from the task_birth table.
+   *  Called on app startup to pre-populate the in-memory addedAtMap. */
+  async function loadBirthRecords(): Promise<Array<{ gid: string; added_at: string }>> {
+    return (await getDb()).select<Array<{ gid: string; added_at: string }>>('SELECT gid, added_at FROM task_birth', [])
+  }
+
+  /** Query the DB schema version from tauri_plugin_sql's internal tracking table. */
+  async function getSchemaVersion(): Promise<number> {
+    try {
+      const result = await (
+        await getDb()
+      ).select<Array<{ version: number }>>('SELECT MAX(version) as version FROM _sqlx_migrations', [])
+      return result[0]?.version ?? 0
+    } catch {
+      return 0
+    }
+  }
+
   return {
     init,
     addRecord,
@@ -225,5 +268,8 @@ export const useHistoryStore = defineStore('history', () => {
     removeByInfoHash,
     checkIntegrity,
     closeConnection,
+    recordTaskBirth,
+    loadBirthRecords,
+    getSchemaVersion,
   }
 })

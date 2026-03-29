@@ -213,8 +213,9 @@ describe('aria2 API', () => {
 
       const result = await fetchTaskList({ type: 'active' })
       expect(result).toHaveLength(2)
-      expect(result[0].gid).toBe('2')
-      expect(result[1].gid).toBe('1')
+      // Preserves aria2 order: active before waiting
+      expect(result[0].gid).toBe('1')
+      expect(result[1].gid).toBe('2')
     })
 
     it('fetchTaskList with default type calls tellStopped', async () => {
@@ -260,8 +261,8 @@ describe('aria2 API', () => {
 
     // ── GID-based stable sorting ──────────────────────────────────
 
-    it('fetchTaskList sorts active+waiting results by GID descending (newest first)', async () => {
-      // Simulate aria2 returning tasks out of order (e.g., after pause/resume)
+    it('fetchTaskList preserves aria2 native order for active+waiting (insertion order)', async () => {
+      // aria2 returns tasks in internal deque order (insertion/queue order)
       const active = [
         { gid: 'c', status: 'active' },
         { gid: 'a', status: 'active' },
@@ -273,10 +274,12 @@ describe('aria2 API', () => {
       mockCall.mockResolvedValueOnce(active).mockResolvedValueOnce(waiting)
 
       const result = await fetchTaskList({ type: 'active' })
-      expect(result.map((t) => t.gid)).toEqual(['d', 'c', 'b', 'a'])
+      // Must preserve aria2 order: active first, then waiting — no GID re-sorting
+      expect(result.map((t) => t.gid)).toEqual(['c', 'a', 'd', 'b'])
     })
 
-    it('fetchTaskList sorts stopped results by GID descending (newest first)', async () => {
+    it('fetchTaskList preserves aria2 native order for stopped results', async () => {
+      // aria2 returns stopped tasks in completion order (deque push_back)
       const stopped = [
         { gid: '0000000000000003', status: 'complete' },
         { gid: '0000000000000001', status: 'error' },
@@ -285,11 +288,12 @@ describe('aria2 API', () => {
       mockCall.mockResolvedValueOnce(stopped)
 
       const result = await fetchTaskList({ type: 'stopped' })
-      expect(result.map((t) => t.gid)).toEqual(['0000000000000003', '0000000000000002', '0000000000000001'])
+      // Must preserve aria2 order — no GID re-sorting
+      expect(result.map((t) => t.gid)).toEqual(['0000000000000003', '0000000000000001', '0000000000000002'])
     })
 
-    it('sorting is stable across poll cycles regardless of status changes', async () => {
-      // First poll: task 'b' is active
+    it('preserves order across poll cycles — aria2 queue order is stable', async () => {
+      // First poll: aria2 returns in queue order
       mockCall
         .mockResolvedValueOnce([
           { gid: 'b', status: 'active' },
@@ -298,16 +302,16 @@ describe('aria2 API', () => {
         .mockResolvedValueOnce([{ gid: 'c', status: 'waiting' }])
       const poll1 = await fetchTaskList({ type: 'active' })
 
-      // Second poll: task 'b' moved to waiting (paused), order from aria2 changed
+      // Second poll: task 'b' moved to waiting, aria2 queue order changes accordingly
       mockCall.mockResolvedValueOnce([{ gid: 'a', status: 'active' }]).mockResolvedValueOnce([
         { gid: 'c', status: 'waiting' },
         { gid: 'b', status: 'paused' },
       ])
       const poll2 = await fetchTaskList({ type: 'active' })
 
-      // GID descending order must be identical in both polls
-      expect(poll1.map((t) => t.gid)).toEqual(['c', 'b', 'a'])
-      expect(poll2.map((t) => t.gid)).toEqual(['c', 'b', 'a'])
+      // Preserved as returned by aria2 — no artificial re-sorting
+      expect(poll1.map((t) => t.gid)).toEqual(['b', 'a', 'c'])
+      expect(poll2.map((t) => t.gid)).toEqual(['a', 'c', 'b'])
     })
 
     // ── Limit parameter for stopped type ───────────────────────────

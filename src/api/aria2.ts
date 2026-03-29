@@ -158,10 +158,13 @@ export async function fetchTaskList(params: { type: string; limit?: number }): P
   switch (type) {
     case TASK_STATUS.ACTIVE: {
       const [active, waiting] = await Promise.all([tellActive(), tellWaiting(0, 1000)])
-      return [...active, ...waiting].sort((a, b) => b.gid.localeCompare(a.gid))
+      // Preserve aria2's native queue order (IndexedList<deque> insertion order).
+      // GIDs are random — sorting by GID produces meaningless ordering.
+      return [...active, ...waiting]
     }
     default:
-      return (await tellStopped(0, limit ?? 1000)).sort((a, b) => b.gid.localeCompare(a.gid))
+      // aria2's stopped list is in completion-time order (deque push_back on finish).
+      return tellStopped(0, limit ?? 1000)
   }
 }
 

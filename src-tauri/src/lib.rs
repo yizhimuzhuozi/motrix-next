@@ -492,12 +492,20 @@ pub fn run() {
             tauri_plugin_sql::Builder::default()
                 .add_migrations(
                     "sqlite:history.db",
-                    vec![tauri_plugin_sql::Migration {
-                        version: 1,
-                        description: "create download_history table",
-                        sql: include_str!("../migrations/001_download_history.sql"),
-                        kind: tauri_plugin_sql::MigrationKind::Up,
-                    }],
+                    vec![
+                        tauri_plugin_sql::Migration {
+                            version: 1,
+                            description: "create download_history table",
+                            sql: include_str!("../migrations/001_download_history.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 2,
+                            description: "add added_at column and task_birth table for position-stable ordering",
+                            sql: include_str!("../migrations/002_add_added_at.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                    ],
                 )
                 .build(),
         )

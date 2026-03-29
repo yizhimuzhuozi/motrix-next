@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2-Download-Engine gestartet, Stabilität wird überprüft...',
   'engine-retrying': 'Erneuter Versuch...',
   'engine-manual-retry': 'Manuell erneut versuchen',
-  'migration-success': 'Datenformat auf {version} aktualisiert',
-  'migration-incomplete': 'Datenformat konnte nicht vollständig auf {version} aktualisiert werden',
+  'migration-success': 'Benutzereinstellungsstruktur auf {version} aktualisiert',
+  'migration-incomplete': 'Benutzereinstellungsstruktur konnte nicht vollständig auf {version} aktualisiert werden',
+  'db-upgraded': 'Datenbankstruktur auf {version} aktualisiert',
 }

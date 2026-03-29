@@ -19,13 +19,14 @@ function mockExecute(query: string, params: unknown[]): { rowsAffected: number }
   const q = query.trim().toUpperCase()
 
   if (q.startsWith('INSERT') || q.startsWith('REPLACE')) {
-    const [gid, name, uri, dir, totalLength, status, taskType, completedAt, meta] = params as [
+    const [gid, name, uri, dir, totalLength, status, taskType, addedAt, completedAt, meta] = params as [
       string,
       string,
       string | null,
       string | null,
       number | null,
       string,
+      string | null,
       string | null,
       string | null,
       string | null,
@@ -40,6 +41,8 @@ function mockExecute(query: string, params: unknown[]): { rowsAffected: number }
       total_length: totalLength ?? undefined,
       status,
       task_type: taskType ?? undefined,
+      // ON CONFLICT: preserve existing added_at (COALESCE)
+      added_at: (existing >= 0 ? rows[existing].added_at : undefined) ?? addedAt ?? undefined,
       created_at: new Date().toISOString(),
       completed_at: completedAt ?? undefined,
       meta: meta ?? undefined,
@@ -92,10 +95,18 @@ function mockSelect(query: string, params: unknown[]): unknown[] {
     const status = params[0] as string
     result = rows
       .filter((r) => r.status === status)
-      .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+      .sort((a, b) => {
+        const ta = a.added_at ?? a.completed_at ?? ''
+        const tb = b.added_at ?? b.completed_at ?? ''
+        return tb.localeCompare(ta)
+      })
   } else {
-    // Default: return all, sorted by completed_at DESC
-    result = [...rows].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+    // Default: return all, sorted by COALESCE(added_at, completed_at) DESC
+    result = [...rows].sort((a, b) => {
+      const ta = a.added_at ?? a.completed_at ?? ''
+      const tb = b.added_at ?? b.completed_at ?? ''
+      return tb.localeCompare(ta)
+    })
   }
 
   // Parse LIMIT clause from the SQL query
@@ -416,9 +427,11 @@ describe('HistoryStore', () => {
       const all = await store.getRecords()
       expect(all).toHaveLength(100)
 
-      // Verify sort order — most recent first
+      // Verify sort order — most recent first (sorted by COALESCE(added_at, completed_at))
       for (let i = 0; i < all.length - 1; i++) {
-        expect(all[i].completed_at! >= all[i + 1].completed_at!).toBe(true)
+        const ta = all[i].added_at ?? all[i].completed_at ?? ''
+        const tb = all[i + 1].added_at ?? all[i + 1].completed_at ?? ''
+        expect(ta >= tb).toBe(true)
       }
     })
   })

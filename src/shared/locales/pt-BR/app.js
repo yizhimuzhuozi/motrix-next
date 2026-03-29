@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'O motor de download aria2 foi iniciado, verificando estabilidade...',
   'engine-retrying': 'Tentando novamente...',
   'engine-manual-retry': 'Tentar manualmente',
-  'migration-success': 'Formato de dados atualizado para {version}',
-  'migration-incomplete': 'Não foi possível atualizar completamente o formato de dados para {version}',
+  'migration-success': 'Estrutura das configurações do usuário atualizada para {version}',
+  'migration-incomplete': 'A estrutura das configurações do usuário não pôde ser totalmente atualizada para {version}',
+  'db-upgraded': 'Estrutura do banco de dados atualizada para {version}',
 }

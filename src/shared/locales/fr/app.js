@@ -79,6 +79,6 @@ export default {
   'engine-verifying-stability': 'Le moteur de telechargement aria2 a demarre, verification de la stabilite...',
   'engine-retrying': 'Nouvelle tentative...',
   'engine-manual-retry': 'Reessayer manuellement',
-  'migration-success': 'Format de données mis à niveau vers {version}',
-  'migration-incomplete': 'Le format de données n\u0027a pas pu être entièrement mis à niveau vers {version}',
+  'migration-success': 'Structure des paramètres utilisateur mise à jour vers {version}',
+  'migration-incomplete': 'La structure des paramètres utilisateur n\'a pas pu être entièrement mise à jour vers {version}',
 }

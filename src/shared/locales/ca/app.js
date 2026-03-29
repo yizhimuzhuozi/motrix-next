@@ -79,6 +79,6 @@ export default {
   'engine-verifying-stability': 'El motor de descarrega aria2 s\u0027ha iniciat, verificant estabilitat...',
   'engine-retrying': 'Reintentant...',
   'engine-manual-retry': 'Reintentar manualment',
-  'migration-success': 'El format de dades s\u0027ha actualitzat a {version}',
-  'migration-incomplete': 'No s\u0027ha pogut actualitzar completament el format de dades a {version}',
+  'migration-success': 'L\'estructura de configuració de l\'usuari s\'ha actualitzat a {version}',
+  'migration-incomplete': 'L\'estructura de configuració de l\'usuari no s\'ha pogut actualitzar completament a {version}',
 }

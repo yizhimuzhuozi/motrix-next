@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'Движок загрузки aria2 запущен, проверка стабильности...',
   'engine-retrying': 'Повторная попытка...',
   'engine-manual-retry': 'Повторить вручную',
-  'migration-success': 'Формат данных обновлён до {version}',
-  'migration-incomplete': 'Не удалось полностью обновить формат данных до {version}',
+  'migration-success': 'Структура пользовательских настроек обновлена до {version}',
+  'migration-incomplete': 'Структура пользовательских настроек не полностью обновлена до {version}',
+  'db-upgraded': 'Структура базы данных обновлена до {version}',
 }

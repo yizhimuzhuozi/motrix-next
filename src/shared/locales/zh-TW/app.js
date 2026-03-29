@@ -79,6 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 下載引擎已啟動，正在驗證穩定性...',
   'engine-retrying': '正在重試...',
   'engine-manual-retry': '手動重試',
-  'migration-success': '資料格式已升級至 {version} 版本',
-  'migration-incomplete': '資料格式未能完整升級至 {version} 版本',
+  'migration-success': '使用者設定結構已升級至 {version}',
+  'migration-incomplete': '使用者設定結構未能完全升級至 {version}',
+  'db-upgraded': '資料庫結構已升級至 {version}',
 }
