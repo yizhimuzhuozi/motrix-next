@@ -133,7 +133,6 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                 }
                 CommandEvent::Terminated(payload) => {
                     let exit_code = payload.code.unwrap_or(-1);
-                    log::info!("[DEBUG-EXIT] engine Terminated exit_code={} signal={:?} PID={}", exit_code, payload.signal, std::process::id());
                     log::warn!("terminated with exit code: {}", exit_code);
 
                     // Generation guard: if a newer engine was spawned since this
@@ -142,7 +141,6 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                         .try_state::<EngineState>()
                         .is_none_or(|s| !s.is_current_generation(my_gen));
                     if is_stale {
-                        log::info!("[DEBUG-EXIT] stale monitor gen={}, ignoring", my_gen);
                         log::debug!("stale monitor (gen {}) ignoring termination", my_gen);
                         break;
                     }
@@ -157,9 +155,7 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                         false
                     };
 
-                    log::info!("[DEBUG-EXIT] engine was_intentional={}", was_intentional);
                     if !was_intentional {
-                        log::info!("[DEBUG-EXIT] >>> EMITTING engine-crashed <<<");
                         // Any non-intentional exit is a crash — including kill -9
                         // which produces exit_code 0.  Frontend drives recovery.
                         let _ = app_handle.emit(
@@ -170,7 +166,6 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
                             }),
                         );
                     } else {
-                        log::info!("[DEBUG-EXIT] emitting engine-stopped (intentional)");
                         let _ = app_handle.emit("engine-stopped", ());
                     }
 
@@ -254,22 +249,16 @@ pub fn stop_engine(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<EngineState>();
     // Signal intentional stop BEFORE kill so the Terminated handler
     // knows this is deliberate and suppresses engine-error.
-    log::info!("[DEBUG-EXIT] stop_engine: setting intentional_stop=true");
     state.intentional_stop.store(true, Ordering::SeqCst);
     let mut child_lock = state.child.lock().map_err(|e| e.to_string())?;
 
     if let Some(child) = child_lock.as_ref() {
         let pid = child.pid();
-        log::info!("[DEBUG-EXIT] stop_engine: killing PID {}", pid);
         kill_process_by_pid(pid)?;
         *child_lock = None;
         log::info!("stopped engine process: PID {}", pid);
-        log::info!("[DEBUG-EXIT] stop_engine: killed PID {}, sleeping 100ms", pid);
         // Brief wait for the OS to fully terminate the process and release the port.
         std::thread::sleep(std::time::Duration::from_millis(100));
-        log::info!("[DEBUG-EXIT] stop_engine: sleep done");
-    } else {
-        log::info!("[DEBUG-EXIT] stop_engine: no child process to kill");
     }
 
     Ok(())
