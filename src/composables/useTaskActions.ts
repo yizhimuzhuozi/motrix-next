@@ -191,12 +191,22 @@ export function useTaskActions(deps: TaskActionsDeps) {
     if (!filePath) return
     try {
       const fileExists = await invoke<boolean>('check_path_exists', { path: filePath })
-      if (!fileExists) {
-        message.warning(t('task.file-not-exist'))
+      if (fileExists) {
+        await invoke('show_item_in_dir', { path: filePath })
+        message.success(t('task.open-folder-success'))
         return
       }
-      await invoke('show_item_in_dir', { path: filePath })
-      message.success(t('task.open-folder-success'))
+      // Fallback: file missing but BT folder or download dir may still exist
+      const fallback = await resolveOpenTarget(task)
+      if (fallback) {
+        const fallbackExists = await invoke<boolean>('check_path_exists', { path: fallback })
+        if (fallbackExists) {
+          await invoke('show_item_in_dir', { path: fallback })
+          message.success(t('task.open-folder-success'))
+          return
+        }
+      }
+      message.warning(t('task.file-not-exist'))
     } catch (e) {
       logger.warn('TaskView.showInFolder', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))
@@ -214,7 +224,7 @@ export function useTaskActions(deps: TaskActionsDeps) {
       }
       const isDir = await invoke<boolean>('check_path_is_dir', { path: target })
       await invoke('open_path_normalized', { path: target })
-      message.success(t(isDir ? 'task.open-folder-success' : 'task.open-file-success'))
+      message.success(t(isDir ? 'task.open-file-is-folder' : 'task.open-file-success'))
     } catch (e) {
       logger.warn('TaskView.openFile error', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))

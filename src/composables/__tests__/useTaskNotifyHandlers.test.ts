@@ -1,10 +1,10 @@
 /**
  * @fileoverview TDD tests for task lifecycle notification handlers.
  *
- * These tests validate the notification callbacks that TaskView registers on
- * TaskStore. The callback logic is extracted into pure functions in
- * useTaskNotifyHandlers.ts for independent unit testing — following the same
- * pattern as useTaskLifecycle.ts and useDownloadCleanup.ts.
+ * These tests validate the notification callbacks that MainLayout registers
+ * on the lifecycle service. The callback logic is extracted into pure
+ * functions in useTaskNotifyHandlers.ts for independent unit testing —
+ * following the same pattern as useTaskLifecycle.ts.
  *
  * Tests written BEFORE implementation per TDD Iron Law.
  *
@@ -14,6 +14,8 @@
  *   3. onError handler sends in-app toast + OS notification with error text.
  *   4. All handlers respect the taskNotification preference gate.
  *   5. Metadata tasks are excluded from completion notifications.
+ *   6. When action callbacks are provided, toast contains a render function.
+ *   7. When action callbacks are absent, toast falls back to plain string.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Aria2Task } from '@shared/types'
@@ -22,6 +24,18 @@ import type { Aria2Task } from '@shared/types'
 const mockNotifyOs = vi.fn((_title: string, _body: string): Promise<void> => Promise.resolve())
 vi.mock('../useOsNotification', () => ({
   notifyOs: (...args: [string, string]) => mockNotifyOs(...args),
+}))
+
+// ── Mock renderCompletionToast ───────────────────────────────────────
+// Return a render function when actions are provided, plain string otherwise.
+vi.mock('../useNotificationToast', () => ({
+  renderCompletionToast: (options: { body: string; onOpenFile?: () => void; onShowInFolder?: () => void }) => {
+    if (options.onOpenFile || options.onShowInFolder) {
+      const fn = () => `[VNode: ${options.body}]`
+      return fn
+    }
+    return options.body
+  },
 }))
 
 import { handleTaskComplete, handleBtComplete, handleTaskError } from '../useTaskNotifyHandlers'
@@ -98,6 +112,7 @@ describe('handleTaskComplete', () => {
     handleTaskComplete(task, deps)
 
     expect(deps.messageSuccess).toHaveBeenCalledOnce()
+    // Without action callbacks, renderCompletionToast returns plain string
     expect(deps.messageSuccess).toHaveBeenCalledWith('test-file.zip completed')
   })
 
@@ -140,6 +155,45 @@ describe('handleTaskComplete', () => {
     expect(deps.messageSuccess).toHaveBeenCalledWith('Ubuntu 24.04 completed')
     expect(mockNotifyOs).toHaveBeenCalledWith('MotrixNext', 'Ubuntu 24.04 completed')
   })
+
+  it('sends render function when onOpenFile callback is provided', () => {
+    const onOpenFile = vi.fn()
+    const deps = makeDeps({ onOpenFile })
+    const task = makeTask()
+
+    handleTaskComplete(task, deps)
+
+    expect(deps.messageSuccess).toHaveBeenCalledOnce()
+    const arg = (deps.messageSuccess as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(typeof arg).toBe('function')
+    // OS notification still uses plain string
+    expect(mockNotifyOs).toHaveBeenCalledWith('MotrixNext', 'test-file.zip completed')
+  })
+
+  it('sends render function when onShowInFolder callback is provided', () => {
+    const onShowInFolder = vi.fn()
+    const deps = makeDeps({ onShowInFolder })
+    const task = makeTask()
+
+    handleTaskComplete(task, deps)
+
+    expect(deps.messageSuccess).toHaveBeenCalledOnce()
+    const arg = (deps.messageSuccess as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(typeof arg).toBe('function')
+  })
+
+  it('sends render function when both action callbacks are provided', () => {
+    const onOpenFile = vi.fn()
+    const onShowInFolder = vi.fn()
+    const deps = makeDeps({ onOpenFile, onShowInFolder })
+    const task = makeTask()
+
+    handleTaskComplete(task, deps)
+
+    expect(deps.messageSuccess).toHaveBeenCalledOnce()
+    const arg = (deps.messageSuccess as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(typeof arg).toBe('function')
+  })
 })
 
 // ── handleBtComplete ─────────────────────────────────────────────────
@@ -177,6 +231,21 @@ describe('handleBtComplete', () => {
 
     expect(deps.messageSuccess).not.toHaveBeenCalled()
     expect(mockNotifyOs).not.toHaveBeenCalled()
+  })
+
+  it('sends render function when action callbacks are provided', () => {
+    const onOpenFile = vi.fn()
+    const onShowInFolder = vi.fn()
+    const deps = makeDeps({ onOpenFile, onShowInFolder })
+    const task = makeTask({ bittorrent: { info: { name: 'Big Archive' } } })
+
+    handleBtComplete(task, deps)
+
+    expect(deps.messageSuccess).toHaveBeenCalledOnce()
+    const arg = (deps.messageSuccess as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(typeof arg).toBe('function')
+    // OS notification still uses plain string
+    expect(mockNotifyOs).toHaveBeenCalledWith('MotrixNext', 'Big Archive — download complete, seeding...')
   })
 })
 

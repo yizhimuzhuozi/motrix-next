@@ -12,7 +12,8 @@ import { createTaskLifecycleService } from '@/composables/useTaskLifecycleServic
 import { buildHistoryRecord, buildBtCompletionRecord, isMetadataTask } from '@/composables/useTaskLifecycle'
 import { handleTaskComplete, handleBtComplete, handleTaskError } from '@/composables/useTaskNotifyHandlers'
 import { shouldDeleteTorrent, trashTorrentFile, cleanupTorrentMetadataFiles } from '@/composables/useDownloadCleanup'
-import { getTaskDisplayName } from '@shared/utils'
+import { getTaskDisplayName, resolveOpenTarget } from '@shared/utils'
+import type { Aria2Task } from '@shared/types'
 import { ARIA2_ERROR_CODES } from '@shared/aria2ErrorCodes'
 import { useHistoryStore } from '@/stores/history'
 import {
@@ -74,6 +75,70 @@ let unlistenExitDialog: (() => void) | null = null
 let globalStatTimer: ReturnType<typeof setTimeout> | null = null
 let lifecycleService: ReturnType<typeof createTaskLifecycleService> | null = null
 let magnetPollTimer: ReturnType<typeof setTimeout> | null = null
+
+// ── Notification action helpers (reuse existing IPC commands) ────────
+
+/**
+ * Open the downloaded file with the system's default application.
+ *
+ * Reuses the same IPC commands as TaskItem's "Open File" context menu:
+ *   - `resolveOpenTarget()` for smart path resolution (BT multi-file → subdir)
+ *   - `check_path_exists` to guard against deleted files
+ *   - `open_path_normalized` to invoke the system opener
+ */
+async function openFileFromNotification(task: Aria2Task) {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const target = await resolveOpenTarget(task)
+  if (!target) return
+  try {
+    const fileExists = await invoke<boolean>('check_path_exists', { path: target })
+    if (!fileExists) {
+      message.warning(t('task.file-not-exist'))
+      return
+    }
+    const isDir = await invoke<boolean>('check_path_is_dir', { path: target })
+    await invoke('open_path_normalized', { path: target })
+    message.success(t(isDir ? 'task.open-file-is-folder' : 'task.open-file-success'))
+  } catch (e) {
+    logger.warn('Notification.openFile', e instanceof Error ? e.message : String(e))
+    message.warning(t('task.file-not-exist'))
+  }
+}
+
+/**
+ * Reveal the downloaded file in the system file manager.
+ *
+ * Reuses the same IPC commands as TaskItem's "Show in Folder" context menu:
+ *   - `check_path_exists` to guard against deleted files
+ *   - `show_item_in_dir` to invoke the platform-native file reveal
+ */
+async function showInFolderFromNotification(task: Aria2Task) {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const filePath = task.files?.[0]?.path
+  if (!filePath) return
+  try {
+    const fileExists = await invoke<boolean>('check_path_exists', { path: filePath })
+    if (fileExists) {
+      await invoke('show_item_in_dir', { path: filePath })
+      message.success(t('task.open-folder-success'))
+      return
+    }
+    // Fallback: file missing but BT folder or download dir may still exist
+    const fallback = await resolveOpenTarget(task)
+    if (fallback) {
+      const fallbackExists = await invoke<boolean>('check_path_exists', { path: fallback })
+      if (fallbackExists) {
+        await invoke('show_item_in_dir', { path: fallback })
+        message.success(t('task.open-folder-success'))
+        return
+      }
+    }
+    message.warning(t('task.file-not-exist'))
+  } catch (e) {
+    logger.warn('Notification.showInFolder', e instanceof Error ? e.message : String(e))
+    message.warning(t('task.file-not-exist'))
+  }
+}
 
 // ── Magnet file selection state (app-level) ─────────────────────────
 const magnetSelectVisible = ref(false)
@@ -493,6 +558,8 @@ onMounted(async () => {
         messageError: message.error,
         t,
         taskNotification: preferenceStore.config?.taskNotification !== false,
+        onOpenFile: openFileFromNotification,
+        onShowInFolder: showInFolderFromNotification,
       })
     },
     onBtComplete: async (task) => {
@@ -513,6 +580,8 @@ onMounted(async () => {
         messageError: message.error,
         t,
         taskNotification: preferenceStore.config?.taskNotification !== false,
+        onOpenFile: openFileFromNotification,
+        onShowInFolder: showInFolderFromNotification,
       })
       if (!shouldDeleteTorrent(preferenceStore.config)) return
       const sourcePath = task.infoHash ? taskStore.consumeTorrentSource(task.infoHash) : undefined
