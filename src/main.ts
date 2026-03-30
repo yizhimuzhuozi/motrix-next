@@ -293,6 +293,10 @@ window.addEventListener('unhandledrejection', (e) => {
       setI18nLocale(i18n, locale)
     }
 
+    // Flush deferred migration toasts now that i18n locale is active.
+    // loadPreference() buffers these signals to avoid showing English toasts.
+    preferenceStore.flushMigrationSignals()
+
     const config = preferenceStore.config
 
     // ── Phase 2: engine startup (non-blocking) ────────────────────────────

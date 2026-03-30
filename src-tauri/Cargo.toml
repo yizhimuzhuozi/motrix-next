@@ -46,6 +46,8 @@ trash = "5"
 dunce = "1"
 os_info = "3"
 sys-locale = "0.3"
+rusqlite = { version = "0.31", features = ["bundled"] }
+rfd = "0.16"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -58,6 +60,9 @@ windows-sys = { version = "0.59", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints.clippy]
 unwrap_used = "deny"

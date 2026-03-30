@@ -10,8 +10,12 @@ use super::state::{log_engine_stdout, path_to_safe_string, EngineState};
 fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         let status = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map_err(|e| format!("Failed to execute taskkill for PID {pid}: {e}"))?;
         if status.success() {

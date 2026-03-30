@@ -1,4 +1,5 @@
 mod commands;
+mod db_guard;
 mod engine;
 mod error;
 #[cfg(target_os = "macos")]
@@ -447,6 +448,14 @@ pub fn run() {
     }));
 
     let log_level = read_log_level();
+
+    // ── Pre-flight DB migration guard ────────────────────────────
+    // Must run BEFORE tauri_plugin_sql to prevent panic on downgrade.
+    // Uses the platform-specific app data directory (same path that
+    // tauri_plugin_sql's "sqlite:history.db" resolves to).
+    if let Some(dir) = dirs::data_dir().map(|d| d.join("com.motrix.next")) {
+        db_guard::check(&dir);
+    }
 
     let mut builder = tauri::Builder::default()
         .plugin(

@@ -24,6 +24,14 @@ export const usePreferenceStore = defineStore('preference', () => {
    *  MainLayout watches this to show an info toast. Null = no upgrade detected. */
   const dbUpgradeVersion = ref<number | null>(null)
 
+  // ── Deferred migration signals ──────────────────────────────────────
+  // loadPreference() runs before setI18nLocale(), so setting these refs
+  // immediately would trigger MainLayout watchers while the locale is
+  // still 'en-US' — causing migration toasts to always display in English.
+  // Solution: buffer the values and flush them after locale is ready.
+  let pendingMigrationResult: MigrationResult | null = null
+  let pendingDbUpgradeVersion: number | null = null
+
   const theme = computed(() => config.value.theme)
   const locale = computed(() => config.value.locale)
   const direction = computed(() => getLangDirection(config.value.locale || 'en-US'))
@@ -47,12 +55,12 @@ export const usePreferenceStore = defineStore('preference', () => {
         // Always signal the saved version so the MainLayout watch can
         // compare it against the live DB version. Fresh installs never
         // reach here (saved is null), so no false toast.
-        dbUpgradeVersion.value = saved.dbSchemaVersion
+        pendingDbUpgradeVersion = saved.dbSchemaVersion
 
         const result = runMigrations(saved)
         config.value = { ...config.value, ...saved }
         if (result.migrated) {
-          migrationResult.value = result
+          pendingMigrationResult = result
           await store.set(STORE_KEY, config.value)
           await store.save()
           logger.info('PreferenceStore', 'config migrated and persisted')
@@ -170,6 +178,21 @@ export const usePreferenceStore = defineStore('preference', () => {
     return fetchBtTrackerFromSource(trackerSource, proxy)
   }
 
+  /**
+   * Emit deferred migration signals so MainLayout watchers fire
+   * AFTER i18n locale is set. Call from main.ts after setI18nLocale().
+   */
+  function flushMigrationSignals() {
+    if (pendingMigrationResult) {
+      migrationResult.value = pendingMigrationResult
+      pendingMigrationResult = null
+    }
+    if (pendingDbUpgradeVersion !== null) {
+      dbUpgradeVersion.value = pendingDbUpgradeVersion
+      pendingDbUpgradeVersion = null
+    }
+  }
+
   return {
     engineMode,
     pendingChanges,
@@ -193,5 +216,6 @@ export const usePreferenceStore = defineStore('preference', () => {
     updateAppLocale,
     fetchBtTracker,
     resetToDefaults,
+    flushMigrationSignals,
   }
 })
