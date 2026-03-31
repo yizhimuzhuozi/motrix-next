@@ -193,15 +193,26 @@ export function useColorScheme() {
     const outline = hexFromArgb(scheme.outlineVariant)
     const outlineFull = hexFromArgb(scheme.outline)
 
+    const primaryPalette = m3Theme.value.palettes.primary
+    const tertiaryPalette = m3Theme.value.palettes.tertiary
+
+    // M3 interaction states: hover/pressed use adjacent tones from the tonal palette.
+    // Light primary ≈ tone 40 → hover=50, pressed=30
+    // Dark primary  ≈ tone 80 → hover=70, pressed=90
+    const primaryHover = hexFromArgb(primaryPalette.tone(isDark.value ? 70 : 50))
+    const primaryPressed = hexFromArgb(primaryPalette.tone(isDark.value ? 90 : 30))
+    const tertiaryHover = hexFromArgb(tertiaryPalette.tone(isDark.value ? 70 : 50))
+    const tertiaryPressed = hexFromArgb(tertiaryPalette.tone(isDark.value ? 90 : 30))
+
     return {
       common: {
         primaryColor: primary,
-        primaryColorHover: hexFromArgb(isDark.value ? scheme.primary : scheme.primaryContainer),
-        primaryColorPressed: hexFromArgb(scheme.primaryContainer),
+        primaryColorHover: primaryHover,
+        primaryColorPressed: primaryPressed,
         primaryColorSuppl: primary,
         warningColor: hexFromArgb(scheme.tertiary),
-        warningColorHover: hexFromArgb(scheme.tertiaryContainer),
-        warningColorPressed: hexFromArgb(scheme.tertiaryContainer),
+        warningColorHover: tertiaryHover,
+        warningColorPressed: tertiaryPressed,
         warningColorSuppl: hexFromArgb(scheme.tertiary),
         bodyColor: 'transparent',
         cardColor: surface('surfaceContainer'),
@@ -222,8 +233,8 @@ export function useColorScheme() {
         borderFocus: `1px solid ${outlineFull}`,
       },
       Input: {
-        color: surface('surfaceContainerLow'),
-        colorFocus: surface('surfaceContainerLow'),
+        color: surface('surfaceContainer'),
+        colorFocus: surface('surfaceContainer'),
         textColor: onSurface,
         placeholderColor: onSurfaceVariant,
         border: `1px solid ${outline}`,
@@ -233,8 +244,8 @@ export function useColorScheme() {
       InputNumber: {
         peers: {
           Input: {
-            color: surface('surfaceContainerLow'),
-            colorFocus: surface('surfaceContainerLow'),
+            color: surface('surfaceContainer'),
+            colorFocus: surface('surfaceContainer'),
             textColor: onSurface,
             border: `1px solid ${outline}`,
             borderHover: `1px solid ${outlineFull}`,

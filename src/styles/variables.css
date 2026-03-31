@@ -106,8 +106,8 @@
   --subnav-active-bg: var(--m3-surface-container-highest);
   --subnav-action: var(--m3-on-surface-variant);
 
-  --main-bg: var(--m3-surface);
-  --panel-bg: var(--m3-surface);
+  --main-bg: var(--m3-surface-container-low);
+  --panel-bg: var(--m3-surface-container-low);
   --panel-title: var(--m3-on-surface);
   --panel-border: var(--m3-outline-variant);
 
