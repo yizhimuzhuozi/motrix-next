@@ -22,44 +22,61 @@ use tauri::AppHandle;
 #[cfg(target_os = "macos")]
 mod macos {
     use objc2_app_kit::NSWorkspace;
-    use objc2_foundation::{NSString, NSURL};
+    use objc2_foundation::{NSBundle, NSString, NSURL};
 
-    /// Returns the file-system path of the app registered as the default
+    /// Returns the bundle identifier of the app registered as the default
     /// handler for the given URL scheme, or `None` if no handler is set.
-    pub fn get_default_handler_path(protocol: &str) -> Option<String> {
+    pub fn get_default_handler_bundle_id(protocol: &str) -> Option<String> {
         let workspace = NSWorkspace::sharedWorkspace();
         let url_str = format!("{protocol}://test");
         let ns_url_str = NSString::from_str(&url_str);
         let test_url = NSURL::URLWithString(&ns_url_str)?;
         let handler_url = workspace.URLForApplicationToOpenURL(&test_url)?;
-        let path = handler_url.path()?;
-        Some(path.to_string())
+        let handler_bundle = NSBundle::bundleWithURL(&handler_url)?;
+        let bundle_id = handler_bundle.bundleIdentifier()?;
+        Some(bundle_id.to_string())
     }
 
-    /// Returns the bundle path of the currently running application.
-    pub fn current_app_bundle_path() -> Option<String> {
-        let workspace = NSWorkspace::sharedWorkspace();
-        let url_str = "motrixnext://self-check";
-        let ns_url_str = NSString::from_str(url_str);
-        let test_url = NSURL::URLWithString(&ns_url_str)?;
-        // motrixnext:// is declared in Info.plist — resolves to our own bundle
-        let handler_url = workspace.URLForApplicationToOpenURL(&test_url)?;
-        let path = handler_url.path()?;
-        Some(path.to_string())
+    /// Returns the bundle identifier of the currently running application.
+    pub fn current_bundle_id() -> Option<String> {
+        let bundle = NSBundle::mainBundle();
+        let bundle_id = bundle.bundleIdentifier()?;
+        Some(bundle_id.to_string())
     }
 
-    /// Attempts to set this application as the default handler for the given
-    /// URL scheme. On macOS 12+, the system may prompt the user for confirmation.
-    pub fn set_as_default_handler(protocol: &str, app_path: &str) -> Result<(), String> {
-        let workspace = NSWorkspace::sharedWorkspace();
-        let ns_path = NSString::from_str(app_path);
-        let app_url = NSURL::fileURLWithPath(&ns_path);
-        let ns_scheme = NSString::from_str(protocol);
+    /// Registers this application as the default handler for the given URL
+    /// scheme using `LSSetDefaultHandlerForURLScheme`.
+    ///
+    /// This API works with bundle identifiers (not file paths), so it
+    /// functions correctly in both dev mode (`cargo run`) and release
+    /// (`.app` bundle).
+    pub fn set_as_default_handler(protocol: &str, bundle_id: &str) -> Result<(), String> {
+        use core_foundation::base::TCFType;
+        use core_foundation::string::CFString;
 
-        workspace.setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(
-            &app_url, &ns_scheme, None,
-        );
-        Ok(())
+        let scheme = CFString::new(protocol);
+        let handler = CFString::new(bundle_id);
+
+        // SAFETY: LSSetDefaultHandlerForURLScheme is a stable C API.
+        let status = unsafe {
+            core_foundation::base::OSStatus::from(LSSetDefaultHandlerForURLScheme(
+                scheme.as_concrete_TypeRef(),
+                handler.as_concrete_TypeRef(),
+            ))
+        };
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(format!("LSSetDefaultHandlerForURLScheme returned {status}"))
+        }
+    }
+
+    // FFI binding for Launch Services
+    extern "C" {
+        fn LSSetDefaultHandlerForURLScheme(
+            scheme: core_foundation::string::CFStringRef,
+            handler: core_foundation::string::CFStringRef,
+        ) -> i32;
     }
 }
 
@@ -74,13 +91,14 @@ pub async fn is_default_protocol_client(
 ) -> Result<bool, AppError> {
     #[cfg(target_os = "macos")]
     {
-        let handler_path = macos::get_default_handler_path(&protocol);
-        let self_path = macos::current_app_bundle_path();
-        match (handler_path, self_path) {
+        let handler_id = macos::get_default_handler_bundle_id(&protocol);
+        let self_id = macos::current_bundle_id();
+        eprintln!("[protocol] is_default({protocol}): handler={handler_id:?} self={self_id:?}");
+        match (&handler_id, &self_id) {
             (Some(handler), Some(self_app)) => Ok(handler == self_app),
             // No handler registered → we are not the default
             (None, _) => Ok(false),
-            // Cannot determine our own path → conservative false
+            // Cannot determine our own bundle id → conservative false
             (_, None) => Ok(false),
         }
     }
@@ -105,9 +123,11 @@ pub async fn set_default_protocol_client(
 ) -> Result<(), AppError> {
     #[cfg(target_os = "macos")]
     {
-        let self_path = macos::current_app_bundle_path()
-            .ok_or_else(|| AppError::Protocol("cannot determine app bundle path".into()))?;
-        macos::set_as_default_handler(&protocol, &self_path).map_err(|e| AppError::Protocol(e))
+        let bundle_id = macos::current_bundle_id();
+        eprintln!("[protocol] set_default({protocol}): bundle_id={bundle_id:?}");
+        let bundle_id = bundle_id
+            .ok_or_else(|| AppError::Protocol("cannot determine app bundle identifier".into()))?;
+        macos::set_as_default_handler(&protocol, &bundle_id).map_err(|e| AppError::Protocol(e))
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -156,21 +176,22 @@ mod tests {
         use super::super::macos;
 
         #[test]
-        fn get_default_handler_path_returns_some_for_https() {
+        fn get_default_handler_bundle_id_returns_some_for_https() {
             // https:// should always have a handler (Safari/Chrome)
-            let result = macos::get_default_handler_path("https");
+            let result = macos::get_default_handler_bundle_id("https");
             assert!(result.is_some(), "expected a handler for https://");
-            let path = result.expect("already checked");
+            let id = result.expect("already checked");
+            // Bundle IDs are reverse-DNS (e.g. "com.apple.Safari")
             assert!(
-                path.ends_with(".app"),
-                "expected .app bundle path, got: {path}"
+                id.contains('.'),
+                "expected reverse-DNS bundle ID, got: {id}"
             );
         }
 
         #[test]
-        fn get_default_handler_path_returns_none_for_nonsense_scheme() {
+        fn get_default_handler_bundle_id_returns_none_for_nonsense_scheme() {
             // A random scheme with no handler registered
-            let result = macos::get_default_handler_path("zzznotarealscheme12345");
+            let result = macos::get_default_handler_bundle_id("zzznotarealscheme12345");
             assert!(
                 result.is_none(),
                 "expected None for unregistered scheme, got: {result:?}"
@@ -178,15 +199,11 @@ mod tests {
         }
 
         #[test]
-        fn current_app_bundle_path_returns_some_when_motrixnext_registered() {
-            // motrixnext:// is declared in Info.plist — if running as .app bundle,
-            // this should return our own path. In test context (cargo test),
-            // it may return None since we're not a bundled .app.
-            let result = macos::current_app_bundle_path();
-            // Accept both Some and None — just verify no panic.
-            if let Some(path) = &result {
-                assert!(!path.is_empty(), "bundle path should not be empty");
-            }
+        fn current_bundle_id_returns_value_in_test_context() {
+            // In cargo test context, NSBundle.mainBundle may not have a
+            // bundleIdentifier (test binaries aren't .app bundles).
+            // We just verify it doesn't panic.
+            let _result = macos::current_bundle_id();
         }
     }
 

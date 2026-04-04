@@ -314,7 +314,15 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot, patchSnapshot } =
             message.success(t('preferences.protocol-unregistered', { protocol }))
           }
         } catch (e) {
-          const reason = e instanceof Error ? e.message : String(e)
+          // Tauri IPC errors arrive as serialized AppError objects
+          // (e.g. { Protocol: "message" }), not Error instances.
+          // String() on a plain object produces "[object Object]".
+          const reason =
+            e instanceof Error
+              ? e.message
+              : typeof e === 'object' && e !== null
+                ? Object.values(e as Record<string, unknown>).join(': ')
+                : String(e)
           logger.warn('Basic.protocol', `Failed to ${enabled ? 'register' : 'unregister'} ${protocol}: ${reason}`)
           message.error(t('preferences.protocol-failed', { protocol, reason }))
         }

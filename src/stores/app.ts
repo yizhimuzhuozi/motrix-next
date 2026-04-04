@@ -228,7 +228,8 @@ export const useAppStore = defineStore('app', () => {
           if (action === 'new') {
             const downloadUrl = parsed.searchParams.get('url')
             if (downloadUrl) {
-              items.push(createBatchItem('uri', downloadUrl))
+              const kind = detectKind(downloadUrl)
+              items.push(createBatchItem(kind, downloadUrl))
             }
           }
           // motrixnext:// with no action or unrecognized action → pure wake-up
@@ -258,8 +259,10 @@ export const useAppStore = defineStore('app', () => {
         items.push(createBatchItem('uri', url))
       } else if (lower.startsWith('thunder://')) {
         items.push(createBatchItem('uri', decodeThunderLink(url)))
-      } else if (isRemoteUri || hasFileExt) {
-        // Remote .torrent/.metalink URLs — let aria2 handle the download
+      } else if (isRemoteUri && hasFileExt) {
+        // Remote .torrent/.metalink URLs — detect kind for proper handling
+        items.push(createBatchItem(detectKind(url), url))
+      } else if (isRemoteUri) {
         items.push(createBatchItem('uri', url))
       }
     }

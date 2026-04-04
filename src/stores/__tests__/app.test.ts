@@ -348,7 +348,7 @@ describe('useAppStore', () => {
   // ── handleDeepLinkUrls ──────────────────────────────────────────
 
   describe('handleDeepLinkUrls', () => {
-    it('keeps remote .torrent and .metalink URLs as uri items', () => {
+    it('detects remote .torrent and .metalink URLs with correct kind', () => {
       const store = useAppStore()
       store.handleDeepLinkUrls([
         'https://example.com/linux.torrent',
@@ -356,9 +356,9 @@ describe('useAppStore', () => {
         'ftp://example.com/archive.metalink',
       ])
       expect(store.pendingBatch.map((i) => ({ kind: i.kind, source: i.source }))).toEqual([
-        { kind: 'uri', source: 'https://example.com/linux.torrent' },
-        { kind: 'uri', source: 'https://example.com/bundle.meta4' },
-        { kind: 'uri', source: 'ftp://example.com/archive.metalink' },
+        { kind: 'torrent', source: 'https://example.com/linux.torrent' },
+        { kind: 'metalink', source: 'https://example.com/bundle.meta4' },
+        { kind: 'metalink', source: 'ftp://example.com/archive.metalink' },
       ])
     })
 

@@ -50,12 +50,56 @@ export async function resolveFileItem(item: BatchItem, t: (key: string) => strin
 }
 
 /**
+ * Resolves a remote file-based batch item: fetches bytes via Rust IPC
+ * (bypasses CORS), converts to base64, and parses torrent metadata.
+ *
+ * Used when the browser extension sends a remote .torrent URL via deep link.
+ * The Rust `fetch_remote_bytes` command uses reqwest with TLS, redirects,
+ * and a 16 MiB size limit.
+ */
+export async function resolveRemoteFileItem(item: BatchItem, t: (key: string) => string) {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const bytes: number[] = await invoke('fetch_remote_bytes', { url: item.source })
+    const uint8 = new Uint8Array(bytes)
+    item.payload = uint8ToBase64(uint8)
+
+    if (item.kind === 'torrent') {
+      try {
+        const meta = await parseTorrentBuffer(uint8, bencode)
+        if (meta) {
+          item.torrentMeta = meta
+          item.selectedFileIndices = meta.files.map((f) => f.idx)
+        }
+      } catch (e) {
+        logger.debug('AddTask.parseRemoteTorrent', e)
+      }
+    }
+  } catch (e) {
+    logger.error('AddTask.resolveRemoteFileItem', e)
+    item.status = 'failed'
+    item.error = t('task.file-load-failed')
+  }
+}
+
+/** Detect whether a source is a remote HTTP/HTTPS URL. */
+function isRemoteSource(source: string): boolean {
+  return /^https?:\/\//i.test(source)
+}
+
+/**
  * Resolves all unresolved (pending, non-URI) batch items by reading their files.
+ * Routes remote URLs (from deep links) through Rust IPC fetch, and local
+ * file paths through Tauri FS plugin.
  */
 export async function resolveUnresolvedItems(batch: BatchItem[], t: (key: string) => string) {
   for (const item of batch) {
     if (item.kind !== 'uri' && item.status === 'pending' && item.payload === item.source) {
-      await resolveFileItem(item, t)
+      if (isRemoteSource(item.source)) {
+        await resolveRemoteFileItem(item, t)
+      } else {
+        await resolveFileItem(item, t)
+      }
     }
   }
 }
