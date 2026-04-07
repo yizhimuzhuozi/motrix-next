@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 download engine started, verifying stability...',
   'engine-retrying': 'Retrying...',
   'engine-manual-retry': 'Manual Retry',
-  'engine-port-conflict-hint': 'Possible causes:\n• Port {port} is occupied by another program\n• A VPN, proxy, or network accelerator is intercepting local communication\n• A firewall or antivirus is blocking the engine connection\n\nTry changing the engine port in Advanced Settings, or temporarily close the conflicting software and retry.',
+  'engine-port-conflict-hint': 'Port {port} may be occupied by a proxy, VPN, or other software. Change the port in Advanced Settings or close the conflicting software and retry.',
   'migration-success': 'User settings schema upgraded to {version}',
   'migration-incomplete': 'User settings schema could not be fully upgraded to {version}',
   'db-upgraded': 'Database schema upgraded to {version}',

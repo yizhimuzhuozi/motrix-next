@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Dong co tai xuong aria2 da khoi dong, dang xac minh tinh on dinh...',
   'engine-retrying': 'Dang thu lai...',
   'engine-manual-retry': 'Thu lai thu cong',
-  'engine-port-conflict-hint': 'Nguyên nhân có thể:\n• Cổng {port} đang bị chương trình khác chiếm dụng\n• VPN, proxy hoặc trình tăng tốc mạng đang chặn giao tiếp cục bộ\n• Tường lửa hoặc phần mềm diệt virus đang chặn kết nối động cơ\n\nGiải pháp: Thay đổi cổng động cơ trong Cài đặt nâng cao, hoặc tạm đóng phần mềm xung đột rồi thử lại.',
+  'engine-port-conflict-hint': 'Cổng {port} có thể đang bị proxy, VPN hoặc phần mềm khác chiếm dụng. Thay đổi cổng trong Cài đặt nâng cao hoặc đóng phần mềm xung đột rồi thử lại.',
   'migration-success': 'Cấu trúc cài đặt người dùng đã nâng cấp lên {version}',
   'migration-incomplete': 'Cấu trúc cài đặt người dùng không thể nâng cấp hoàn toàn lên {version}',
   'db-upgraded': 'Cấu trúc cơ sở dữ liệu đã nâng cấp lên {version}',

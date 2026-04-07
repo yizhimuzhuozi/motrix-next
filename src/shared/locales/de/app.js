@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2-Download-Engine gestartet, Stabilität wird überprüft...',
   'engine-retrying': 'Erneuter Versuch...',
   'engine-manual-retry': 'Manuell erneut versuchen',
-  'engine-port-conflict-hint': 'Mögliche Ursachen:\n• Port {port} wird von einem anderen Programm belegt\n• Ein VPN, Proxy oder Netzwerkbeschleuniger fängt die lokale Kommunikation ab\n• Eine Firewall oder ein Antivirenprogramm blockiert die Engine-Verbindung\n\nLösung: Ändern Sie den Engine-Port in den erweiterten Einstellungen oder schließen Sie die betreffende Software vorübergehend und versuchen Sie es erneut.',
+  'engine-port-conflict-hint': 'Port {port} wird möglicherweise von einem Proxy, VPN oder anderer Software belegt. Ändern Sie den Port in den erweiterten Einstellungen oder schließen Sie die konfliktverursachende Software und versuchen Sie es erneut.',
   'migration-success': 'Benutzereinstellungsstruktur auf {version} aktualisiert',
   'migration-incomplete': 'Benutzereinstellungsstruktur konnte nicht vollständig auf {version} aktualisiert werden',
   'db-upgraded': 'Datenbankstruktur auf {version} aktualisiert',

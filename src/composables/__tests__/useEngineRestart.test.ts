@@ -22,7 +22,13 @@ vi.mock('@/api/aria2', () => ({
 }))
 
 // Mock app store
-const mockAppStore = { engineReady: true, engineInitializing: false }
+const mockAppStore = {
+  engineReady: true,
+  engineRestarting: false,
+  setEngineRestarting(val: boolean) {
+    mockAppStore.engineRestarting = val
+  },
+}
 vi.mock('@/stores/app', () => ({
   useAppStore: () => mockAppStore,
 }))
@@ -33,7 +39,7 @@ describe('useEngineRestart', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockAppStore.engineReady = true
-    mockAppStore.engineInitializing = false
+    mockAppStore.engineRestarting = false
     // By default, invoke and reconnect succeed immediately
     mockInvoke.mockResolvedValue(undefined)
     mockReconnect.mockResolvedValue(undefined)

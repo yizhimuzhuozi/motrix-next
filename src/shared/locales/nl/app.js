@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2-downloadengine gestart, stabiliteit wordt gecontroleerd...',
   'engine-retrying': 'Opnieuw proberen...',
   'engine-manual-retry': 'Handmatig opnieuw proberen',
-  'engine-port-conflict-hint': 'Mogelijke oorzaken:\n• Poort {port} wordt gebruikt door een ander programma\n• Een VPN, proxy of netwerkversneller onderschept lokale communicatie\n• Een firewall of antivirusprogramma blokkeert de motorverbinding\n\nOplossing: Wijzig de motorpoort in Geavanceerde instellingen, of sluit de conflicterende software tijdelijk en probeer het opnieuw.',
+  'engine-port-conflict-hint': 'Poort {port} wordt mogelijk gebruikt door een proxy, VPN of andere software. Wijzig de poort in Geavanceerde instellingen of sluit de conflicterende software en probeer het opnieuw.',
   'migration-success': 'Gebruikersinstellingenstructuur bijgewerkt naar {version}',
   'migration-incomplete': 'Gebruikersinstellingenstructuur kon niet volledig worden bijgewerkt naar {version}',
   'db-upgraded': 'Databasestructuur bijgewerkt naar {version}',

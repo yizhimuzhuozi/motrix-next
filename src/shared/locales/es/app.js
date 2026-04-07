@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'El motor de descarga aria2 se ha iniciado, verificando estabilidad...',
   'engine-retrying': 'Reintentando...',
   'engine-manual-retry': 'Reintentar manualmente',
-  'engine-port-conflict-hint': 'Posibles causas:\n• El puerto {port} está ocupado por otro programa\n• Una VPN, proxy o acelerador de red intercepta la comunicación local\n• El firewall o antivirus bloquea la conexión del motor\n\nSolución: Cambie el puerto del motor en Configuración avanzada, o cierre temporalmente el software en conflicto y vuelva a intentarlo.',
+  'engine-port-conflict-hint': 'El puerto {port} puede estar ocupado por un proxy, VPN u otro software. Cambie el puerto en Configuración avanzada o cierre el software en conflicto y vuelva a intentarlo.',
   'migration-success': 'Estructura de configuración de usuario actualizada a {version}',
   'migration-incomplete': 'La estructura de configuración de usuario no se pudo actualizar completamente a {version}',
   'db-upgraded': 'Estructura de base de datos actualizada a {version}',

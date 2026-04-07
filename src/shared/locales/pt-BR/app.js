@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'O motor de download aria2 foi iniciado, verificando estabilidade...',
   'engine-retrying': 'Tentando novamente...',
   'engine-manual-retry': 'Tentar manualmente',
-  'engine-port-conflict-hint': 'Possíveis causas:\n• A porta {port} está sendo usada por outro programa\n• Uma VPN, proxy ou acelerador de rede está interceptando a comunicação local\n• O firewall ou antivírus está bloqueando a conexão do mecanismo\n\nSolução: Altere a porta do mecanismo nas Configurações avançadas, ou feche temporariamente o software em conflito e tente novamente.',
+  'engine-port-conflict-hint': 'A porta {port} pode estar sendo usada por um proxy, VPN ou outro software. Altere a porta nas Configurações avançadas ou feche o software em conflito e tente novamente.',
   'migration-success': 'Estrutura das configurações do usuário atualizada para {version}',
   'migration-incomplete': 'A estrutura das configurações do usuário não pôde ser totalmente atualizada para {version}',
   'db-upgraded': 'Estrutura do banco de dados atualizada para {version}',

@@ -44,7 +44,8 @@ const attempt = ref(0)
 const statusKey = ref<'engine-recovering' | 'engine-verifying-stability'>('engine-recovering')
 const rpcPort = computed(() => Number(preferenceStore.config.rpcListenPort) || 16800)
 
-// ── Right action button state machine ─────────────────────────────────
+// ── Button label state machines ───────────────────────────────────────
+const dismissLabel = computed(() => (phase.value === 'recovering' ? 'app.cancel' : 'app.close'))
 const actionLabel = computed(() => {
   switch (phase.value) {
     case 'recovering':
@@ -205,9 +206,6 @@ watch(
             </div>
             <NText class="engine-main-text">{{ t('app.engine-unrecoverable') }}</NText>
             <div class="engine-warning-box">
-              <NText depth="3" class="engine-hint">
-                {{ t('app.engine-dismiss-warning') }}
-              </NText>
               <NText depth="3" class="engine-hint engine-port-hint">
                 {{ t('app.engine-port-conflict-hint', { port: rpcPort }) }}
               </NText>
@@ -217,7 +215,9 @@ watch(
       </div>
       <div class="engine-dialog-footer">
         <NButton style="min-width: 120px" @click="dismiss">
-          {{ t('app.close') }}
+          <Transition name="status-text" mode="out-in">
+            <span :key="dismissLabel">{{ t(dismissLabel) }}</span>
+          </Transition>
         </NButton>
         <NButton
           class="action-btn"
@@ -272,7 +272,7 @@ watch(
 .engine-dialog-body {
   position: relative;
   padding: 30px 30px 20px;
-  height: 200px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -319,7 +319,6 @@ watch(
 }
 .engine-port-hint {
   display: block;
-  margin-top: 6px;
   white-space: pre-line;
 }
 .engine-attempt-counter {
@@ -341,8 +340,11 @@ watch(
 .engine-warning-box {
   background: color-mix(in srgb, var(--m3-error) 6%, transparent);
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 14px 16px;
   max-width: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Phase switch transitions (same as UpdateDialog) */

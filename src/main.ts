@@ -53,22 +53,37 @@ window.addEventListener('unhandledrejection', (e) => {
   const appStore = useAppStore()
   const historyStore = useHistoryStore()
 
-  async function waitForEngine(port: number, secret: string, maxRetries = 10): Promise<boolean> {
+  async function waitForEngine(port: number, secret: string, maxRetries = 1): Promise<boolean> {
     const { Aria2 } = await import('@shared/aria2')
+    const ATTEMPT_TIMEOUT = 2000
     for (let i = 0; i < maxRetries; i++) {
+      const probe = new Aria2({ host: '127.0.0.1', port, secret })
       try {
-        const probe = new Aria2({ host: '127.0.0.1', port, secret })
-        await probe.open()
-        await probe.call('getVersion')
+        console.log(`[waitForEngine] attempt ${i + 1}/${maxRetries} connecting to port ${port}...`)
+        await Promise.race([
+          (async () => {
+            await probe.open()
+            await probe.call('getVersion')
+          })(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('attempt timeout')), ATTEMPT_TIMEOUT)),
+        ])
         await probe.close()
+        console.log(`[waitForEngine] connected on attempt ${i + 1}`)
         return true
       } catch (e) {
-        // Exponential backoff: 100 → 200 → 400 → 800 → 1600 → 2000 → 2000 …
+        // Force-close the socket — it may still be in CONNECTING state
+        try {
+          probe.socket?.close()
+        } catch {
+          /* ignore */
+        }
         const delay = Math.min(100 * 2 ** i, 2000)
+        console.log(`[waitForEngine] attempt ${i + 1}/${maxRetries} failed: ${e}, retry in ${delay}ms`)
         logger.debug('waitForEngine', `attempt ${i + 1}/${maxRetries} failed, retry in ${delay}ms: ${e}`)
         await new Promise((r) => setTimeout(r, delay))
       }
     }
+    console.log(`[waitForEngine] all ${maxRetries} attempts failed`)
     return false
   }
 
@@ -363,7 +378,7 @@ window.addEventListener('unhandledrejection', (e) => {
     taskStore.setApi(aria2Api)
 
     // Engine initializes in the background — does NOT block the UI.
-    // appStore.engineInitializing drives the init banner in MainLayout.
+    // appStore.engineRestarting drives the engine banner in MainLayout.
     const enginePromise = initEngine(port, secret, config)
 
     // ── Phase 3: non-critical IPC (parallel) ──────────────────────────────
@@ -382,7 +397,7 @@ window.addEventListener('unhandledrejection', (e) => {
     }
 
     // ── Phase 2 completion: engine ready ───────────────────────────────────
-    // try/finally guarantees engineInitializing always clears, even on failure.
+    // try/finally guarantees engineRestarting always clears, even on failure.
     // engineReady distinguishes success from failure for the UI toast.
     try {
       const ok = await enginePromise
@@ -400,7 +415,7 @@ window.addEventListener('unhandledrejection', (e) => {
       logger.error('Engine', 'unexpected startup error: ' + e)
       appStore.engineReady = false
     } finally {
-      appStore.engineInitializing = false
+      appStore.setEngineRestarting(false)
     }
 
     // Resume all paused/waiting tasks on launch if configured

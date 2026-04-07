@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Le moteur de telechargement aria2 a demarre, verification de la stabilite...',
   'engine-retrying': 'Nouvelle tentative...',
   'engine-manual-retry': 'Reessayer manuellement',
-  'engine-port-conflict-hint': 'Causes possibles :\n• Le port {port} est occupé par un autre programme\n• Un VPN, proxy ou accélérateur réseau intercepte la communication locale\n• Le pare-feu ou l\u0027antivirus bloque la connexion du moteur\n\nSolution : Changez le port du moteur dans les Paramètres avancés, ou fermez temporairement le logiciel en conflit et réessayez.',
+  'engine-port-conflict-hint': 'Le port {port} est peut-être occupé par un proxy, VPN ou autre logiciel. Changez le port dans les Paramètres avancés ou fermez le logiciel en conflit et réessayez.',
   'migration-success': 'Structure des paramètres utilisateur mise à jour vers {version}',
   'migration-incomplete': 'La structure des paramètres utilisateur n\'a pas pu être entièrement mise à jour vers {version}',
   'protocol-hijacked-title': 'L\'association de liens nécessite une confirmation',

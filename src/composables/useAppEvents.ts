@@ -23,7 +23,7 @@ interface AppEventsDeps {
     enqueueBatch: (items: ReturnType<typeof createBatchItem>[]) => number
     handleDeepLinkUrls: (urls: string[]) => void
     engineReady: boolean
-    engineInitializing: boolean
+    engineRestarting: boolean
   }
   taskStore: {
     taskList: unknown[]
@@ -116,7 +116,7 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
     )
 
     const stopEngineWatch: WatchStopHandle = watch(
-      () => appStore.engineInitializing,
+      () => appStore.engineRestarting,
       (initializing) => {
         if (!initializing) {
           if (appStore.engineReady) {

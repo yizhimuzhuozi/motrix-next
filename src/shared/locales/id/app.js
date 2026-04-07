@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Mesin unduh aria2 dimulai, memverifikasi stabilitas...',
   'engine-retrying': 'Mencoba lagi...',
   'engine-manual-retry': 'Coba Lagi Manual',
-  'engine-port-conflict-hint': 'Kemungkinan penyebab:\n• Port {port} digunakan oleh program lain\n• VPN, proxy, atau akselerator jaringan mencegat komunikasi lokal\n• Firewall atau antivirus memblokir koneksi engine\n\nSolusi: Ubah port engine di Pengaturan Lanjutan, atau tutup sementara perangkat lunak terkait dan coba lagi.',
+  'engine-port-conflict-hint': 'Port {port} mungkin digunakan oleh proxy, VPN, atau perangkat lunak lain. Ubah port di Pengaturan Lanjutan atau tutup perangkat lunak yang berkonflik dan coba lagi.',
   'migration-success': 'Struktur pengaturan pengguna ditingkatkan ke {version}',
   'migration-incomplete': 'Struktur pengaturan pengguna tidak dapat ditingkatkan sepenuhnya ke {version}',
   'db-upgraded': 'Struktur database ditingkatkan ke {version}',

@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 下载引擎已启动，正在验证稳定性...',
   'engine-retrying': '正在重试...',
   'engine-manual-retry': '手动重试',
-  'engine-port-conflict-hint': '可能的原因：\n• 通信端口 {port} 被其他程序占用\n• 代理、VPN 或网络加速器拦截了本地通信\n• 防火墙或杀毒软件阻止了引擎连接\n\n建议：前往高级设置更改引擎端口，或暂时关闭相关软件后重试。',
+  'engine-port-conflict-hint': '端口 {port} 可能被代理、VPN 或其他软件占用，请在高级设置中更换端口或关闭冲突软件后重试。',
   'migration-success': '用户设置结构已升级至 {version}',
   'migration-incomplete': '用户设置结构未能完全升级至 {version}',
   'db-upgraded': '数据库结构已升级至 {version}',

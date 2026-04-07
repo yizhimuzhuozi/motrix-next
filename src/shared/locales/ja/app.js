@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 ダウンロードエンジンを起動しました。安定性を確認中...',
   'engine-retrying': '再試行中...',
   'engine-manual-retry': '手動で再試行',
-  'engine-port-conflict-hint': '考えられる原因：\n• ポート {port} が他のプログラムに使用されています\n• VPN、プロキシ、またはネットワークアクセラレータがローカル通信を妨げています\n• ファイアウォールまたはウイルス対策ソフトがエンジン接続をブロックしています\n\n対処法：詳細設定でエンジンポートを変更するか、競合するソフトウェアを一時的に終了してから再試行してください。',
+  'engine-port-conflict-hint': 'ポート {port} がプロキシ、VPN、または他のソフトウェアに使用されている可能性があります。詳細設定でポートを変更するか、競合するソフトウェアを終了してから再試行してください。',
   'migration-success': 'ユーザー設定構造が {version} にアップグレードされました',
   'migration-incomplete': 'ユーザー設定構造を {version} に完全にアップグレードできませんでした',
   'db-upgraded': 'データベース構造が {version} にアップグレードされました',

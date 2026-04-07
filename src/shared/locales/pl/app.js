@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Silnik pobierania aria2 uruchomiony, weryfikacja stabilnosci...',
   'engine-retrying': 'Ponowna proba...',
   'engine-manual-retry': 'Ponow probe recznie',
-  'engine-port-conflict-hint': 'Możliwe przyczyny:\n• Port {port} jest zajęty przez inny program\n• VPN, proxy lub akcelerator sieci przechwytuje komunikację lokalną\n• Zapora sieciowa lub antywirus blokuje połączenie silnika\n\nRozwiązanie: Zmień port silnika w Ustawieniach zaawansowanych lub tymczasowo zamknij kolidujące oprogramowanie i spróbuj ponownie.',
+  'engine-port-conflict-hint': 'Port {port} może być zajęty przez proxy, VPN lub inne oprogramowanie. Zmień port w Ustawieniach zaawansowanych lub zamknij oprogramowanie powodujące konflikt i spróbuj ponownie.',
   'migration-success': 'Struktura ustawień użytkownika zaktualizowana do {version}',
   'migration-incomplete': 'Struktura ustawień użytkownika nie mogła zostać w pełni zaktualizowana do {version}',
   'db-upgraded': 'Struktura bazy danych zaktualizowana do {version}',

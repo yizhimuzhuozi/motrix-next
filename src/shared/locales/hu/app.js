@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Az aria2 letoltomotor elindult, stabilitas ellenorzese...',
   'engine-retrying': 'Ujraproba...',
   'engine-manual-retry': 'Manualis ujraproba',
-  'engine-port-conflict-hint': 'Lehetséges okok:\n• A(z) {port} portot egy másik program foglalja\n• Egy VPN, proxy vagy hálózati gyorsító elfogja a helyi kommunikációt\n• A tűzfal vagy a vírusirtó blokkolja a motor kapcsolatát\n\nMegoldás: Módosítsa a motor portját a Speciális beállításokban, vagy ideiglenesen zárja be az érintett szoftvert, és próbálja újra.',
+  'engine-port-conflict-hint': 'A(z) {port} portot egy proxy, VPN vagy más szoftver foglalhatja. Módosítsa a portot a Speciális beállításokban, vagy zárja be az ütköző szoftvert, és próbálja újra.',
   'migration-success': 'Felhasználói beállítások struktúrája frissítve a(z) {version} verzióra',
   'migration-incomplete': 'A felhasználói beállítások struktúrája nem frissíthető teljesen a(z) {version} verzióra',
   'db-upgraded': 'Adatbázis struktúra frissítve a(z) {version} verzióra',

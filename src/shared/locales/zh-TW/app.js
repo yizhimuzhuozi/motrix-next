@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 下載引擎已啟動，正在驗證穩定性...',
   'engine-retrying': '正在重試...',
   'engine-manual-retry': '手動重試',
-  'engine-port-conflict-hint': '可能的原因：\n• 通訊連接埠 {port} 被其他程式佔用\n• 代理、VPN 或網路加速器攔截了本機通訊\n• 防火牆或防毒軟體阻止了引擎連線\n\n建議：前往進階設定更改引擎連接埠，或暫時關閉相關軟體後重試。',
+  'engine-port-conflict-hint': '連接埠 {port} 可能被代理、VPN 或其他軟體佔用，請在進階設定中更換連接埠或關閉衝突軟體後重試。',
   'migration-success': '使用者設定結構已升級至 {version}',
   'migration-incomplete': '使用者設定結構未能完全升級至 {version}',
   'db-upgraded': '資料庫結構已升級至 {version}',

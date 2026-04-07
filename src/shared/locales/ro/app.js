@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'Motorul de descarcare aria2 a pornit, se verifica stabilitatea...',
   'engine-retrying': 'Se reincearca...',
   'engine-manual-retry': 'Reincearca manual',
-  'engine-port-conflict-hint': 'Cauze posibile:\n• Portul {port} este ocupat de un alt program\n• Un VPN, proxy sau accelerator de rețea interceptează comunicarea locală\n• Firewall-ul sau antivirusul blochează conexiunea motorului\n\nSoluție: Schimbați portul motorului în Setări avansate sau închideți temporar software-ul în conflict și încercați din nou.',
+  'engine-port-conflict-hint': 'Portul {port} poate fi ocupat de un proxy, VPN sau alt software. Schimbați portul în Setări avansate sau închideți software-ul în conflict și încercați din nou.',
   'migration-success': 'Structura setărilor utilizatorului actualizată la {version}',
   'migration-incomplete': 'Structura setărilor utilizatorului nu a putut fi actualizată complet la {version}',
   'db-upgraded': 'Structura bazei de date actualizată la {version}',

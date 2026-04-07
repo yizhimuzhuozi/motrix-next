@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 다운로드 엔진이 시작되었습니다. 안정성 확인 중...',
   'engine-retrying': '재시도 중...',
   'engine-manual-retry': '수동 재시도',
-  'engine-port-conflict-hint': '가능한 원인:\n• 포트 {port}이(가) 다른 프로그램에 의해 사용 중입니다\n• VPN, 프록시 또는 네트워크 가속기가 로컬 통신을 가로채고 있습니다\n• 방화벽 또는 바이러스 백신이 엔진 연결을 차단하고 있습니다\n\n해결 방법: 고급 설정에서 엔진 포트를 변경하거나, 충돌하는 소프트웨어를 일시적으로 종료한 후 다시 시도하세요.',
+  'engine-port-conflict-hint': '포트 {port}이(가) 프록시, VPN 또는 다른 소프트웨어에 의해 사용 중일 수 있습니다. 고급 설정에서 포트를 변경하거나 충돌하는 소프트웨어를 종료한 후 다시 시도하세요.',
   'migration-success': '사용자 설정 구조가 {version}으로 업그레이드되었습니다',
   'migration-incomplete': '사용자 설정 구조를 {version}으로 완전히 업그레이드할 수 없습니다',
   'db-upgraded': '데이터베이스 구조가 {version}으로 업그레이드되었습니다',

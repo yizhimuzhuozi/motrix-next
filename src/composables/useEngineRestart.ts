@@ -38,7 +38,7 @@ export function useEngineRestart() {
 
     // Signal "restarting" to the UI
     appStore.engineReady = false
-    appStore.engineInitializing = true
+    appStore.setEngineRestarting(true)
     setEngineReady(false)
 
     try {
@@ -82,7 +82,7 @@ export function useEngineRestart() {
       appStore.engineReady = false
       return false
     } finally {
-      appStore.engineInitializing = false
+      appStore.setEngineRestarting(false)
       isRestarting.value = false
     }
   }

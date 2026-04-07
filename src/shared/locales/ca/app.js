@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'El motor de descarrega aria2 s\u0027ha iniciat, verificant estabilitat...',
   'engine-retrying': 'Reintentant...',
   'engine-manual-retry': 'Reintentar manualment',
-  'engine-port-conflict-hint': 'Possibles causes:\n• El port {port} està ocupat per un altre programa\n• Un VPN, servidor intermediari o accelerador de xarxa intercepta la comunicació local\n• El tallafocs o l\u0027antivirus bloqueja la connexió del motor\n\nSolució: Aneu a la Configuració avançada per canviar el port del motor, o tanqueu temporalment el programari implicat i torneu-ho a provar.',
+  'engine-port-conflict-hint': 'El port {port} pot estar ocupat per un programa intermediari, VPN o un altre programari. Canvieu el port a la Configuració avançada o tanqueu el programari en conflicte i torneu-ho a provar.',
   'migration-success': 'L\'estructura de configuració de l\'usuari s\'ha actualitzat a {version}',
   'migration-incomplete': 'L\'estructura de configuració de l\'usuari no s\'ha pogut actualitzar completament a {version}',
   'protocol-hijacked-title': 'Cal confirmar l\'associació d\'enllaços',

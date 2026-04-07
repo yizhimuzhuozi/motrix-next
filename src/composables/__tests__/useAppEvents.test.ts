@@ -69,7 +69,7 @@ function createDeps() {
     enqueueBatch: vi.fn(() => 0),
     handleDeepLinkUrls: vi.fn(),
     engineReady: false,
-    engineInitializing: true,
+    engineRestarting: true,
   })
   const taskStore = reactive({
     taskList: [] as unknown[],
@@ -157,11 +157,11 @@ describe('useAppEvents', () => {
     const listeners = await setupListeners()
     expect(typeof (listeners as { teardown?: unknown }).teardown).toBe('function')
 
-    appStore.engineInitializing = false
+    appStore.engineRestarting = false
     await nextTick()
     expect(message.error).toHaveBeenCalledTimes(1)
 
-    appStore.engineInitializing = true
+    appStore.engineRestarting = true
     await nextTick()
     message.success.mockClear()
     message.error.mockClear()
@@ -169,7 +169,7 @@ describe('useAppEvents', () => {
     message.info.mockClear()
     ;(listeners as { teardown: () => void }).teardown()
 
-    appStore.engineInitializing = false
+    appStore.engineRestarting = false
     await nextTick()
 
     expect(message.error).not.toHaveBeenCalled()
@@ -192,7 +192,7 @@ describe('useAppEvents', () => {
     await setupListeners()
     unmount()
 
-    appStore.engineInitializing = false
+    appStore.engineRestarting = false
     await nextTick()
 
     expect(message.error).not.toHaveBeenCalled()

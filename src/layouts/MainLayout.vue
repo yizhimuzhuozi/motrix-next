@@ -812,9 +812,9 @@ onUnmounted(() => {
     }"
   >
     <!-- Minimal progress bar during engine initialization / restart -->
-    <Transition name="init-slide">
-      <div v-if="appStore.engineInitializing" class="init-banner">
-        <div class="init-progress" />
+    <Transition name="engine-slide">
+      <div v-if="appStore.engineRestarting" class="engine-banner">
+        <div class="engine-progress" />
       </div>
     </Transition>
     <AsideBar @show-about="showAbout = true" />
@@ -969,7 +969,7 @@ onUnmounted(() => {
 }
 
 /* Minimal progress bar during engine initialization / restart */
-.init-banner {
+.engine-banner {
   position: fixed;
   top: 0;
   left: 0;
@@ -979,18 +979,18 @@ onUnmounted(() => {
   overflow: hidden;
   pointer-events: none;
 }
-.init-progress {
+.engine-progress {
   position: absolute;
   top: 0;
   left: 0;
   height: 2px;
   width: 30%;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-  animation: init-indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: engine-indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   will-change: transform;
   contain: layout style paint;
 }
-@keyframes init-indeterminate {
+@keyframes engine-indeterminate {
   0% {
     left: -30%;
   }
@@ -998,18 +998,18 @@ onUnmounted(() => {
     left: 100%;
   }
 }
-.init-slide-enter-active {
+.engine-slide-enter-active {
   transition:
     transform 0.25s cubic-bezier(0, 0, 0, 1),
     opacity 0.2s linear;
 }
-.init-slide-leave-active {
+.engine-slide-leave-active {
   transition:
     transform 0.2s cubic-bezier(0.3, 0, 1, 1),
     opacity 0.15s linear;
 }
-.init-slide-enter-from,
-.init-slide-leave-to {
+.engine-slide-enter-from,
+.engine-slide-leave-to {
   transform: translateY(-100%);
   opacity: 0;
 }

@@ -79,7 +79,7 @@ export default {
   'engine-verifying-stability': 'aria2 indirme motoru baslatildi, kararlilik dogrulaniyor...',
   'engine-retrying': 'Tekrar deneniyor...',
   'engine-manual-retry': 'Manuel olarak tekrar dene',
-  'engine-port-conflict-hint': 'Olası nedenler:\n• {port} numaralı bağlantı noktası başka bir program tarafından kullanılıyor\n• Bir VPN, proxy veya ağ hızlandırıcı yerel iletişimi engelliyor\n• Güvenlik duvarı veya antivirüs, motor bağlantısını engelliyor\n\nÇözüm: Gelişmiş Ayarlar\u0027dan motor bağlantı noktasını değiştirin veya çakışan yazılımı geçici olarak kapatıp tekrar deneyin.',
+  'engine-port-conflict-hint': 'Bağlantı noktası {port} bir proxy, VPN veya başka bir yazılım tarafından kullanılıyor olabilir. Gelişmiş Ayarlar\'dan bağlantı noktasını değiştirin veya çakışan yazılımı kapatıp tekrar deneyin.',
   'migration-success': 'Kullanıcı ayarları yapısı {version} sürümüne yükseltildi',
   'migration-incomplete': 'Kullanıcı ayarları yapısı {version} sürümüne tam olarak yükseltilemedi',
   'db-upgraded': 'Veritabanı yapısı {version} sürümüne yükseltildi',

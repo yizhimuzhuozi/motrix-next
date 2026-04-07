@@ -49,7 +49,27 @@ export const useAppStore = defineStore('app', () => {
   const addTaskOptions = ref<Aria2EngineOptions>({})
   const progress = ref(0)
   const pendingUpdate = ref<TauriUpdate | null>(null)
-  const engineInitializing = ref(true)
+  const engineRestarting = ref(true)
+  let engineRestartingSince = Date.now()
+  const MIN_BANNER_MS = 1000
+
+  /** Set engine restarting state with minimum display time to prevent flicker. */
+  function setEngineRestarting(value: boolean) {
+    if (value) {
+      engineRestarting.value = true
+      engineRestartingSince = Date.now()
+    } else {
+      const elapsed = Date.now() - engineRestartingSince
+      const remaining = MIN_BANNER_MS - elapsed
+      if (remaining > 0) {
+        setTimeout(() => {
+          engineRestarting.value = false
+        }, remaining)
+      } else {
+        engineRestarting.value = false
+      }
+    }
+  }
   const engineReady = ref(false)
   const pendingMagnetGids = ref<string[]>([])
   /** Protocols detected as hijacked at startup (set by syncProtocolHandlers). */
@@ -283,7 +303,8 @@ export const useAppStore = defineStore('app', () => {
     addTaskOptions,
     progress,
     pendingUpdate,
-    engineInitializing,
+    engineRestarting,
+    setEngineRestarting,
     engineReady,
     pendingMagnetGids,
     updateInterval,
