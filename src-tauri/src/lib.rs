@@ -140,6 +140,27 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = app_handle.emit("deep-link-open", &urls);
     });
 
+    // Register all configured deep-link schemes at startup on Linux.
+    //
+    // The .deb bundler installs `motrix-next.desktop` in /usr/share/applications/,
+    // but the deep-link plugin's `is_registered()` expects a runtime-created
+    // `motrix-next-handler.desktop` in ~/.local/share/applications/.  Without
+    // this call, `is_registered()` always returns false on .deb installs,
+    // causing protocol toggles to appear disabled (see issue #180).
+    //
+    // `register_all()` is idempotent — it skips schemes whose handler file
+    // already exists and is up-to-date.  The generated file uses NoDisplay=true
+    // to avoid duplicate entries in the application menu.
+    //
+    // On macOS and Windows this is compile-time excluded: those platforms use
+    // native registration APIs in commands/protocol.rs instead.
+    #[cfg(target_os = "linux")]
+    {
+        if let Err(e) = app.deep_link().register_all() {
+            log::warn!("deep-link: register_all failed (non-fatal): {e}");
+        }
+    }
+
     // Conditionally restore window state based on user preference.
     // The window-state plugin is registered with skip_initial_state("main")
     // so it does NOT auto-restore.  We read the preference here and
