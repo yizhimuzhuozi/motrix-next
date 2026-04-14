@@ -20,6 +20,7 @@ import {
 } from '@shared/utils'
 import { decodePathSegment } from '@shared/utils/batchHelpers'
 import { calcColumnWidth } from '@shared/utils/calcColumnWidth'
+import { countryCodeToFlag, lookupPeerIps, type GeoInfo } from '@shared/utils/geoip'
 import {
   NDrawer,
   NDrawerContent,
@@ -36,6 +37,7 @@ import {
   NFormItem,
   NCollapseTransition,
   NEllipsis,
+  NTooltip,
 } from 'naive-ui'
 import {
   InformationCircleOutline,
@@ -276,19 +278,23 @@ const fileColumns = computed(() => {
 const peers = computed(() => {
   if (!props.task || !isBT.value) return []
   const p = props.task.peers
-  return (p || []).map((peer: Aria2Peer) => ({
-    host: `${peer.ip}:${peer.port}`,
-    client: peerIdParser(peer.peerId),
-    percent: peer.bitfield ? bitfieldToPercent(peer.bitfield) + '%' : '-',
-    uploadSpeed: bytesToSize(peer.uploadSpeed) + '/s',
-    downloadSpeed: bytesToSize(peer.downloadSpeed) + '/s',
-    amChoking: peer.amChoking === 'true',
-    peerChoking: peer.peerChoking === 'true',
-    seeder: peer.seeder === 'true',
-  }))
+  return (p || [])
+    .map((peer: Aria2Peer) => ({
+      host: `${peer.ip}:${peer.port}`,
+      client: peerIdParser(peer.peerId),
+      percent: peer.bitfield ? bitfieldToPercent(peer.bitfield) + '%' : '-',
+      uploadSpeed: bytesToSize(peer.uploadSpeed) + '/s',
+      downloadSpeed: bytesToSize(peer.downloadSpeed) + '/s',
+      amChoking: peer.amChoking === 'true',
+      peerChoking: peer.peerChoking === 'true',
+      seeder: peer.seeder === 'true',
+    }))
+    .sort((a, b) => a.host.localeCompare(b.host))
+    .map((row, i) => ({ ...row, index: i + 1 }))
 })
 
 interface PeerRow {
+  index: number
   host: string
   client: string
   percent: string
@@ -299,10 +305,64 @@ interface PeerRow {
   seeder: boolean
 }
 
+// ── GeoIP: peer country flag resolution ──────────────────────────────
+const geoCache = ref<Record<string, GeoInfo>>({})
+
+watch(
+  peers,
+  async (list) => {
+    const uniqueIps = [...new Set(list.map((p) => p.host.split(':')[0]))]
+    if (uniqueIps.length === 0) {
+      geoCache.value = {}
+      return
+    }
+    try {
+      geoCache.value = await lookupPeerIps(uniqueIps)
+    } catch {
+      // Graceful degradation: flags show nothing when lookup fails
+    }
+  },
+  { immediate: true },
+)
+
 const peerColumns = computed(() => {
   const data = peers.value
   return [
-    { title: t('task.task-peer-host'), key: 'host', minWidth: 140 },
+    {
+      title: t('task.task-tracker-tier'),
+      key: 'index',
+      width: calcColumnWidth({
+        title: t('task.task-tracker-tier'),
+        values: data.map((r) => String(r.index)),
+        sortable: true,
+      }),
+      align: 'center' as const,
+      sorter: (a: PeerRow, b: PeerRow) => a.index - b.index,
+      defaultSortOrder: 'ascend' as const,
+    },
+    {
+      title: t('task.task-peer-host'),
+      key: 'host',
+      minWidth: 160,
+      render: (row: PeerRow) => {
+        const ip = row.host.split(':')[0]
+        const geo = geoCache.value[ip]
+        if (!geo) return row.host
+        const flag = countryCodeToFlag(geo.country_code)
+        return h('span', { style: 'white-space: nowrap' }, [
+          h(
+            NTooltip,
+            { placement: 'top' },
+            {
+              trigger: () => h('span', { style: 'cursor: default' }, flag),
+              default: () => `${geo.country_name} · ${geo.continent}`,
+            },
+          ),
+          ' ',
+          row.host,
+        ])
+      },
+    },
     {
       title: t('task.task-peer-client'),
       key: 'client',

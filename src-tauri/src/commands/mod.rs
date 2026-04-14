@@ -1,6 +1,7 @@
 pub mod config;
 pub mod engine;
 pub mod fs;
+pub mod geoip;
 pub mod net;
 pub mod protocol;
 pub mod proxy;
@@ -12,6 +13,7 @@ pub mod upnp;
 pub use config::*;
 pub use engine::*;
 pub use fs::*;
+pub use geoip::*;
 pub use net::*;
 pub use protocol::*;
 pub use proxy::*;

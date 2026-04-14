@@ -342,6 +342,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // that WebKitGTK's EGL init succeeded — safe to delete the sentinel.
     gpu_guard::mark_healthy();
 
+    // ── GeoIP: load bundled DB-IP Country Lite for peer country flags ─
+    let geoip_state = commands::geoip::init_geoip(&app.handle().clone());
+    app.manage(geoip_state);
+
     Ok(())
 }
 
@@ -653,6 +657,7 @@ pub fn run() {
             commands::remove_as_default_protocol_client,
             commands::fetch_remote_bytes,
             commands::get_system_proxy,
+            commands::lookup_peer_ips,
         ])
         // ── Window event interception ─────────────────────────────────
         //

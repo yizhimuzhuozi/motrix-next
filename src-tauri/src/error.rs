@@ -31,6 +31,10 @@ pub enum AppError {
     /// Protocol handler registration/query error.
     #[error("Protocol error: {0}")]
     Protocol(String),
+    /// GeoIP database lookup error.
+    #[error("GeoIP error: {0}")]
+    #[allow(dead_code)]
+    GeoIp(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -93,6 +97,12 @@ mod tests {
         assert_eq!(e.to_string(), "Protocol error: unsupported platform");
     }
 
+    #[test]
+    fn display_geoip_error() {
+        let e = AppError::GeoIp("database not found".into());
+        assert_eq!(e.to_string(), "GeoIP error: database not found");
+    }
+
     // ── From conversions ────────────────────────────────────────────
 
     #[test]
@@ -136,6 +146,7 @@ mod tests {
             ("Updater", AppError::Updater("u".into())),
             ("Upnp", AppError::Upnp("p".into())),
             ("Protocol", AppError::Protocol("r".into())),
+            ("GeoIp", AppError::GeoIp("g".into())),
         ];
         for (tag, err) in cases {
             let json = serde_json::to_string(&err).expect("serialize");

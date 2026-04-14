@@ -48,6 +48,7 @@ os_info = "3"
 sys-locale = "0.3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rfd = { version = "0.16", default-features = false }
+maxminddb = { version = "0.27", features = ["mmap"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
