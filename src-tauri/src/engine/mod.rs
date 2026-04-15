@@ -11,6 +11,6 @@ mod cleanup;
 mod lifecycle;
 mod state;
 
-pub use lifecycle::{restart_engine, save_session_rpc, start_engine, stop_engine};
+pub use lifecycle::{restart_engine, start_engine, stop_engine};
 pub(crate) use state::path_to_safe_string;
 pub use state::EngineState;

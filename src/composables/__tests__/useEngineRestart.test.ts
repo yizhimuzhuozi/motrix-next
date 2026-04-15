@@ -4,8 +4,8 @@
  * Verifies the concurrency guard that prevents multiple simultaneous engine
  * restarts — the root cause of orphaned aria2c processes.
  *
- * HONESTY NOTE: These tests use real async concurrency to prove the guard
- * works under pressure.  No mocks of the module under test.
+ * Now tests the invoke()-only flow: restart_engine_command (which runs
+ * on_engine_ready internally) + wait_for_engine (Rust-side health check).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
@@ -14,10 +14,8 @@ import { nextTick } from 'vue'
 const mockInvoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 
-// Mock reconnectClient
-const mockReconnect = vi.fn()
+// Mock aria2 API — only setEngineReady is used now
 vi.mock('@/api/aria2', () => ({
-  reconnectClient: (...args: unknown[]) => mockReconnect(...args),
   setEngineReady: vi.fn(),
 }))
 
@@ -40,9 +38,11 @@ describe('useEngineRestart', () => {
     vi.clearAllMocks()
     mockAppStore.engineReady = true
     mockAppStore.engineRestarting = false
-    // By default, invoke and reconnect succeed immediately
-    mockInvoke.mockResolvedValue(undefined)
-    mockReconnect.mockResolvedValue(undefined)
+    // By default: restart_engine_command succeeds, wait_for_engine returns true
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'wait_for_engine') return Promise.resolve(true)
+      return Promise.resolve(undefined)
+    })
   })
 
   it('exposes isRestarting ref that starts as false', () => {
@@ -107,15 +107,16 @@ describe('useEngineRestart', () => {
     expect(isRestarting.value).toBe(false)
   })
 
-  it('returns false when reconnect retries are exhausted', async () => {
-    mockReconnect.mockRejectedValue(new Error('rpc unavailable'))
+  it('returns false when wait_for_engine returns false', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'wait_for_engine') return Promise.resolve(false)
+      return Promise.resolve(undefined)
+    })
 
     const { restartEngine } = useEngineRestart()
     const result = await restartEngine({ port: 16800, secret: 'test' })
-
     expect(result).toBe(false)
-    expect(mockReconnect).toHaveBeenCalledTimes(5)
-  }, 7000)
+  })
 
   it('allows restart after a previous one completes', async () => {
     const { restartEngine, isRestarting } = useEngineRestart()
@@ -126,19 +127,20 @@ describe('useEngineRestart', () => {
 
     // Second restart should also be allowed
     const result = await restartEngine({ port: 16800, secret: 'test' })
-    expect(result).not.toBe(false)
-    expect(mockInvoke).toHaveBeenCalledTimes(2)
+    expect(result).toBe(true)
   })
 
-  it('calls restart_engine_command via invoke', async () => {
+  it('calls restart_engine_command then wait_for_engine via invoke', async () => {
     const { restartEngine } = useEngineRestart()
     await restartEngine({ port: 16800, secret: 'abc' })
     expect(mockInvoke).toHaveBeenCalledWith('restart_engine_command')
+    expect(mockInvoke).toHaveBeenCalledWith('wait_for_engine')
   })
 
-  it('calls reconnectClient with correct port and secret', async () => {
+  it('sets engineReady=true on success', async () => {
+    mockAppStore.engineReady = false
     const { restartEngine } = useEngineRestart()
     await restartEngine({ port: 16800, secret: 'abc' })
-    expect(mockReconnect).toHaveBeenCalledWith({ port: 16800, secret: 'abc' })
+    expect(mockAppStore.engineReady).toBe(true)
   })
 })

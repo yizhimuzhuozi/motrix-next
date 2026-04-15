@@ -63,7 +63,7 @@ export function buildEngineOptions(form: AddTaskForm): Aria2EngineOptions {
     dir: form.dir,
     split: String(form.split),
     // max-connection-per-server is intentionally NOT set per-task.
-    // It uses the global value pushed by syncGlobalOptions(), allowing
+    // It uses the global value pushed by on_engine_ready() (Rust), allowing
     // split (segment count) and max-conn (server connection cap) to be
     // controlled independently. See: aria2 download_helper.cc:394-401.
   }

@@ -170,6 +170,28 @@ pub fn setup_tray(app: &AppHandle) -> Result<TrayMenuState, Box<dyn std::error::
                         let _ = window.set_focus();
                     }
                 }
+                "tray-pause-all" => {
+                    log::info!("tray:pause-all — calling aria2 directly");
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Some(aria2) = app.try_state::<crate::aria2::client::Aria2State>() {
+                            if let Err(e) = aria2.0.force_pause_all().await {
+                                log::warn!("tray:pause-all failed: {e}");
+                            }
+                        }
+                    });
+                }
+                "tray-resume-all" => {
+                    log::info!("tray:resume-all — calling aria2 directly");
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Some(aria2) = app.try_state::<crate::aria2::client::Aria2State>() {
+                            if let Err(e) = aria2.0.unpause_all().await {
+                                log::warn!("tray:resume-all failed: {e}");
+                            }
+                        }
+                    });
+                }
                 _ => {
                     if let Some(action) = resolve_tray_action(id) {
                         let _ = app.emit("tray-menu-action", action);
@@ -186,18 +208,16 @@ pub fn setup_tray(app: &AppHandle) -> Result<TrayMenuState, Box<dyn std::error::
 
 /// Maps a tray menu event ID to the action string emitted to the frontend.
 ///
-/// Returns `None` for the "show" action (handled natively, not forwarded)
+/// Returns `None` for actions handled natively (show, pause-all, resume-all)
 /// and for unknown IDs.
 ///
 /// This is a pure function extracted from the `on_menu_event` closure
 /// so it can be unit-tested without a Tauri runtime.
 pub fn resolve_tray_action(menu_id: &str) -> Option<&str> {
     match menu_id {
-        "tray-new-task" | "tray-resume-all" | "tray-pause-all" => {
-            Some(menu_id.strip_prefix("tray-").unwrap_or(menu_id))
-        }
+        "tray-new-task" => Some("new-task"),
         "tray-quit" => Some("quit"),
-        // "show" is handled natively (window.show + set_focus), not emitted
+        // "show", "tray-pause-all", "tray-resume-all" are handled natively
         _ => None,
     }
 }
@@ -212,13 +232,15 @@ mod tests {
     }
 
     #[test]
-    fn resolve_resume_all() {
-        assert_eq!(resolve_tray_action("tray-resume-all"), Some("resume-all"));
+    fn resolve_pause_all_handled_natively() {
+        // pause-all is now handled directly in on_menu_event, not emitted
+        assert_eq!(resolve_tray_action("tray-pause-all"), None);
     }
 
     #[test]
-    fn resolve_pause_all() {
-        assert_eq!(resolve_tray_action("tray-pause-all"), Some("pause-all"));
+    fn resolve_resume_all_handled_natively() {
+        // resume-all is now handled directly in on_menu_event, not emitted
+        assert_eq!(resolve_tray_action("tray-resume-all"), None);
     }
 
     #[test]

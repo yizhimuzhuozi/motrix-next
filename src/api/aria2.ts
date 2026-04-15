@@ -1,196 +1,98 @@
-/** @fileoverview Aria2 JSON-RPC client wrapper providing typed API for task management. */
-import { Aria2 } from '@shared/aria2'
-import { TASK_STATUS } from '@shared/constants'
+/**
+ * @fileoverview Aria2 API — invoke() transport layer.
+ *
+ * All aria2 RPC calls go through Tauri invoke() to the Rust backend.
+ * The Rust Aria2Client handles HTTP JSON-RPC communication with aria2c.
+ */
+import { invoke } from '@tauri-apps/api/core'
 import { changeKeysToCamelCase, formatOptionsForEngine } from '@shared/utils'
 import type { Aria2Task, Aria2RawGlobalStat, Aria2Peer, Aria2EngineOptions, Aria2File, AppConfig } from '@shared/types'
-import { isAria2Task, isAria2GlobalStat } from '@shared/guards'
 import { logger } from '@shared/logger'
 import { resolveDownloadDir } from '@shared/utils/fileCategory'
 
-let client: Aria2 | null = null
+/**
+ * Engine readiness state.
+ * With the Rust backend transport, readiness is determined by the engine
+ * lifecycle commands — the Aria2Client is always available once credentials
+ * are set by `on_engine_ready`.
+ */
 let engineReady = false
 
-/** Returns true when the aria2 RPC connection has been established. */
+/** Returns true when the aria2 engine has started and is accepting RPC. */
 export function isEngineReady(): boolean {
   return engineReady
 }
 
-/** Marks the engine as ready (used when WebSocket fails but HTTP RPC is available). */
+/** Marks the engine as ready/unready. */
 export function setEngineReady(ready: boolean): void {
   engineReady = ready
 }
 
-/** Returns the initialized Aria2 client instance or throws if not yet initialized. */
-export function getClient(): Aria2 {
-  if (!client) throw new Error('Aria2 client not initialized')
-  return client
-}
-
-/** Creates and opens a new Aria2 RPC client connection. */
-export async function initClient(options: { port: number; secret: string }): Promise<Aria2> {
-  client = new Aria2({
-    host: '127.0.0.1',
-    port: options.port,
-    secret: options.secret,
-  })
-  await client.open()
-  engineReady = true
-  return client
-}
-
-/** Closes the active Aria2 RPC connection and resets the client.
- *  Force-closes the raw WebSocket to avoid hanging on pending connections
- *  where the library's close() waits for an onclose event that never fires. */
-export async function closeClient(): Promise<void> {
-  if (client) {
-    const c = client
-    client = null
-    // Force-close the raw socket — the library's close() method uses
-    // `this.on('close', resolve)` which hangs if onclose never fires.
-    try {
-      if (c.socket) {
-        c.socket.onclose = null
-        c.socket.onerror = null
-        c.socket.onmessage = null
-        c.socket.onopen = null
-        c.socket.close()
-      }
-    } catch {
-      // Socket may already be destroyed — safe to ignore.
-    }
-  }
-}
-
-/** Tears down the current connection and opens a fresh one with new credentials.
- *  Includes a connection timeout to avoid hanging on unresponsive sockets.
- *  Used when restart-required settings (port, secret) change at runtime. */
-export async function reconnectClient(options: { port: number; secret: string }, timeoutMs = 3000): Promise<Aria2> {
-  await closeClient()
-  engineReady = false
-
-  // Race initClient against a timeout — WebSocket open() has no built-in
-  // deadline, so a just-started engine can cause it to hang indefinitely.
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`reconnect timed out after ${timeoutMs}ms`)), timeoutMs),
-  )
-  try {
-    return await Promise.race([initClient(options), timeout])
-  } catch (e) {
-    // On timeout, the initClient WebSocket may still be pending — tear it down.
-    await closeClient()
-    throw e
-  }
-}
-
 /** Retrieves aria2 engine version and list of enabled features. */
 export async function getVersion(): Promise<{ version: string; enabledFeatures: string[] }> {
-  return getClient().call<{ version: string; enabledFeatures: string[] }>('getVersion')
+  return invoke<{ version: string; enabledFeatures: string[] }>('aria2_get_version')
 }
 
 /** Fetches all global aria2 configuration options as camelCase keys. */
 export async function getGlobalOption(): Promise<Record<string, string>> {
-  const data = await getClient().call<Record<string, string>>('getGlobalOption')
+  const data = await invoke<Record<string, string>>('aria2_get_global_option')
   return changeKeysToCamelCase(data) as Record<string, string>
 }
 
 /** Fetches aggregated download/upload statistics from aria2. */
 export async function getGlobalStat(): Promise<Aria2RawGlobalStat> {
-  const data = await getClient().call<Aria2RawGlobalStat>('getGlobalStat')
-  if (!isAria2GlobalStat(data)) {
-    logger.warn('aria2.getGlobalStat', 'Invalid global stat response')
-  }
-  return data
+  return invoke<Aria2RawGlobalStat>('aria2_get_global_stat')
 }
 
 /** Updates aria2 global configuration at runtime. */
 export async function changeGlobalOption(options: Partial<AppConfig>): Promise<void> {
   const engineOptions = formatOptionsForEngine(options)
   logger.debug('aria2.changeGlobalOption', engineOptions)
-  await getClient().call<string>('changeGlobalOption', engineOptions)
+  await invoke<string>('aria2_change_global_option', { options: engineOptions })
 }
 
 /** Fetches the option set for a specific download task as camelCase keys. */
 export async function getOption(params: { gid: string }): Promise<Record<string, string>> {
-  const data = await getClient().call<Record<string, string>>('getOption', params.gid)
+  const data = await invoke<Record<string, string>>('aria2_get_option', { gid: params.gid })
   return changeKeysToCamelCase(data) as Record<string, string>
 }
 
 /** Modifies options for a specific download task at runtime. */
 export async function changeOption(params: { gid: string; options: Aria2EngineOptions }): Promise<void> {
   const engineOptions = formatOptionsForEngine(params.options)
-  await getClient().call<string>('changeOption', params.gid, engineOptions)
+  await invoke<string>('aria2_change_option', { gid: params.gid, options: engineOptions })
 }
 
 /** Retrieves the file list for a download task by GID. */
 export async function getFiles(params: { gid: string }): Promise<Aria2File[]> {
-  const data = await getClient().call<Record<string, unknown>[]>('getFiles', params.gid)
+  const data = await invoke<Record<string, unknown>[]>('aria2_get_files', { gid: params.gid })
   return data.map((f) => changeKeysToCamelCase(f)) as unknown as Aria2File[]
-}
-
-/** Retrieves the full status of a download task by GID. */
-async function tellStatus(gid: string): Promise<Aria2Task> {
-  return getClient().call<Aria2Task>('tellStatus', gid)
-}
-
-/** Lists all actively downloading tasks. */
-async function tellActive(): Promise<Aria2Task[]> {
-  return getClient().call<Aria2Task[]>('tellActive')
-}
-
-/** Lists waiting (queued) tasks from the given offset. */
-async function tellWaiting(offset: number, num: number): Promise<Aria2Task[]> {
-  return getClient().call<Aria2Task[]>('tellWaiting', offset, num)
-}
-
-/** Lists stopped/completed/errored tasks from the given offset. */
-async function tellStopped(offset: number, num: number): Promise<Aria2Task[]> {
-  return getClient().call<Aria2Task[]>('tellStopped', offset, num)
 }
 
 /** Fetches only active tasks (no waiting). */
 export async function fetchActiveTaskList(): Promise<Aria2Task[]> {
-  return tellActive()
+  return invoke<Aria2Task[]>('aria2_fetch_active_task_list')
 }
 
-/** Fetches task list by status type: active+waiting or stopped.
- *  For stopped type, an optional limit controls the maximum number of entries
- *  retrieved from aria2 (defaults to 1000). Active type ignores limit. */
+/** Fetches task list by status type: active+waiting or stopped. */
 export async function fetchTaskList(params: { type: string; limit?: number }): Promise<Aria2Task[]> {
-  const { type, limit } = params
-  switch (type) {
-    case TASK_STATUS.ACTIVE: {
-      const [active, waiting] = await Promise.all([tellActive(), tellWaiting(0, 1000)])
-      // Preserve aria2's native queue order (IndexedList<deque> insertion order).
-      // GIDs are random — sorting by GID produces meaningless ordering.
-      return [...active, ...waiting]
-    }
-    default:
-      // aria2's stopped list is in completion-time order (deque push_back on finish).
-      return tellStopped(0, limit ?? 1000)
-  }
+  return invoke<Aria2Task[]>('aria2_fetch_task_list', {
+    type: params.type,
+    limit: params.limit ?? null,
+  })
 }
 
 /** Fetches a single task's full status by GID. */
 export async function fetchTaskItem(params: { gid: string }): Promise<Aria2Task> {
-  const data = await tellStatus(params.gid)
-  if (!isAria2Task(data)) {
-    logger.warn('aria2.fetchTaskItem', `Invalid task response for gid ${params.gid}`)
-  }
-  return data
+  return invoke<Aria2Task>('aria2_fetch_task_item', { gid: params.gid })
 }
 
 /** Fetches a single task's status along with its peer list (for BT tasks). */
 export async function fetchTaskItemWithPeers(params: { gid: string }): Promise<Aria2Task & { peers: Aria2Peer[] }> {
-  const [task, peers] = await Promise.all([
-    tellStatus(params.gid),
-    getClient().call<Aria2Peer[]>('getPeers', params.gid),
-  ])
-  return { ...task, peers }
+  return invoke<Aria2Task & { peers: Aria2Peer[] }>('aria2_fetch_task_item_with_peers', { gid: params.gid })
 }
 
-/** Adds one or more URI downloads with per-URI output filename overrides.
- *  When fileCategory is provided, each URI's `dir` is resolved independently
- *  based on its file extension — enabling smart path classification. */
+/** Adds one or more URI downloads with per-URI output filename overrides. */
 export async function addUri(params: {
   uris: string[]
   outs: string[]
@@ -199,7 +101,9 @@ export async function addUri(params: {
 }): Promise<string[]> {
   const { uris, outs, options, fileCategory } = params
   const engineOptions = formatOptionsForEngine(options)
-  const tasks = uris.map((uri, index) => {
+
+  // Each URI gets its own aria2 task with optional per-URI overrides
+  const tasks = uris.map(async (uri, index) => {
     const opts: Record<string, string> = { ...engineOptions }
     if (outs[index]) opts.out = outs[index]
 
@@ -208,8 +112,9 @@ export async function addUri(params: {
       opts.dir = resolveDownloadDir(uri, opts.dir || '', true, fileCategory.categories)
     }
 
-    return getClient().call<string>('addUri', [uri], opts)
+    return invoke<string>('aria2_add_uri', { uris: [uri], options: opts })
   })
+
   const gids = await Promise.all(tasks)
   logger.info('aria2.addUri', `added ${gids.length} URI task(s) gids=[${gids.join(',')}]`)
   return gids
@@ -217,13 +122,11 @@ export async function addUri(params: {
 
 /**
  * Adds a single download with all URIs as mirrors (alternative sources).
- * Unlike addUri which creates one download per URI, this creates exactly one
- * download — making it safe for atomic restart operations.
  */
 export async function addUriAtomic(params: { uris: string[]; options: Record<string, string> }): Promise<string> {
   const { uris, options } = params
   const engineOptions = formatOptionsForEngine(options)
-  const gid = await getClient().call<string>('addUri', uris, engineOptions)
+  const gid = await invoke<string>('aria2_add_uri', { uris, options: engineOptions })
   logger.debug('aria2.addUriAtomic', `gid=${gid} mirrors=${uris.length}`)
   return gid
 }
@@ -231,10 +134,8 @@ export async function addUriAtomic(params: { uris: string[]; options: Record<str
 /** Adds a torrent download from a base64-encoded .torrent file. */
 export async function addTorrent(params: { torrent: string; options: Aria2EngineOptions }): Promise<string> {
   const engineOptions = formatOptionsForEngine(params.options)
-  // BT downloads need force-save=true for session persistence (seeding resumption).
-  // HTTP downloads must NOT have this — see SessionSerializer.cc:288.
   engineOptions['force-save'] = 'true'
-  const gid = await getClient().call<string>('addTorrent', params.torrent, [], engineOptions)
+  const gid = await invoke<string>('aria2_add_torrent', { torrent: params.torrent, options: engineOptions })
   logger.info('aria2.addTorrent', `gid=${gid}`)
   return gid
 }
@@ -242,73 +143,70 @@ export async function addTorrent(params: { torrent: string; options: Aria2Engine
 /** Adds a metalink download from a base64-encoded .metalink file. */
 export async function addMetalink(params: { metalink: string; options: Aria2EngineOptions }): Promise<string[]> {
   const engineOptions = formatOptionsForEngine(params.options)
-  // Metalink downloads may contain BT sources — persist for seeding resumption.
   engineOptions['force-save'] = 'true'
-  const gids = await getClient().call<string[]>('addMetalink', params.metalink, engineOptions)
+  const gids = await invoke<string[]>('aria2_add_metalink', { metalink: params.metalink, options: engineOptions })
   logger.info('aria2.addMetalink', `added ${gids.length} task(s) gids=[${gids.join(',')}]`)
   return gids
 }
 
 /** Forcefully removes a download task by GID. */
 export async function removeTask(params: { gid: string }): Promise<string> {
-  return getClient().call<string>('forceRemove', params.gid)
+  return invoke<string>('aria2_force_remove', { gid: params.gid })
 }
 
 /** Forcefully pauses a download task by GID. */
 export async function forcePauseTask(params: { gid: string }): Promise<string> {
-  return getClient().call<string>('forcePause', params.gid)
+  return invoke<string>('aria2_force_pause', { gid: params.gid })
 }
 
 /** Pauses a download task by GID (graceful). */
 export async function pauseTask(params: { gid: string }): Promise<string> {
-  return getClient().call<string>('pause', params.gid)
+  return invoke<string>('aria2_pause', { gid: params.gid })
 }
 
 /** Resumes a paused download task by GID. */
 export async function resumeTask(params: { gid: string }): Promise<string> {
-  return getClient().call<string>('unpause', params.gid)
+  return invoke<string>('aria2_unpause', { gid: params.gid })
 }
 
 /** Pauses all active downloads (graceful). */
 export async function pauseAllTask(): Promise<string> {
-  return getClient().call<string>('pauseAll')
+  return invoke<string>('aria2_pause_all')
 }
 
 /** Forcefully pauses all active downloads. */
 export async function forcePauseAllTask(): Promise<string> {
-  return getClient().call<string>('forcePauseAll')
+  return invoke<string>('aria2_force_pause_all')
 }
 
 /** Resumes all paused downloads. */
 export async function resumeAllTask(): Promise<string> {
-  return getClient().call<string>('unpauseAll')
+  return invoke<string>('aria2_unpause_all')
 }
 
 /** Saves the current aria2 session to disk. */
 export async function saveSession(): Promise<string> {
-  return getClient().call<string>('saveSession')
+  return invoke<string>('aria2_save_session')
 }
 
 /** Removes a completed/errored task record from the download list. */
 export async function removeTaskRecord(params: { gid: string }): Promise<string> {
-  return getClient().call<string>('removeDownloadResult', params.gid)
+  return invoke<string>('aria2_remove_download_result', { gid: params.gid })
 }
 
 /** Purges all completed/errored task records from the download list. */
 export async function purgeTaskRecord(): Promise<string> {
-  return getClient().call<string>('purgeDownloadResult')
+  return invoke<string>('aria2_purge_download_result')
 }
 
 /** Batch-resumes multiple tasks by GID array via multicall. */
 export async function batchResumeTask(params: { gids: string[] }): Promise<unknown[][]> {
-  const calls = params.gids.map((gid) => ['unpause', gid] as [string, ...unknown[]])
-  return getClient().multicall<unknown[][]>(calls)
+  return invoke<unknown[][]>('aria2_batch_unpause', { gids: params.gids })
 }
 
 /** Batch-pauses multiple tasks by GID array via multicall (force). */
 export async function batchPauseTask(params: { gids: string[] }): Promise<unknown[][]> {
-  const calls = params.gids.map((gid) => ['forcePause', gid] as [string, ...unknown[]])
-  return getClient().multicall<unknown[][]>(calls)
+  return invoke<unknown[][]>('aria2_batch_force_pause', { gids: params.gids })
 }
 
 /** Alias for batchPauseTask — force-pauses multiple tasks. */
@@ -318,14 +216,10 @@ export async function batchForcePauseTask(params: { gids: string[] }): Promise<u
 
 /** Batch-removes multiple tasks by GID array via multicall (force). */
 export async function batchRemoveTask(params: { gids: string[] }): Promise<unknown[][]> {
-  const calls = params.gids.map((gid) => ['forceRemove', gid] as [string, ...unknown[]])
-  return getClient().multicall<unknown[][]>(calls)
+  return invoke<unknown[][]>('aria2_batch_force_remove', { gids: params.gids })
 }
 
 const api = {
-  initClient,
-  closeClient,
-  reconnectClient,
   getVersion,
   getGlobalOption,
   getGlobalStat,

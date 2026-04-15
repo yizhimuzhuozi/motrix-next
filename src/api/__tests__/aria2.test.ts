@@ -1,48 +1,32 @@
 /**
  * @fileoverview Tests for the aria2 API layer (src/api/aria2.ts).
  *
+ * Now tests the invoke()-based transport — verifies that each API function
+ * calls the correct Tauri command with the expected arguments.
+ *
  * Key behaviors under test:
- * - Client initialization sets engineReady=true
- * - getClient throws when not initialized
- * - All API methods delegate to the correct Aria2 RPC method
- * - fetchTaskList routes by type (active = active + waiting, default = stopped)
- * - addUri creates one call per URI with per-URI output filename override
- * - addUriAtomic creates exactly one call with all URIs as mirrors
- * - Batch operations (resume/pause/remove) use multicall
- * - Type guards are applied on getGlobalStat and fetchTaskItem
- * - closeClient resets client to null and clears state
+ * - setEngineReady controls the readiness flag
+ * - All API methods invoke the correct Tauri command
+ * - fetchTaskList routes by type (active vs stopped)
+ * - addUri creates one invoke per URI with per-URI output filename override
+ * - addUriAtomic creates exactly one invoke with all URIs as mirrors
+ * - Batch operations use batch invoke commands
+ * - force-save injection for BT/metalink but not HTTP
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── Hoisted mocks (available inside vi.mock factories) ──────────────
-const { mockCall, mockMulticall, mockOpen, mockClose, mockInvoke } = vi.hoisted(() => ({
-  mockCall: vi.fn(),
-  mockMulticall: vi.fn(),
-  mockOpen: vi.fn().mockResolvedValue(undefined),
-  mockClose: vi.fn().mockResolvedValue(undefined),
+// ── Hoisted mocks ───────────────────────────────────────────────────
+const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn().mockResolvedValue({}),
 }))
-
-vi.mock('@shared/aria2', () => {
-  class MockAria2 {
-    call = mockCall
-    multicall = mockMulticall
-    open = mockOpen
-    close = mockClose
-  }
-  return { Aria2: MockAria2 }
-})
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }))
 
 import {
-  initClient,
-  closeClient,
   isEngineReady,
   setEngineReady,
-  getClient,
   getVersion,
   getGlobalOption,
   getGlobalStat,
@@ -73,42 +57,15 @@ import {
   batchRemoveTask,
 } from '../aria2'
 
-describe('aria2 API', () => {
-  beforeEach(async () => {
+describe('aria2 API (invoke transport)', () => {
+  beforeEach(() => {
     vi.clearAllMocks()
-    // Reset module state by re-initializing
     setEngineReady(false)
-    try {
-      await closeClient()
-    } catch {
-      /* ignore */
-    }
   })
 
   // ── Client Lifecycle ────────────────────────────────────────────
 
   describe('client lifecycle', () => {
-    it('initClient creates a client and sets engineReady=true', async () => {
-      expect(isEngineReady()).toBe(false)
-
-      await initClient({ port: 6800, secret: 'mysecret' })
-
-      expect(isEngineReady()).toBe(true)
-      expect(mockOpen).toHaveBeenCalledOnce()
-    })
-
-    it('getClient throws when not initialized', async () => {
-      expect(() => getClient()).toThrow('Aria2 client not initialized')
-    })
-
-    it('closeClient resets client reference', async () => {
-      await initClient({ port: 6800, secret: 's' })
-      await closeClient()
-
-      // Client should be nulled — getClient must throw
-      expect(() => getClient()).toThrow('Aria2 client not initialized')
-    })
-
     it('setEngineReady explicitly controls readiness flag', () => {
       setEngineReady(true)
       expect(isEngineReady()).toBe(true)
@@ -119,25 +76,26 @@ describe('aria2 API', () => {
 
   // ── RPC Method Delegation ───────────────────────────────────────
 
-  describe('RPC methods', () => {
+  describe('RPC methods via invoke', () => {
     beforeEach(async () => {
-      await initClient({ port: 6800, secret: 's' })
+      setEngineReady(true)
     })
 
-    it('getVersion calls aria2.getVersion', async () => {
-      mockCall.mockResolvedValueOnce({ version: '1.37.0', enabledFeatures: ['BitTorrent'] })
+    it('getVersion invokes aria2_get_version', async () => {
+      mockInvoke.mockResolvedValueOnce({ version: '1.37.0', enabledFeatures: ['BitTorrent'] })
       const result = await getVersion()
-      expect(mockCall).toHaveBeenCalledWith('getVersion')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_get_version')
       expect(result.version).toBe('1.37.0')
     })
 
-    it('getGlobalOption returns camelCase keys', async () => {
-      mockCall.mockResolvedValueOnce({ 'max-concurrent-downloads': '5' })
+    it('getGlobalOption invokes and converts to camelCase', async () => {
+      mockInvoke.mockResolvedValueOnce({ 'max-concurrent-downloads': '5' })
       const result = await getGlobalOption()
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_get_global_option')
       expect(result).toHaveProperty('maxConcurrentDownloads')
     })
 
-    it('getGlobalStat validates response with type guard', async () => {
+    it('getGlobalStat invokes aria2_get_global_stat', async () => {
       const stat = {
         downloadSpeed: '0',
         uploadSpeed: '0',
@@ -146,31 +104,32 @@ describe('aria2 API', () => {
         numWaiting: '0',
         numStoppedTotal: '0',
       }
-      mockCall.mockResolvedValueOnce(stat)
+      mockInvoke.mockResolvedValueOnce(stat)
       const result = await getGlobalStat()
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_get_global_stat')
       expect(result).toEqual(stat)
     })
 
-    it('changeGlobalOption formats options for engine', async () => {
-      mockCall.mockResolvedValueOnce('OK')
+    it('changeGlobalOption invokes with formatted options', async () => {
+      mockInvoke.mockResolvedValueOnce('OK')
       await changeGlobalOption({ maxConcurrentDownloads: 10 } as never)
-      expect(mockCall).toHaveBeenCalledWith('changeGlobalOption', expect.any(Object))
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_change_global_option', { options: expect.any(Object) })
     })
 
-    it('getOption returns camelCase keys for specific GID', async () => {
-      mockCall.mockResolvedValueOnce({ 'max-download-limit': '0' })
+    it('getOption invokes with gid and converts to camelCase', async () => {
+      mockInvoke.mockResolvedValueOnce({ 'max-download-limit': '0' })
       const result = await getOption({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('getOption', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_get_option', { gid: 'abc' })
       expect(result).toHaveProperty('maxDownloadLimit')
     })
 
-    it('changeOption formats and sends options for a specific GID', async () => {
-      mockCall.mockResolvedValueOnce('OK')
+    it('changeOption invokes with gid and formatted options', async () => {
+      mockInvoke.mockResolvedValueOnce('OK')
       await changeOption({ gid: 'abc', options: { maxDownloadLimit: '0' } as never })
-      expect(mockCall).toHaveBeenCalledWith('changeOption', 'abc', expect.any(Object))
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_change_option', { gid: 'abc', options: expect.any(Object) })
     })
 
-    it('getFiles calls aria2.getFiles and returns camelCase typed files', async () => {
+    it('getFiles invokes and returns camelCase typed files', async () => {
       const rawFiles = [
         {
           index: '1',
@@ -189,13 +148,12 @@ describe('aria2 API', () => {
           uris: [],
         },
       ]
-      mockCall.mockResolvedValueOnce(rawFiles)
+      mockInvoke.mockResolvedValueOnce(rawFiles)
       const result = await getFiles({ gid: 'magnet-gid' })
-      expect(mockCall).toHaveBeenCalledWith('getFiles', 'magnet-gid')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_get_files', { gid: 'magnet-gid' })
       expect(result).toHaveLength(2)
       expect(result[0].path).toBe('/downloads/movie.mkv')
       expect(result[0].completedLength).toBe('0')
-      expect(result[1].length).toBe('50000')
     })
   })
 
@@ -203,36 +161,39 @@ describe('aria2 API', () => {
 
   describe('task fetching', () => {
     beforeEach(async () => {
-      await initClient({ port: 6800, secret: 's' })
+      setEngineReady(true)
     })
 
-    it('fetchTaskList with type "active" calls tellActive + tellWaiting', async () => {
-      const active = [{ gid: '1', status: 'active' }]
-      const waiting = [{ gid: '2', status: 'waiting' }]
-      mockCall.mockResolvedValueOnce(active).mockResolvedValueOnce(waiting)
+    it('fetchTaskList with type "active" invokes aria2_fetch_task_list', async () => {
+      const combined = [
+        { gid: '1', status: 'active' },
+        { gid: '2', status: 'waiting' },
+      ]
+      mockInvoke.mockResolvedValueOnce(combined)
 
       const result = await fetchTaskList({ type: 'active' })
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_task_list', { type: 'active', limit: null })
       expect(result).toHaveLength(2)
-      // Preserves aria2 order: active before waiting
       expect(result[0].gid).toBe('1')
       expect(result[1].gid).toBe('2')
     })
 
-    it('fetchTaskList with default type calls tellStopped', async () => {
+    it('fetchTaskList with stopped type invokes aria2_fetch_task_list', async () => {
       const stopped = [{ gid: '3', status: 'complete' }]
-      mockCall.mockResolvedValueOnce(stopped)
+      mockInvoke.mockResolvedValueOnce(stopped)
 
       const result = await fetchTaskList({ type: 'complete' })
       expect(result).toHaveLength(1)
     })
 
-    it('fetchActiveTaskList calls tellActive only', async () => {
-      mockCall.mockResolvedValueOnce([{ gid: '1' }])
+    it('fetchActiveTaskList invokes aria2_fetch_active_task_list', async () => {
+      mockInvoke.mockResolvedValueOnce([{ gid: '1' }])
       const result = await fetchActiveTaskList()
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_active_task_list')
       expect(result).toHaveLength(1)
     })
 
-    it('fetchTaskItem validates task with isAria2Task guard', async () => {
+    it('fetchTaskItem invokes with gid', async () => {
       const task = {
         gid: 'abc',
         status: 'active',
@@ -245,96 +206,43 @@ describe('aria2 API', () => {
         dir: '/dl',
         files: [],
       }
-      mockCall.mockResolvedValueOnce(task)
+      mockInvoke.mockResolvedValueOnce(task)
       const result = await fetchTaskItem({ gid: 'abc' })
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_task_item', { gid: 'abc' })
       expect(result.gid).toBe('abc')
     })
 
-    it('fetchTaskItemWithPeers returns task merged with peers', async () => {
-      const task = { gid: 'abc', status: 'active' }
-      const peers = [{ peerId: 'peer1', ip: '1.2.3.4', port: '6881' }]
-      mockCall.mockResolvedValueOnce(task).mockResolvedValueOnce(peers)
+    it('fetchTaskItemWithPeers invokes with gid', async () => {
+      const merged = { gid: 'abc', status: 'active', peers: [{ peerId: 'peer1' }] }
+      mockInvoke.mockResolvedValueOnce(merged)
       const result = await fetchTaskItemWithPeers({ gid: 'abc' })
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_task_item_with_peers', { gid: 'abc' })
       expect(result.gid).toBe('abc')
       expect(result.peers).toHaveLength(1)
     })
 
-    // ── GID-based stable sorting ──────────────────────────────────
-
-    it('fetchTaskList preserves aria2 native order for active+waiting (insertion order)', async () => {
-      // aria2 returns tasks in internal deque order (insertion/queue order)
-      const active = [
+    it('fetchTaskList preserves order from Rust response', async () => {
+      const tasks = [
         { gid: 'c', status: 'active' },
         { gid: 'a', status: 'active' },
-      ]
-      const waiting = [
-        { gid: 'd', status: 'paused' },
+        { gid: 'd', status: 'waiting' },
         { gid: 'b', status: 'waiting' },
       ]
-      mockCall.mockResolvedValueOnce(active).mockResolvedValueOnce(waiting)
-
+      mockInvoke.mockResolvedValueOnce(tasks)
       const result = await fetchTaskList({ type: 'active' })
-      // Must preserve aria2 order: active first, then waiting — no GID re-sorting
       expect(result.map((t) => t.gid)).toEqual(['c', 'a', 'd', 'b'])
     })
 
-    it('fetchTaskList preserves aria2 native order for stopped results', async () => {
-      // aria2 returns stopped tasks in completion order (deque push_back)
-      const stopped = [
-        { gid: '0000000000000003', status: 'complete' },
-        { gid: '0000000000000001', status: 'error' },
-        { gid: '0000000000000002', status: 'complete' },
-      ]
-      mockCall.mockResolvedValueOnce(stopped)
-
-      const result = await fetchTaskList({ type: 'stopped' })
-      // Must preserve aria2 order — no GID re-sorting
-      expect(result.map((t) => t.gid)).toEqual(['0000000000000003', '0000000000000001', '0000000000000002'])
-    })
-
-    it('preserves order across poll cycles — aria2 queue order is stable', async () => {
-      // First poll: aria2 returns in queue order
-      mockCall
-        .mockResolvedValueOnce([
-          { gid: 'b', status: 'active' },
-          { gid: 'a', status: 'active' },
-        ])
-        .mockResolvedValueOnce([{ gid: 'c', status: 'waiting' }])
-      const poll1 = await fetchTaskList({ type: 'active' })
-
-      // Second poll: task 'b' moved to waiting, aria2 queue order changes accordingly
-      mockCall.mockResolvedValueOnce([{ gid: 'a', status: 'active' }]).mockResolvedValueOnce([
-        { gid: 'c', status: 'waiting' },
-        { gid: 'b', status: 'paused' },
-      ])
-      const poll2 = await fetchTaskList({ type: 'active' })
-
-      // Preserved as returned by aria2 — no artificial re-sorting
-      expect(poll1.map((t) => t.gid)).toEqual(['b', 'a', 'c'])
-      expect(poll2.map((t) => t.gid)).toEqual(['a', 'c', 'b'])
-    })
-
-    // ── Limit parameter for stopped type ───────────────────────────
-
-    it('fetchTaskList passes limit to tellStopped when provided', async () => {
-      mockCall.mockResolvedValueOnce([])
+    it('fetchTaskList passes limit to invoke', async () => {
+      mockInvoke.mockResolvedValueOnce([])
       await fetchTaskList({ type: 'stopped', limit: 128 })
-      // tellStopped(offset, num) — limit should be used as num
-      expect(mockCall).toHaveBeenCalledWith('tellStopped', 0, 128)
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_task_list', { type: 'stopped', limit: 128 })
     })
 
-    it('fetchTaskList uses default 1000 for tellStopped when limit is undefined', async () => {
-      mockCall.mockResolvedValueOnce([])
+    it('fetchTaskList uses null limit when undefined', async () => {
+      mockInvoke.mockResolvedValueOnce([])
       await fetchTaskList({ type: 'stopped' })
-      expect(mockCall).toHaveBeenCalledWith('tellStopped', 0, 1000)
-    })
-
-    it('fetchTaskList ignores limit for active type', async () => {
-      mockCall.mockResolvedValueOnce([]).mockResolvedValueOnce([])
-      await fetchTaskList({ type: 'active', limit: 50 })
-      // tellActive has no parameters, tellWaiting uses hardcoded 1000
-      expect(mockCall).toHaveBeenCalledWith('tellActive')
-      expect(mockCall).toHaveBeenCalledWith('tellWaiting', 0, 1000)
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_fetch_task_list', { type: 'stopped', limit: null })
     })
   })
 
@@ -342,11 +250,11 @@ describe('aria2 API', () => {
 
   describe('task creation', () => {
     beforeEach(async () => {
-      await initClient({ port: 6800, secret: 's' })
+      setEngineReady(true)
     })
 
-    it('addUri creates one call per URI with per-URI out option', async () => {
-      mockCall.mockResolvedValue('gid1')
+    it('addUri creates one invoke per URI with per-URI out option', async () => {
+      mockInvoke.mockResolvedValue('gid1')
 
       const result = await addUri({
         uris: ['http://a.com/1.zip', 'http://b.com/2.zip'],
@@ -356,12 +264,13 @@ describe('aria2 API', () => {
 
       expect(result).toHaveLength(2)
       // First call should have out option
-      const firstCallOpts = mockCall.mock.calls[0][2] as Record<string, string>
-      expect(firstCallOpts.out).toBe('file1.zip')
+      const firstCallArgs = mockInvoke.mock.calls[0]
+      expect(firstCallArgs[0]).toBe('aria2_add_uri')
+      expect(firstCallArgs[1].options.out).toBe('file1.zip')
     })
 
-    it('addUriAtomic creates exactly one call with all URIs', async () => {
-      mockCall.mockResolvedValueOnce('gid-atomic')
+    it('addUriAtomic creates exactly one invoke with all URIs', async () => {
+      mockInvoke.mockResolvedValueOnce('gid-atomic')
 
       const result = await addUriAtomic({
         uris: ['http://mirror1.com/f.zip', 'http://mirror2.com/f.zip'],
@@ -369,68 +278,69 @@ describe('aria2 API', () => {
       })
 
       expect(result).toBe('gid-atomic')
-      expect(mockCall).toHaveBeenCalledTimes(1)
-      const uris = mockCall.mock.calls[0][1] as string[]
-      expect(uris).toHaveLength(2)
+      expect(mockInvoke).toHaveBeenCalledTimes(1)
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_add_uri', {
+        uris: ['http://mirror1.com/f.zip', 'http://mirror2.com/f.zip'],
+        options: expect.any(Object),
+      })
     })
 
     it('addTorrent passes base64 torrent data', async () => {
-      mockCall.mockResolvedValueOnce('gid-torrent')
+      mockInvoke.mockResolvedValueOnce('gid-torrent')
       const result = await addTorrent({ torrent: 'base64data', options: {} })
       expect(result).toBe('gid-torrent')
-      expect(mockCall).toHaveBeenCalledWith('addTorrent', 'base64data', [], expect.any(Object))
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_add_torrent', {
+        torrent: 'base64data',
+        options: expect.objectContaining({ 'force-save': 'true' }),
+      })
     })
 
     it('addMetalink passes base64 metalink data', async () => {
-      mockCall.mockResolvedValueOnce(['gid-ml1'])
+      mockInvoke.mockResolvedValueOnce(['gid-ml1'])
       const result = await addMetalink({ metalink: 'base64ml', options: {} })
       expect(result).toEqual(['gid-ml1'])
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_add_metalink', {
+        metalink: 'base64ml',
+        options: expect.objectContaining({ 'force-save': 'true' }),
+      })
     })
 
-    // ── force-save per-download isolation ──────────────────────────
-    // aria2's SessionSerializer.cc:288 only persists FINISHED tasks when
-    // the task's per-download force-save=true.  Setting it globally causes
-    // completed HTTP downloads to persist in the session file, making aria2
-    // re-download them on restart (infinite loop).
-    //
-    // Solution: inject force-save=true ONLY on BT/metalink tasks that need
-    // session persistence for seeding resumption.
-
     it('addTorrent injects force-save=true into per-download options', async () => {
-      mockCall.mockResolvedValueOnce('gid-torrent')
+      mockInvoke.mockResolvedValueOnce('gid-torrent')
       await addTorrent({ torrent: 'base64data', options: {} })
-      const engineOpts = mockCall.mock.calls[0][3] as Record<string, string>
-      expect(engineOpts['force-save']).toBe('true')
+      const callArgs = mockInvoke.mock.calls[0][1] as Record<string, unknown>
+      expect((callArgs.options as Record<string, string>)['force-save']).toBe('true')
     })
 
     it('addTorrent preserves caller-supplied options alongside force-save', async () => {
-      mockCall.mockResolvedValueOnce('gid-torrent')
+      mockInvoke.mockResolvedValueOnce('gid-torrent')
       await addTorrent({ torrent: 'data', options: { dir: '/custom', split: '4' } })
-      const engineOpts = mockCall.mock.calls[0][3] as Record<string, string>
-      expect(engineOpts['force-save']).toBe('true')
-      expect(engineOpts.dir).toBe('/custom')
-      expect(engineOpts.split).toBe('4')
+      const callArgs = mockInvoke.mock.calls[0][1] as Record<string, unknown>
+      const options = callArgs.options as Record<string, string>
+      expect(options['force-save']).toBe('true')
+      expect(options.dir).toBe('/custom')
+      expect(options.split).toBe('4')
     })
 
-    it('addMetalink injects force-save=true into per-download options', async () => {
-      mockCall.mockResolvedValueOnce(['gid-ml1'])
+    it('addMetalink injects force-save=true', async () => {
+      mockInvoke.mockResolvedValueOnce(['gid-ml1'])
       await addMetalink({ metalink: 'base64ml', options: {} })
-      const engineOpts = mockCall.mock.calls[0][2] as Record<string, string>
-      expect(engineOpts['force-save']).toBe('true')
+      const callArgs = mockInvoke.mock.calls[0][1] as Record<string, unknown>
+      expect((callArgs.options as Record<string, string>)['force-save']).toBe('true')
     })
 
     it('addUri does NOT inject force-save (HTTP downloads must not persist)', async () => {
-      mockCall.mockResolvedValue('gid-http')
+      mockInvoke.mockResolvedValue('gid-http')
       await addUri({ uris: ['http://example.com/file.zip'], outs: [], options: {} })
-      const engineOpts = mockCall.mock.calls[0][2] as Record<string, string>
-      expect(engineOpts).not.toHaveProperty('force-save')
+      const callArgs = mockInvoke.mock.calls[0][1] as Record<string, unknown>
+      expect((callArgs.options as Record<string, string>)['force-save']).toBeUndefined()
     })
 
     it('addUriAtomic does NOT inject force-save', async () => {
-      mockCall.mockResolvedValueOnce('gid-atomic')
+      mockInvoke.mockResolvedValueOnce('gid-atomic')
       await addUriAtomic({ uris: ['http://example.com/f.zip'], options: {} })
-      const engineOpts = mockCall.mock.calls[0][2] as Record<string, string>
-      expect(engineOpts).not.toHaveProperty('force-save')
+      const callArgs = mockInvoke.mock.calls[0][1] as Record<string, unknown>
+      expect((callArgs.options as Record<string, string>)['force-save']).toBeUndefined()
     })
   })
 
@@ -438,58 +348,58 @@ describe('aria2 API', () => {
 
   describe('task control', () => {
     beforeEach(async () => {
-      await initClient({ port: 6800, secret: 's' })
-      mockCall.mockResolvedValue('OK')
+      setEngineReady(true)
+      mockInvoke.mockResolvedValue('OK')
     })
 
-    it('removeTask calls forceRemove', async () => {
+    it('removeTask invokes aria2_force_remove', async () => {
       await removeTask({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('forceRemove', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_force_remove', { gid: 'abc' })
     })
 
-    it('pauseTask calls pause', async () => {
+    it('pauseTask invokes aria2_pause', async () => {
       await pauseTask({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('pause', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_pause', { gid: 'abc' })
     })
 
-    it('forcePauseTask calls forcePause', async () => {
+    it('forcePauseTask invokes aria2_force_pause', async () => {
       await forcePauseTask({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('forcePause', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_force_pause', { gid: 'abc' })
     })
 
-    it('resumeTask calls unpause', async () => {
+    it('resumeTask invokes aria2_unpause', async () => {
       await resumeTask({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('unpause', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_unpause', { gid: 'abc' })
     })
 
-    it('pauseAllTask calls pauseAll', async () => {
+    it('pauseAllTask invokes aria2_pause_all', async () => {
       await pauseAllTask()
-      expect(mockCall).toHaveBeenCalledWith('pauseAll')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_pause_all')
     })
 
-    it('forcePauseAllTask calls forcePauseAll', async () => {
+    it('forcePauseAllTask invokes aria2_force_pause_all', async () => {
       await forcePauseAllTask()
-      expect(mockCall).toHaveBeenCalledWith('forcePauseAll')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_force_pause_all')
     })
 
-    it('resumeAllTask calls unpauseAll', async () => {
+    it('resumeAllTask invokes aria2_unpause_all', async () => {
       await resumeAllTask()
-      expect(mockCall).toHaveBeenCalledWith('unpauseAll')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_unpause_all')
     })
 
-    it('saveSession calls saveSession', async () => {
+    it('saveSession invokes aria2_save_session', async () => {
       await saveSession()
-      expect(mockCall).toHaveBeenCalledWith('saveSession')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_save_session')
     })
 
-    it('removeTaskRecord calls removeDownloadResult', async () => {
+    it('removeTaskRecord invokes aria2_remove_download_result', async () => {
       await removeTaskRecord({ gid: 'abc' })
-      expect(mockCall).toHaveBeenCalledWith('removeDownloadResult', 'abc')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_remove_download_result', { gid: 'abc' })
     })
 
-    it('purgeTaskRecord calls purgeDownloadResult', async () => {
+    it('purgeTaskRecord invokes aria2_purge_download_result', async () => {
       await purgeTaskRecord()
-      expect(mockCall).toHaveBeenCalledWith('purgeDownloadResult')
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_purge_download_result')
     })
   })
 
@@ -497,29 +407,23 @@ describe('aria2 API', () => {
 
   describe('batch operations', () => {
     beforeEach(async () => {
-      await initClient({ port: 6800, secret: 's' })
-      mockMulticall.mockResolvedValue([['OK'], ['OK']])
+      setEngineReady(true)
+      mockInvoke.mockResolvedValue([['OK'], ['OK']])
     })
 
-    it('batchResumeTask sends multicall with unpause for each GID', async () => {
+    it('batchResumeTask invokes aria2_batch_unpause with gids', async () => {
       await batchResumeTask({ gids: ['g1', 'g2'] })
-      expect(mockMulticall).toHaveBeenCalledWith([
-        ['unpause', 'g1'],
-        ['unpause', 'g2'],
-      ])
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_batch_unpause', { gids: ['g1', 'g2'] })
     })
 
-    it('batchPauseTask sends multicall with forcePause for each GID', async () => {
+    it('batchPauseTask invokes aria2_batch_force_pause with gids', async () => {
       await batchPauseTask({ gids: ['g1', 'g2'] })
-      expect(mockMulticall).toHaveBeenCalledWith([
-        ['forcePause', 'g1'],
-        ['forcePause', 'g2'],
-      ])
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_batch_force_pause', { gids: ['g1', 'g2'] })
     })
 
-    it('batchRemoveTask sends multicall with forceRemove for each GID', async () => {
+    it('batchRemoveTask invokes aria2_batch_force_remove with gids', async () => {
       await batchRemoveTask({ gids: ['g1'] })
-      expect(mockMulticall).toHaveBeenCalledWith([['forceRemove', 'g1']])
+      expect(mockInvoke).toHaveBeenCalledWith('aria2_batch_force_remove', { gids: ['g1'] })
     })
   })
 })

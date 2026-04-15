@@ -8,7 +8,7 @@ import { usePreferenceStore } from './stores/preference'
 import { useTaskStore } from './stores/task'
 import { useAppStore } from './stores/app'
 import { useHistoryStore } from './stores/history'
-import aria2Api, { initClient } from './api/aria2'
+import aria2Api from './api/aria2'
 import { ENGINE_RPC_PORT, AUTO_SYNC_TRACKER_INTERVAL, DEFAULT_TRACKER_SOURCE } from '@shared/constants'
 import { convertTrackerDataToLine, convertTrackerDataToComma, reduceTrackerString } from '@shared/utils/tracker'
 import { logger } from '@shared/logger'
@@ -53,37 +53,16 @@ window.addEventListener('unhandledrejection', (e) => {
   const appStore = useAppStore()
   const historyStore = useHistoryStore()
 
-  async function waitForEngine(port: number, secret: string, maxRetries = 3): Promise<boolean> {
-    const { Aria2 } = await import('@shared/aria2')
-    const ATTEMPT_TIMEOUT = 2000
-    for (let i = 0; i < maxRetries; i++) {
-      const probe = new Aria2({ host: '127.0.0.1', port, secret })
-      try {
-        logger.debug('waitForEngine', `attempt ${i + 1}/${maxRetries} connecting to port ${port}`)
-        await Promise.race([
-          (async () => {
-            await probe.open()
-            await probe.call('getVersion')
-          })(),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('attempt timeout')), ATTEMPT_TIMEOUT)),
-        ])
-        await probe.close()
-        logger.info('waitForEngine', `connected on attempt ${i + 1}`)
-        return true
-      } catch (e) {
-        // Force-close the socket — it may still be in CONNECTING state
-        try {
-          probe.socket?.close()
-        } catch {
-          /* ignore */
-        }
-        const delay = Math.min(100 * 2 ** i, 2000)
-        logger.debug('waitForEngine', `attempt ${i + 1}/${maxRetries} failed, retry in ${delay}ms: ${e}`)
-        await new Promise((r) => setTimeout(r, delay))
-      }
+  /** Rust-side health check: probes aria2c HTTP RPC with retries.
+   *  Also updates Aria2Client credentials so invoke() commands work. */
+  async function waitForEngine(): Promise<boolean> {
+    const { invoke } = await import('@tauri-apps/api/core')
+    try {
+      return await invoke<boolean>('wait_for_engine')
+    } catch (e) {
+      logger.error('waitForEngine', `invoke failed: ${e}`)
+      return false
     }
-    logger.warn('waitForEngine', `all ${maxRetries} attempts failed`)
-    return false
   }
 
   async function autoCheckForUpdate() {
@@ -149,7 +128,7 @@ window.addEventListener('unhandledrejection', (e) => {
   //
   //  Phase 1 (critical path)   – loadPreference → locale → window.show()
   //  Phase 2 (engine, async)   – rpcSecret → save config → start engine
-  //                              → waitForEngine → initClient
+  //                              → on_engine_ready (Rust) → wait_for_engine
   //  Phase 3 (non-critical)    – deep-link, autostart (parallel)
   //  Phase 4 (deferred)        – update check, tracker sync, FS warmup,
   //                              clipboard monitor
@@ -210,26 +189,26 @@ window.addEventListener('unhandledrejection', (e) => {
           'rpc-listen-port': String(port),
         },
       })
+      // start_engine_command ONLY spawns the aria2c sidecar.
+      // Credential update + option sync happen in wait_for_engine
+      // (after aria2c is confirmed ready).
       await invoke('start_engine_command')
     } catch (e) {
       logger.error('Engine', e)
       return false
     }
 
-    const ready = await waitForEngine(port, secret)
+    // Rust-side health check: probe → on_engine_ready (credential + option sync)
+    const ready = await waitForEngine()
     if (!ready) {
       logger.error('Engine', 'Engine did not become ready after retries')
       return false
     }
 
-    try {
-      await initClient({ port, secret })
-      logger.info('Engine', `RPC client connected via WebSocket on port ${port}`)
-    } catch (e) {
-      logger.warn('Engine', 'WebSocket failed, using HTTP fallback: ' + (e as Error).message)
-      const { setEngineReady } = await import('@/api/aria2')
-      setEngineReady(true)
-    }
+    // Mark frontend as ready — invoke() transport is always available
+    const { setEngineReady } = await import('@/api/aria2')
+    setEngineReady(true)
+    logger.info('Engine', `Rust aria2 client connected via invoke() on port ${port}`)
     return true
   }
 
@@ -402,24 +381,11 @@ window.addEventListener('unhandledrejection', (e) => {
       const ok = await enginePromise
       appStore.engineReady = ok
 
-      // Push user-configured options to aria2 global state via RPC.
-      // CLI args already set these at process startup, but this is
-      // defense-in-depth: ensures the runtime global state matches
-      // the user's preferences even if system.json had stale keys.
+      // Global option sync and speed scheduler are now handled by Rust:
+      // - on_engine_ready() syncs system.json options to aria2 via changeGlobalOption
+      // - spawn_speed_scheduler() runs a 60s timer in tokio (no WebView needed)
       if (ok) {
-        const { syncGlobalOptions } = await import('@/composables/syncGlobalOptions')
-        await syncGlobalOptions(config).catch((e) => logger.warn('Engine', 'global option sync failed: ' + e))
-
-        // Start the speed schedule timer — checks every 60s whether to
-        // switch between normal and alternative speed limits.
-        const { startScheduler } = await import('@/composables/useSpeedScheduler')
-        const { changeGlobalOption } = await import('@/api/aria2')
-        const stopScheduler = startScheduler(() => preferenceStore.config, {
-          changeGlobalOption,
-          updateAndSave: (partial) => preferenceStore.updateAndSave(partial),
-        })
-        // Store cleanup for engine restart scenarios
-        ;(window as unknown as Record<string, unknown>).__stopSpeedScheduler = stopScheduler
+        logger.info('Engine', 'Rust on_engine_ready completed: options synced, services spawned')
       }
     } catch (e) {
       logger.error('Engine', 'unexpected startup error: ' + e)

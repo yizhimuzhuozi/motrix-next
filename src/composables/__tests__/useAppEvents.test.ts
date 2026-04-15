@@ -7,7 +7,7 @@ const routerBeforeEachMock = vi.fn()
 const dragDropListenerMock = vi.fn()
 const openDialogMock = vi.fn()
 const openUrlMock = vi.fn()
-const reconnectClientMock = vi.fn()
+
 const setEngineReadyMock = vi.fn()
 let eventUnlisteners: Array<ReturnType<typeof vi.fn>> = []
 
@@ -45,7 +45,6 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/api/aria2', () => ({
   isEngineReady: vi.fn(() => true),
-  reconnectClient: (...args: unknown[]) => reconnectClientMock(...args),
   setEngineReady: (...args: unknown[]) => setEngineReadyMock(...args),
 }))
 
@@ -147,7 +146,6 @@ describe('useAppEvents', () => {
     dragDropListenerMock.mockImplementation(async () => vi.fn().mockName('unlisten:drag-drop'))
     openDialogMock.mockResolvedValue(null)
     openUrlMock.mockResolvedValue(undefined)
-    reconnectClientMock.mockResolvedValue(undefined)
   })
 
   it('returns a teardown that unregisters engine listeners, the watcher, and the router guard', async () => {

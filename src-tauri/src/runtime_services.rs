@@ -1,0 +1,438 @@
+//! Runtime services orchestration layer.
+//!
+//! Coordinates post-engine-start initialization:
+//! 1. Updates `Aria2Client` credentials to match the just-started engine
+//! 2. Refreshes `RuntimeConfig` from the store
+//! 3. Syncs global options to aria2 via `changeGlobalOption`
+//!
+//! Called by `start_engine_command` and `restart_engine_command`,
+//! and by the updater recovery path.
+
+use crate::aria2::client::Aria2State;
+use crate::error::AppError;
+use crate::runtime_config::RuntimeConfigState;
+use tauri::Manager;
+use tauri_plugin_store::StoreExt;
+
+/// Keys that aria2 rejects via `changeGlobalOption` — they are bound at
+/// process startup via CLI args and cannot be changed at runtime.
+///
+/// Matches the `NON_HOT_RELOADABLE` set in `src/shared/utils/config.ts`.
+const NON_HOT_RELOADABLE: &[&str] = &[
+    // needRestartKeys
+    "dht-listen-port",
+    "listen-port",
+    "rpc-listen-port",
+    "rpc-secret",
+    // aria2 docs exclusions
+    "checksum",
+    "index-out",
+    "out",
+    "pause",
+    "select-file",
+    "rpc-save-upload-metadata",
+    // Needs full app relaunch (tauri-plugin-log init)
+    "log-level",
+];
+
+/// Reads the `system.json` store and returns its key-value pairs as a
+/// flat `Map<String, String>`, filtered to only hot-reloadable keys.
+///
+/// `system.json` stores aria2 engine options in kebab-case as a flat
+/// JSON object (written by the `save_system_config` command).
+fn read_system_options(
+    app: &tauri::AppHandle,
+) -> Result<serde_json::Map<String, serde_json::Value>, AppError> {
+    let store = app
+        .store("system.json")
+        .map_err(|e| AppError::Store(format!("Failed to open system.json: {e}")))?;
+
+    // system.json stores all keys at the root level
+    let mut opts = serde_json::Map::new();
+    for key in store.keys() {
+        if NON_HOT_RELOADABLE.contains(&key.as_str()) {
+            continue;
+        }
+        if let Some(val) = store.get(&key) {
+            // aria2 changeGlobalOption expects all values as strings
+            let str_val = match &val {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                _ => continue,
+            };
+            opts.insert(key, serde_json::Value::String(str_val));
+        }
+    }
+    Ok(opts)
+}
+
+/// Full post-engine-start orchestration sequence.
+///
+/// Must be called after the engine sidecar has started and is accepting
+/// RPC connections.
+///
+/// Steps:
+/// 1. Update `Aria2Client` credentials from config store
+/// 2. Refresh `RuntimeConfigState` from preferences
+/// 3. Read `system.json` and push hot-reloadable options to aria2
+/// 4. Apply speed limit overrides based on schedule state
+/// 5. Stop existing background services (handles restart gracefully)
+/// 6. Spawn fresh background services (stat, speed scheduler, task monitor)
+pub async fn on_engine_ready(app: &tauri::AppHandle) -> Result<(), AppError> {
+    // 1. Update Aria2Client credentials
+    let (port, secret) = read_engine_credentials(app)?;
+    if let Some(aria2) = app.try_state::<Aria2State>() {
+        aria2.0.update_credentials(port, secret).await;
+    }
+
+    // 2. Refresh RuntimeConfig
+    if let Some(rc_state) = app.try_state::<RuntimeConfigState>() {
+        let store = app
+            .store("config.json")
+            .map_err(|e| AppError::Store(format!("Failed to open config.json: {e}")))?;
+        if let Some(prefs) = store.get("preferences") {
+            let _ = rc_state.refresh_from_json(&prefs).await;
+        }
+    }
+
+    // 3. Sync global options
+    let mut opts = read_system_options(app)?;
+
+    // 4. Speed limit override
+    if let Some(rc_state) = app.try_state::<RuntimeConfigState>() {
+        let cfg = rc_state.snapshot().await;
+        if !cfg.speed_limit_enabled {
+            // Speed limiter OFF → unlimited
+            opts.insert(
+                "max-overall-download-limit".to_string(),
+                serde_json::Value::String("0".to_string()),
+            );
+            opts.insert(
+                "max-overall-upload-limit".to_string(),
+                serde_json::Value::String("0".to_string()),
+            );
+        } else if cfg.speed_schedule_enabled
+            && !is_in_scheduled_period(
+                &cfg.speed_schedule_from,
+                &cfg.speed_schedule_to,
+                cfg.speed_schedule_days,
+            )
+        {
+            // Schedule ON but outside period → unlimited
+            opts.insert(
+                "max-overall-download-limit".to_string(),
+                serde_json::Value::String("0".to_string()),
+            );
+            opts.insert(
+                "max-overall-upload-limit".to_string(),
+                serde_json::Value::String("0".to_string()),
+            );
+        }
+        // Otherwise: in-period limits from system.json are already correct
+    }
+
+    // Push to aria2
+    if !opts.is_empty() {
+        if let Some(aria2) = app.try_state::<Aria2State>() {
+            let count = opts.len();
+            aria2.0.change_global_option(opts).await?;
+            log::info!("runtime_services: synced {count} global options to aria2");
+        }
+    } else {
+        log::info!("runtime_services: no global options to sync");
+    }
+
+    // 5–6. Stop old services, spawn fresh ones.
+    // On first start the handles are None; on restart they hold the old handles.
+    spawn_background_services(app).await;
+
+    Ok(())
+}
+
+/// Stops any running background services and spawns fresh ones.
+///
+/// Safe to call multiple times — idempotent stop + fresh spawn.
+async fn spawn_background_services(app: &tauri::AppHandle) {
+    use crate::speed_scheduler::{self, SpeedSchedulerState};
+    use crate::stat_service::{self, StatServiceState};
+    use crate::task_monitor::{self, TaskMonitorState};
+
+    let aria2_arc = match app.try_state::<Aria2State>() {
+        Some(s) => s.0.clone(),
+        None => {
+            log::warn!("runtime_services: Aria2State not available, skipping service spawn");
+            return;
+        }
+    };
+
+    // Stop existing services (handles restart scenario)
+    if let Some(ss) = app.try_state::<StatServiceState>() {
+        let mut guard = ss.0.lock().await;
+        if let Some(old) = guard.take() {
+            old.stop();
+            log::debug!("runtime_services: stopped old stat_service");
+        }
+    }
+    if let Some(ss) = app.try_state::<SpeedSchedulerState>() {
+        let mut guard = ss.0.lock().await;
+        if let Some(old) = guard.take() {
+            old.stop();
+            log::debug!("runtime_services: stopped old speed_scheduler");
+        }
+    }
+    if let Some(ts) = app.try_state::<TaskMonitorState>() {
+        let mut guard = ts.0.lock().await;
+        if let Some(old) = guard.take() {
+            old.stop();
+            log::debug!("runtime_services: stopped old task_monitor");
+        }
+    }
+
+    // Spawn fresh services
+    let stat_handle = stat_service::spawn_stat_service(app.clone(), aria2_arc.clone());
+    if let Some(ss) = app.try_state::<StatServiceState>() {
+        *ss.0.lock().await = Some(stat_handle);
+    }
+
+    let scheduler_handle = speed_scheduler::spawn_speed_scheduler(app.clone(), aria2_arc.clone());
+    if let Some(ss) = app.try_state::<SpeedSchedulerState>() {
+        *ss.0.lock().await = Some(scheduler_handle);
+    }
+
+    let monitor_handle = task_monitor::spawn_task_monitor(app.clone(), aria2_arc);
+    if let Some(ts) = app.try_state::<TaskMonitorState>() {
+        *ts.0.lock().await = Some(monitor_handle);
+    }
+
+    log::info!("runtime_services: spawned stat_service + speed_scheduler + task_monitor");
+}
+
+/// Read engine port and secret from the config store.
+fn read_engine_credentials(app: &tauri::AppHandle) -> Result<(u16, String), AppError> {
+    let store = app
+        .store("config.json")
+        .map_err(|e| AppError::Store(format!("Failed to open config.json: {e}")))?;
+
+    let prefs = store.get("preferences");
+
+    let port = prefs
+        .as_ref()
+        .and_then(|p| {
+            p.get("rpcListenPort").and_then(|v| {
+                v.as_u64()
+                    .map(|n| n as u16)
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+        })
+        .unwrap_or(16800);
+
+    let secret = prefs
+        .as_ref()
+        .and_then(|p| p.get("rpcSecret")?.as_str().map(String::from))
+        .unwrap_or_default();
+
+    Ok((port, secret))
+}
+
+/// Public wrapper for use by commands that need engine credentials
+/// without running the full `on_engine_ready` orchestration.
+pub fn read_engine_credentials_from_app(app: &tauri::AppHandle) -> Result<(u16, String), AppError> {
+    read_engine_credentials(app)
+}
+
+/// Pure function: determines if the current time falls within the scheduled
+/// speed-limit period.
+///
+/// Port of the TypeScript `isInScheduledPeriod` from `useSpeedScheduler.ts`.
+///
+/// - `from`/`to`: "HH:mm" 24-hour format strings
+/// - `days`: bitmask (Mon=1,Tue=2,Wed=4,Thu=8,Fri=16,Sat=32,Sun=64; 0=every day)
+pub fn is_in_scheduled_period(from: &str, to: &str, days: u8) -> bool {
+    is_in_scheduled_period_at(from, to, days, chrono::Local::now())
+}
+
+/// Testable version with injectable "now".
+fn is_in_scheduled_period_at(
+    from: &str,
+    to: &str,
+    days: u8,
+    now: chrono::DateTime<chrono::Local>,
+) -> bool {
+    use chrono::{Datelike, Timelike};
+
+    // Day-of-week check: Mon=1, Tue=2, ..., Sun=64; 0 = every day
+    if days != 0 {
+        // chrono: Mon=0..Sun=6 → bit position
+        let day_bit = 1u8 << now.weekday().num_days_from_monday();
+        if days & day_bit == 0 {
+            return false;
+        }
+    }
+
+    let parse_hm = |s: &str| -> Option<(u32, u32)> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return None;
+        }
+        Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+    };
+
+    let (from_h, from_m) = match parse_hm(from) {
+        Some(v) => v,
+        None => return false,
+    };
+    let (to_h, to_m) = match parse_hm(to) {
+        Some(v) => v,
+        None => return false,
+    };
+
+    let now_minutes = now.hour() * 60 + now.minute();
+    let from_minutes = from_h * 60 + from_m;
+    let to_minutes = to_h * 60 + to_m;
+
+    if from_minutes <= to_minutes {
+        // Same-day span: 08:00 → 22:00
+        now_minutes >= from_minutes && now_minutes < to_minutes
+    } else {
+        // Overnight span: 22:00 → 08:00
+        now_minutes >= from_minutes || now_minutes < to_minutes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn make_time(hour: u32, minute: u32, weekday_offset: i64) -> chrono::DateTime<chrono::Local> {
+        // Create a date at a known weekday offset from a Monday
+        // 2025-01-06 is a Monday
+        let naive = chrono::NaiveDate::from_ymd_opt(2025, 1, 6 + weekday_offset as u32)
+            .unwrap()
+            .and_hms_opt(hour, minute, 0)
+            .unwrap();
+        chrono::Local.from_local_datetime(&naive).single().unwrap()
+    }
+
+    // ── Schedule period checks ──────────────────────────────────────
+
+    #[test]
+    fn same_day_span_inside() {
+        // 08:00 → 22:00, currently 12:00 Monday, every day
+        let now = make_time(12, 0, 0);
+        assert!(is_in_scheduled_period_at("08:00", "22:00", 0, now));
+    }
+
+    #[test]
+    fn same_day_span_outside_before() {
+        let now = make_time(7, 30, 0);
+        assert!(!is_in_scheduled_period_at("08:00", "22:00", 0, now));
+    }
+
+    #[test]
+    fn same_day_span_outside_after() {
+        let now = make_time(22, 30, 0);
+        assert!(!is_in_scheduled_period_at("08:00", "22:00", 0, now));
+    }
+
+    #[test]
+    fn overnight_span_inside_late() {
+        // 22:00 → 08:00, currently 23:00
+        let now = make_time(23, 0, 0);
+        assert!(is_in_scheduled_period_at("22:00", "08:00", 0, now));
+    }
+
+    #[test]
+    fn overnight_span_inside_early() {
+        // 22:00 → 08:00, currently 06:00
+        let now = make_time(6, 0, 0);
+        assert!(is_in_scheduled_period_at("22:00", "08:00", 0, now));
+    }
+
+    #[test]
+    fn overnight_span_outside() {
+        // 22:00 → 08:00, currently 12:00
+        let now = make_time(12, 0, 0);
+        assert!(!is_in_scheduled_period_at("22:00", "08:00", 0, now));
+    }
+
+    #[test]
+    fn boundary_exactly_at_from() {
+        let now = make_time(8, 0, 0);
+        assert!(is_in_scheduled_period_at("08:00", "22:00", 0, now));
+    }
+
+    #[test]
+    fn boundary_exactly_at_to() {
+        // "to" is exclusive
+        let now = make_time(22, 0, 0);
+        assert!(!is_in_scheduled_period_at("08:00", "22:00", 0, now));
+    }
+
+    // ── Day-of-week filtering ───────────────────────────────────────
+
+    #[test]
+    fn weekday_only_on_monday() {
+        // Weekdays = 31 (Mon=1+Tue=2+Wed=4+Thu=8+Fri=16)
+        let monday = make_time(12, 0, 0); // Monday
+        assert!(is_in_scheduled_period_at("08:00", "22:00", 31, monday));
+    }
+
+    #[test]
+    fn weekday_only_on_saturday() {
+        // Weekdays = 31, Saturday offset = 5
+        let saturday = make_time(12, 0, 5); // Saturday
+        assert!(!is_in_scheduled_period_at("08:00", "22:00", 31, saturday));
+    }
+
+    #[test]
+    fn weekend_only_on_sunday() {
+        // Weekends = 96 (Sat=32+Sun=64)
+        let sunday = make_time(12, 0, 6); // Sunday
+        assert!(is_in_scheduled_period_at("08:00", "22:00", 96, sunday));
+    }
+
+    #[test]
+    fn every_day_ignores_bitmask() {
+        // days=0 means every day
+        let wednesday = make_time(12, 0, 2);
+        assert!(is_in_scheduled_period_at("08:00", "22:00", 0, wednesday));
+    }
+
+    // ── Invalid input handling ──────────────────────────────────────
+
+    #[test]
+    fn invalid_from_returns_false() {
+        let now = make_time(12, 0, 0);
+        assert!(!is_in_scheduled_period_at("invalid", "22:00", 0, now));
+    }
+
+    #[test]
+    fn invalid_to_returns_false() {
+        let now = make_time(12, 0, 0);
+        assert!(!is_in_scheduled_period_at("08:00", "bad", 0, now));
+    }
+
+    // ── NON_HOT_RELOADABLE ─────────────────────────────────────────
+
+    #[test]
+    fn non_hot_reloadable_contains_restart_keys() {
+        assert!(NON_HOT_RELOADABLE.contains(&"rpc-listen-port"));
+        assert!(NON_HOT_RELOADABLE.contains(&"rpc-secret"));
+        assert!(NON_HOT_RELOADABLE.contains(&"listen-port"));
+        assert!(NON_HOT_RELOADABLE.contains(&"dht-listen-port"));
+    }
+
+    #[test]
+    fn non_hot_reloadable_contains_log_level() {
+        assert!(NON_HOT_RELOADABLE.contains(&"log-level"));
+    }
+
+    #[test]
+    fn non_hot_reloadable_does_not_contain_normal_keys() {
+        assert!(!NON_HOT_RELOADABLE.contains(&"max-overall-download-limit"));
+        assert!(!NON_HOT_RELOADABLE.contains(&"dir"));
+        assert!(!NON_HOT_RELOADABLE.contains(&"split"));
+    }
+}

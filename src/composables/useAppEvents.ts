@@ -12,7 +12,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useRouter } from 'vue-router'
 import { logger } from '@shared/logger'
-import { setEngineReady, isEngineReady, reconnectClient } from '@/api/aria2'
+import { setEngineReady, isEngineReady } from '@/api/aria2'
 import { detectKind, createBatchItem } from '@shared/utils/batchHelpers'
 import { onUnmounted, watch, type Ref, type WatchStopHandle } from 'vue'
 
@@ -133,33 +133,27 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
     const unlistenEngineRecovered = registerCleanup(
       await listen<{ source: string }>('engine-recovered', async (event) => {
         logger.info('MainLayout', `engine recovered (source: ${event.payload.source})`)
-        const port = Number(preferenceStore.config.rpcListenPort) || 16800
-        const secret = preferenceStore.config.rpcSecret || ''
 
-        // Exponential backoff reconnect — same pattern as useEngineRestart.ts.
-        // restart_engine() returns after spawn(), before RPC is ready.
-        // Allow up to ~5s for aria2 to open its TCP listener.
-        const maxRetries = 5
-        let lastError: unknown
-        for (let i = 0; i < maxRetries; i++) {
-          const delay = Math.min(200 * 2 ** i, 2000)
-          await new Promise((r) => setTimeout(r, delay))
-          try {
-            await reconnectClient({ port, secret })
+        // Rust-side health check with retries — also updates Aria2Client credentials.
+        // on_engine_ready() was already called by restart_engine_command before
+        // this event is emitted, so credentials and options are synced.
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          const ready = await invoke<boolean>('wait_for_engine')
+          if (ready) {
             setEngineReady(true)
             appStore.engineReady = true
             message.success(t('app.engine-recovered'))
-            return
-          } catch (e) {
-            lastError = e
-            logger.debug('MainLayout', `engine-recovered reconnect attempt ${i + 1}/${maxRetries} failed: ${e}`)
+          } else {
+            logger.error('MainLayout', 'engine-recovered: wait_for_engine returned false')
+            setEngineReady(false)
+            appStore.engineReady = false
           }
+        } catch (e) {
+          logger.error('MainLayout', `engine-recovered: wait_for_engine failed: ${e}`)
+          setEngineReady(false)
+          appStore.engineReady = false
         }
-
-        // All retries exhausted — engine process may be running but RPC unreachable
-        logger.error('MainLayout', `engine-recovered: all ${maxRetries} reconnect attempts failed: ${lastError}`)
-        setEngineReady(false)
-        appStore.engineReady = false
       }),
     )
 

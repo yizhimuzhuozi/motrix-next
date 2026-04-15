@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { isEmpty } from 'lodash-es'
 import { load } from '@tauri-apps/plugin-store'
+import { invoke } from '@tauri-apps/api/core'
 import { getLangDirection, pushItemToFixedLengthArray, removeArrayItem } from '@shared/utils'
 import { fetchBtTrackerFromSource } from '@shared/utils/tracker'
 import { DEFAULT_APP_CONFIG, MAX_NUM_OF_DIRECTORIES } from '@shared/constants'
@@ -65,6 +66,7 @@ export const usePreferenceStore = defineStore('preference', () => {
           await store.save()
           logger.info('PreferenceStore', 'config migrated and persisted')
         }
+        invoke('refresh_runtime_config').catch((e: unknown) => logger.debug('PreferenceStore.refreshRuntimeConfig', e))
       }
     } catch (e) {
       logger.error('PreferenceStore.loadPreference', e)
@@ -76,6 +78,7 @@ export const usePreferenceStore = defineStore('preference', () => {
       const store = await getStore()
       await store.set(STORE_KEY, config.value)
       await store.save()
+      invoke('refresh_runtime_config').catch((e: unknown) => logger.debug('PreferenceStore.refreshRuntimeConfig', e))
       return true
     } catch (e) {
       logger.error('PreferenceStore.savePreference', e)
@@ -90,6 +93,7 @@ export const usePreferenceStore = defineStore('preference', () => {
       await store.set(STORE_KEY, merged)
       await store.save()
       config.value = merged
+      invoke('refresh_runtime_config').catch((e: unknown) => logger.debug('PreferenceStore.refreshRuntimeConfig', e))
       return true
     } catch (e) {
       logger.error('PreferenceStore.updateAndSave', e)
@@ -166,6 +170,7 @@ export const usePreferenceStore = defineStore('preference', () => {
       await store.set(STORE_KEY, defaults)
       await store.save()
       config.value = defaults
+      invoke('refresh_runtime_config').catch((e: unknown) => logger.debug('PreferenceStore.refreshRuntimeConfig', e))
       return true
     } catch (e) {
       logger.error('PreferenceStore.resetToDefaults', e)

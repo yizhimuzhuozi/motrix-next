@@ -1,10 +1,17 @@
+mod aria2;
 mod commands;
 mod db_guard;
 mod engine;
 mod error;
 mod gpu_guard;
+mod history;
 #[cfg(target_os = "macos")]
 mod menu;
+mod runtime_config;
+mod runtime_services;
+mod speed_scheduler;
+mod stat_service;
+mod task_monitor;
 mod tray;
 mod upnp;
 
@@ -56,6 +63,32 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
     let tray_state = tray::setup_tray(handle)?;
     app.manage(tray_state);
+
+    // Aria2 JSON-RPC client — starts with default credentials, updated
+    // after engine start via Aria2Client::update_credentials().
+    let aria2_state = aria2::client::Aria2State(std::sync::Arc::new(
+        aria2::client::Aria2Client::new(16800, String::new()),
+    ));
+    app.manage(aria2_state);
+
+    // Runtime config cache — refreshed by frontend after each config save.
+    app.manage(runtime_config::RuntimeConfigState::new());
+
+    // Background services — handles stored here so on_engine_ready can
+    // stop old tasks before spawning new ones on restart.
+    app.manage(stat_service::StatServiceState::new());
+    app.manage(speed_scheduler::SpeedSchedulerState::new());
+    app.manage(task_monitor::TaskMonitorState::new());
+
+    // History database — opens the same DB as tauri-plugin-sql migrations.
+    {
+        use tauri::Manager;
+        let app_data = app.path().app_data_dir()?;
+        let db_path = app_data.join("history.db");
+        let history_db = history::HistoryDb::open(&db_path)
+            .map_err(|e| format!("Failed to open history.db: {e}"))?;
+        app.manage(history::HistoryDbState(std::sync::Arc::new(history_db)));
+    }
 
     #[cfg(target_os = "macos")]
     app.on_menu_event(|app, event| match event.id().as_ref() {
@@ -399,26 +432,16 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
             // Save aria2 session before killing the engine so in-progress
             // downloads survive across restarts.  Best-effort with 500ms
             // timeout — never blocks app exit.
-            {
-                let port = app
-                    .store("config.json")
-                    .ok()
-                    .and_then(|s| s.get("preferences"))
-                    .and_then(|p| {
-                        p.get("rpcListenPort").and_then(|v| {
-                            v.as_u64()
-                                .map(|n| n.to_string())
-                                .or_else(|| v.as_str().map(String::from))
-                        })
-                    })
-                    .unwrap_or_else(|| "16800".to_string());
-                let secret = app
-                    .store("config.json")
-                    .ok()
-                    .and_then(|s| s.get("preferences"))
-                    .and_then(|p| p.get("rpcSecret")?.as_str().map(String::from))
-                    .unwrap_or_default();
-                engine::save_session_rpc(&port, &secret);
+            if let Some(aria2) = app.try_state::<aria2::client::Aria2State>() {
+                let client = aria2.0.clone();
+                let _ = tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(500),
+                        client.save_session(),
+                    )
+                    .await
+                });
+                log::info!("aria2 session save attempted via managed client");
             }
             let _ = engine::stop_engine(app, true);
             // Clean up UPnP port mappings on exit.
@@ -661,6 +684,44 @@ pub fn run() {
             commands::fetch_remote_bytes,
             commands::get_system_proxy,
             commands::lookup_peer_ips,
+            commands::refresh_runtime_config,
+            commands::history_add_record,
+            commands::history_get_records,
+            commands::history_remove_record,
+            commands::history_clear_records,
+            commands::history_remove_stale,
+            commands::history_remove_by_info_hash,
+            commands::history_record_birth,
+            commands::history_load_births,
+            commands::history_check_integrity,
+            commands::aria2_fetch_task_list,
+            commands::aria2_fetch_active_task_list,
+            commands::aria2_fetch_task_item,
+            commands::aria2_fetch_task_item_with_peers,
+            commands::aria2_get_version,
+            commands::aria2_get_global_option,
+            commands::aria2_get_global_stat,
+            commands::aria2_change_global_option,
+            commands::aria2_get_option,
+            commands::aria2_change_option,
+            commands::aria2_get_files,
+            commands::aria2_add_uri,
+            commands::aria2_add_torrent,
+            commands::aria2_add_metalink,
+            commands::aria2_force_remove,
+            commands::aria2_force_pause,
+            commands::aria2_pause,
+            commands::aria2_unpause,
+            commands::aria2_pause_all,
+            commands::aria2_force_pause_all,
+            commands::aria2_unpause_all,
+            commands::aria2_save_session,
+            commands::aria2_remove_download_result,
+            commands::aria2_purge_download_result,
+            commands::aria2_batch_unpause,
+            commands::aria2_batch_force_pause,
+            commands::aria2_batch_force_remove,
+            commands::wait_for_engine,
         ])
         // ── Window event interception ─────────────────────────────────
         //
@@ -710,19 +771,48 @@ pub fn run() {
                 log::debug!("window:prefs minimizeToTrayOnClose={}", should_hide);
 
                 if should_hide {
-                    log::info!("window:hide-to-tray label=main");
-                    let _ = window.hide();
+                    // Lightweight mode: destroy the WebView to free memory.
+                    // Window is fully recreated on tray-click via get_or_create_main_window.
+                    // Downloads, monitoring, and tray continue — they run in Rust.
+                    let lightweight = store_prefs
+                        .as_ref()
+                        .and_then(|p| p.get("lightweightMode")?.as_bool())
+                        .unwrap_or(false);
 
-                    #[cfg(target_os = "macos")]
-                    {
-                        let hide_dock = store_prefs
-                            .as_ref()
-                            .and_then(|p| p.get("hideDockOnMinimize")?.as_bool())
-                            .unwrap_or(false);
-                        log::debug!("window:prefs hideDockOnMinimize={}", hide_dock);
-                        if hide_dock {
-                            use tauri::ActivationPolicy;
-                            let _ = app.set_activation_policy(ActivationPolicy::Accessory);
+                    if lightweight {
+                        log::info!("window:lightweight-destroy label=main");
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            let hide_dock = store_prefs
+                                .as_ref()
+                                .and_then(|p| p.get("hideDockOnMinimize")?.as_bool())
+                                .unwrap_or(false);
+                            if hide_dock {
+                                use tauri::ActivationPolicy;
+                                let _ = app.set_activation_policy(ActivationPolicy::Accessory);
+                            }
+                        }
+
+                        // destroy() removes the WebView; prevent_close() above
+                        // already stopped the default close. We must close the
+                        // window ourselves via WebviewWindow::destroy().
+                        let _ = window.destroy();
+                    } else {
+                        log::info!("window:hide-to-tray label=main");
+                        let _ = window.hide();
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            let hide_dock = store_prefs
+                                .as_ref()
+                                .and_then(|p| p.get("hideDockOnMinimize")?.as_bool())
+                                .unwrap_or(false);
+                            log::debug!("window:prefs hideDockOnMinimize={}", hide_dock);
+                            if hide_dock {
+                                use tauri::ActivationPolicy;
+                                let _ = app.set_activation_policy(ActivationPolicy::Accessory);
+                            }
                         }
                     }
                 } else {

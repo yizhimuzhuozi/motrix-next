@@ -19,7 +19,6 @@ pub enum AppError {
     #[error("IO error: {0}")]
     Io(String),
     /// Requested resource not found.
-    #[allow(dead_code)]
     #[error("Not found: {0}")]
     NotFound(String),
     /// Auto-updater check or install failure.
@@ -31,10 +30,12 @@ pub enum AppError {
     /// Protocol handler registration/query error.
     #[error("Protocol error: {0}")]
     Protocol(String),
-    /// GeoIP database lookup error.
-    #[error("GeoIP error: {0}")]
-    #[allow(dead_code)]
-    GeoIp(String),
+    /// Aria2 JSON-RPC communication error.
+    #[error("Aria2 RPC error: {0}")]
+    Aria2(String),
+    /// Database read/write error (rusqlite).
+    #[error("Database error: {0}")]
+    Database(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -46,6 +47,18 @@ impl From<std::io::Error> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(e: serde_json::Error) -> Self {
         AppError::Store(e.to_string())
+    }
+}
+
+impl From<reqwest::Error> for AppError {
+    fn from(e: reqwest::Error) -> Self {
+        AppError::Aria2(e.to_string())
+    }
+}
+
+impl From<rusqlite::Error> for AppError {
+    fn from(e: rusqlite::Error) -> Self {
+        AppError::Database(e.to_string())
     }
 }
 
@@ -97,12 +110,6 @@ mod tests {
         assert_eq!(e.to_string(), "Protocol error: unsupported platform");
     }
 
-    #[test]
-    fn display_geoip_error() {
-        let e = AppError::GeoIp("database not found".into());
-        assert_eq!(e.to_string(), "GeoIP error: database not found");
-    }
-
     // ── From conversions ────────────────────────────────────────────
 
     #[test]
@@ -146,7 +153,8 @@ mod tests {
             ("Updater", AppError::Updater("u".into())),
             ("Upnp", AppError::Upnp("p".into())),
             ("Protocol", AppError::Protocol("r".into())),
-            ("GeoIp", AppError::GeoIp("g".into())),
+            ("Aria2", AppError::Aria2("a".into())),
+            ("Database", AppError::Database("d".into())),
         ];
         for (tag, err) in cases {
             let json = serde_json::to_string(&err).expect("serialize");
@@ -155,5 +163,26 @@ mod tests {
                 "variant {tag} serialized as '{json}'"
             );
         }
+    }
+
+    // ── Aria2 + Database variants ───────────────────────────────────
+
+    #[test]
+    fn display_aria2_error() {
+        let e = AppError::Aria2("connection refused".into());
+        assert_eq!(e.to_string(), "Aria2 RPC error: connection refused");
+    }
+
+    #[test]
+    fn display_database_error() {
+        let e = AppError::Database("table not found".into());
+        assert_eq!(e.to_string(), "Database error: table not found");
+    }
+
+    #[test]
+    fn from_rusqlite_error_produces_database_variant() {
+        let rusqlite_err = rusqlite::Error::InvalidParameterCount(0, 1);
+        let app_err = AppError::from(rusqlite_err);
+        assert!(matches!(app_err, AppError::Database(_)));
     }
 }
