@@ -460,11 +460,7 @@ async fn monitor_loop(
         // after a previous trigger (cancelled or completed).
         {
             let active_dl = count_active_downloads(&all);
-            let waiting: usize = aria2
-                .tell_waiting(0, 1)
-                .await
-                .map(|w| w.len())
-                .unwrap_or(0);
+            let waiting: usize = aria2.tell_waiting(0, 1).await.map(|w| w.len()).unwrap_or(0);
 
             if active_dl > 0 || waiting > 0 {
                 had_active_downloads = true;
@@ -472,11 +468,7 @@ async fn monitor_loop(
                 shutdown_triggered = false;
             }
 
-            if !shutdown_triggered
-                && had_active_downloads
-                && active_dl == 0
-                && waiting == 0
-            {
+            if !shutdown_triggered && had_active_downloads && active_dl == 0 && waiting == 0 {
                 let should_shutdown = app
                     .try_state::<super::config::RuntimeConfigState>()
                     .map(|rc| rc.0.try_read().is_ok_and(|cfg| cfg.shutdown_when_complete))
