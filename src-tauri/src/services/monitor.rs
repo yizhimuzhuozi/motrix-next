@@ -403,11 +403,12 @@ async fn monitor_loop(
 
         let events = notifier.scan(&all);
 
-        // DEBUG: capture event names for shutdown trace
-        let events_emitted: Vec<String> = events.iter().map(|(n, _)| n.clone()).collect();
-        if !events_emitted.is_empty() {
-            eprintln!("[shutdown-debug] events this cycle: {:?}", events_emitted);
-        }
+        // Track whether this cycle produced a new completion event.
+        // Used below to reset `shutdown_triggered` for instant downloads
+        // that complete within a single poll window.
+        let has_new_completion = events
+            .iter()
+            .any(|(n, _)| n == events::TASK_COMPLETE || n == events::BT_COMPLETE);
 
         // Gate on user preference — skip notification events when disabled
         if !events.is_empty() {
@@ -468,31 +469,17 @@ async fn monitor_loop(
             let active_dl = count_active_downloads(&all);
             let waiting: usize = aria2.tell_waiting(0, 1).await.map(|w| w.len()).unwrap_or(0);
 
-            // DEBUG: trace every poll cycle
-            eprintln!(
-                "[shutdown-debug] active_dl={active_dl} waiting={waiting} \
-                 had_active={had_active_downloads} triggered={shutdown_triggered} \
-                 events={}",
-                events_emitted.len()
-            );
-
             if active_dl > 0 || waiting > 0 {
                 had_active_downloads = true;
                 // New downloads appeared — allow re-detection.
                 shutdown_triggered = false;
-                eprintln!("[shutdown-debug] → reset: had_active=true, triggered=false");
             }
 
             // A new completion event means a task went through its full lifecycle
             // (waiting → active → complete) even if we never observed it as active
             // in the 2s poll window (instant download). Treat this as equivalent to
             // "had active downloads" and allow re-triggering.
-            if shutdown_triggered
-                && events_emitted
-                    .iter()
-                    .any(|n| n == events::TASK_COMPLETE || n == events::BT_COMPLETE)
-            {
-                eprintln!("[shutdown-debug] → completion event while triggered — resetting");
+            if shutdown_triggered && has_new_completion {
                 shutdown_triggered = false;
             }
 
@@ -502,12 +489,9 @@ async fn monitor_loop(
                     .map(|rc| rc.0.try_read().is_ok_and(|cfg| cfg.shutdown_when_complete))
                     .unwrap_or(false);
 
-                eprintln!("[shutdown-debug] → condition met, should_shutdown={should_shutdown}");
-
                 if should_shutdown {
                     shutdown_triggered = true;
                     log::info!("task_monitor: all downloads complete, shutdown requested");
-                    eprintln!("[shutdown-debug] → FIRING shutdown countdown!");
 
                     // Reset the cancel flag for this new shutdown sequence.
                     // Previous cancellations must not suppress this trigger.
