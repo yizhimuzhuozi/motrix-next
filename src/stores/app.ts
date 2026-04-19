@@ -67,6 +67,8 @@ export const useAppStore = defineStore('app', () => {
   const addTaskOptions = ref<Aria2EngineOptions>({})
   /** Referer from the most recent deep-link, pre-filled into AddTask form. */
   const pendingReferer = ref('')
+  /** Cookie from the most recent deep-link, forwarded to aria2 as a Cookie header. */
+  const pendingCookie = ref('')
   const progress = ref(0)
   const pendingUpdate = ref<TauriUpdate | null>(null)
   const engineRestarting = ref(true)
@@ -149,6 +151,7 @@ export const useAppStore = defineStore('app', () => {
     addTaskVisible.value = false
     pendingBatch.value = []
     pendingReferer.value = ''
+    pendingCookie.value = ''
   }
 
   function updateAddTaskOptions(options: Aria2EngineOptions = {}) {
@@ -253,14 +256,22 @@ export const useAppStore = defineStore('app', () => {
               // The extension passes the originating tab URL here so the
               // desktop app can set the Referer header on the download.
               const referer = parsed.searchParams.get('referer') || ''
+              // Extract browser cookies forwarded by the extension.
+              // Cookie-gated CDNs (Quark, Baidu, etc.) require these
+              // cookies for authentication — without them, the CDN
+              // returns HTTP 412 Precondition Failed.
+              const cookie = parsed.searchParams.get('cookie') || ''
               if (referer) {
                 pendingReferer.value = referer
+              }
+              if (cookie) {
+                pendingCookie.value = cookie
               }
 
               // Auto-submit: bypass AddTask dialog when enabled for this type
               const autoSubmit = usePreferenceStore().config.autoSubmitFromExtension
               if (autoSubmit.enable && shouldAutoSubmit(autoSubmit, kind, downloadUrl)) {
-                void autoSubmitExtensionUrl(downloadUrl, referer)
+                void autoSubmitExtensionUrl(downloadUrl, referer, cookie)
               } else {
                 items.push(createBatchItem(kind, downloadUrl))
               }
@@ -323,7 +334,7 @@ export const useAppStore = defineStore('app', () => {
    * Auto-submits a single extension URL using the user's default settings.
    * Equivalent to opening AddTask and clicking Submit without any changes.
    */
-  async function autoSubmitExtensionUrl(url: string, referer: string): Promise<void> {
+  async function autoSubmitExtensionUrl(url: string, referer: string, cookie: string): Promise<void> {
     const preferenceStore = usePreferenceStore()
     const taskStore = useTaskStore()
 
@@ -335,7 +346,7 @@ export const useAppStore = defineStore('app', () => {
       userAgent: '',
       authorization: '',
       referer,
-      cookie: '',
+      cookie,
       proxyMode: isGlobalDownloadProxyActive(preferenceStore.config.proxy) ? 'global' : 'none',
       customProxy: '',
       globalProxyServer: preferenceStore.config.proxy?.server ?? '',
@@ -365,6 +376,7 @@ export const useAppStore = defineStore('app', () => {
     pendingBatch,
     addTaskOptions,
     pendingReferer,
+    pendingCookie,
     progress,
     pendingUpdate,
     engineRestarting,
