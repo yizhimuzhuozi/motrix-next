@@ -104,7 +104,8 @@ export const UPDATE_CHANNELS = ['stable', 'beta'] as const
 /**
  * Factory default values for every AppConfig field.
  * **This is the single source of truth** for both first-launch initialization
- * and the "Restore Defaults" action. All fallbacks in buildBasicForm() and
+ * and the "Restore Defaults" action. All fallbacks in buildGeneralForm(),
+ * buildDownloadsForm(), buildBtForm(), buildNetworkForm(), and
  * buildAdvancedForm() must reference these values via `?? D.field`.
  *
  * Each value is justified by industry research:

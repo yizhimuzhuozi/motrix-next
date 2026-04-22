@@ -54,14 +54,14 @@ export interface AdvancedForm {
   userAgent: string
   logLevel: string
   hardwareRendering: boolean
-  // Clipboard detection (migrated from Basic.vue)
+  // Clipboard detection (migrated from legacy Basic tab)
   clipboardEnable: boolean
   clipboardHttp: boolean
   clipboardFtp: boolean
   clipboardMagnet: boolean
   clipboardThunder: boolean
   clipboardBtHash: boolean
-  // Protocol handlers (migrated from Basic.vue)
+  // Protocol handlers (migrated from legacy Basic tab)
   protocolMagnet: boolean
   protocolThunder: boolean
   protocolMotrixnext: boolean

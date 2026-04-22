@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview Network preference tab: proxy, ports, user-agent, timeouts, file allocation. */
-import { computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import { usePreferenceStore } from '@/stores/preference'
@@ -10,6 +10,7 @@ import { useSystemProxyDetect } from '@/composables/useSystemProxyDetect'
 import { logger } from '@shared/logger'
 import { useAppMessage } from '@/composables/useAppMessage'
 import { PROXY_SCOPE_OPTIONS, FILE_ALLOCATION_OPTIONS, ENGINE_RPC_PORT } from '@shared/constants'
+import { diffConfig, checkIsNeedRestart } from '@shared/utils/config'
 import {
   buildNetworkForm,
   buildNetworkSystemConfig,
@@ -36,6 +37,7 @@ import {
   NText,
   useDialog,
 } from 'naive-ui'
+const needsRestart = ref(false)
 import PreferenceActionBar from './PreferenceActionBar.vue'
 import { SearchOutline, DiceOutline } from '@vicons/ionicons5'
 
@@ -86,12 +88,45 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceF
         return false
       }
     }
+
+    // Gate: engine restart confirmation (BT/DHT port change).
+    // Must confirm BEFORE saving — declining cancels the entire save so
+    // config.json never contains values the running engine doesn't match.
+    const changed = diffConfig(preferenceStore.config, f)
+    if (checkIsNeedRestart(changed)) {
+      const ok = await new Promise<boolean>((resolve) => {
+        dialog.warning({
+          title: t('preferences.engine-restart-title'),
+          content: t('preferences.engine-restart-confirm'),
+          positiveText: t('preferences.engine-restart-now'),
+          negativeText: t('app.cancel'),
+          maskClosable: false,
+          onPositiveClick: () => resolve(true),
+          onNegativeClick: () => resolve(false),
+          onClose: () => resolve(false),
+        })
+      })
+      if (!ok) return false
+      needsRestart.value = true
+    }
+
     return true
   },
   afterSave: async (f, prevConfig) => {
     // Sync UPnP mapping state after save
     if (f.enableUpnp !== prevConfig.enableUpnp) {
       syncUpnpState(!!f.enableUpnp, f.listenPort, f.dhtListenPort)
+    }
+
+    // Engine restart — user already confirmed in beforeSave, execute immediately.
+    if (needsRestart.value) {
+      needsRestart.value = false
+      const port = (preferenceStore.config.rpcListenPort as number) || ENGINE_RPC_PORT
+      const secret = (preferenceStore.config.rpcSecret as string) || ''
+      message.info(t('preferences.engine-restarting'))
+      await nextTick()
+      await new Promise((r) => requestAnimationFrame(r))
+      await restartEngine({ port, secret })
     }
   },
 })

@@ -21,17 +21,14 @@ import * as path from 'node:path'
 
 const SRC = path.resolve(__dirname, '..', '..', '..')
 const UPDATE_DIALOG = path.join(SRC, 'components', 'preference', 'UpdateDialog.vue')
-const BASIC = path.join(SRC, 'components', 'preference', 'Basic.vue')
 const ADVANCED = path.join(SRC, 'components', 'preference', 'Advanced.vue')
 
 describe('graceful engine shutdown before relaunch()', () => {
   let updateDialogSrc: string
-  let basicSrc: string
   let advancedSrc: string
 
   beforeAll(() => {
     updateDialogSrc = fs.readFileSync(UPDATE_DIALOG, 'utf-8')
-    basicSrc = fs.readFileSync(BASIC, 'utf-8')
     advancedSrc = fs.readFileSync(ADVANCED, 'utf-8')
   })
 
@@ -71,19 +68,6 @@ describe('graceful engine shutdown before relaunch()', () => {
       // No artificial timer — apply_update is awaited directly
       expect(fn!.includes('await invoke')).toBe(true)
       expect(fn!.includes('MIN_')).toBe(false)
-    })
-  })
-
-  // ── Basic.vue ─────────────────────────────────────────────────────
-
-  describe('Basic.vue', () => {
-    it('imports or calls stop_engine_command / stopEngine', () => {
-      expect(basicSrc.includes('stop_engine_command') || basicSrc.includes('stopEngine')).toBe(true)
-    })
-
-    it('every relaunch() call is preceded by stopEngine/stop_engine_command', () => {
-      // Find all relaunch() occurrences and verify each has a stop before it
-      assertStopBeforeEveryRelaunch(basicSrc, 'Basic.vue')
     })
   })
 

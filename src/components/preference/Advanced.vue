@@ -231,7 +231,7 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceF
       }
     }
 
-    // Protocol handler registration (reconcile-based, migrated from Basic.vue).
+    // Protocol handler registration (reconcile-based).
     {
       const prevProtocols = prevConfig.protocols ?? { magnet: false, thunder: false, motrixnext: true }
       for (const [protocol, formKey, prev] of [

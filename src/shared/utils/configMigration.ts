@@ -66,7 +66,7 @@ const migrations: Migration[] = [
   // ── v1 → v2 ──────────────────────────────────────────────────────
   // Decouple split from maxConnectionPerServer.
   //
-  // Before v2, transformBasicForStore() forced split = maxConnectionPerServer.
+  // Before v2, transformDownloadsForStore() forced split = maxConnectionPerServer.
   // Both values are already persisted in config.json with the same number,
   // so no value migration is needed — we only remove the obsolete
   // engineMaxConnectionPerServer field that served as a sync anchor for

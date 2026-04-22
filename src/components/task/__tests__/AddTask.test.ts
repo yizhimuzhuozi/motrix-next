@@ -276,7 +276,7 @@ describe('AddTask split preference sync', () => {
     const { usePreferenceStore } = await import('@/stores/preference')
     const preferenceStore = usePreferenceStore()
     // Simulate user having saved maxConnectionPerServer=32 in Basic settings
-    // which writes split=32 to the store via transformBasicForStore
+    // which writes split=32 to the store via transformDownloadsForStore
     preferenceStore.$patch({ config: { split: 32, maxConnectionPerServer: 32 } })
 
     const wrapper = mountDialog()

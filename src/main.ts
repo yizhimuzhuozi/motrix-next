@@ -172,17 +172,24 @@ window.addEventListener('unhandledrejection', (e) => {
       // Seed system.json with the FULL set of default system config values.
       // This ensures CLI args include --split, --max-connection-per-server,
       // --user-agent, etc. even before the user opens the preference page.
-      // On subsequent launches, saved values from Basic/Advanced preferences
-      // already exist in system.json and will be merged (not overwritten).
-      const { buildBasicSystemConfig, buildBasicForm } = await import('@/composables/useBasicPreference')
+      // On subsequent launches, saved values from Downloads/BT/Network/Advanced
+      // preferences already exist in system.json and will be merged (not overwritten).
+      const { buildDownloadsSystemConfig, buildDownloadsForm } = await import('@/composables/useDownloadsPreference')
+      const { buildBtSystemConfig, buildBtForm } = await import('@/composables/useBtPreference')
+      const { buildNetworkSystemConfig, buildNetworkForm } = await import('@/composables/useNetworkPreference')
       const { buildAdvancedSystemConfig, buildAdvancedForm } = await import('@/composables/useAdvancedPreference')
-      const basicSystem = buildBasicSystemConfig(buildBasicForm(config, defaultDir))
+
+      const downloadsSystem = buildDownloadsSystemConfig(buildDownloadsForm(config, defaultDir))
+      const btSystem = buildBtSystemConfig(buildBtForm(config))
+      const networkSystem = buildNetworkSystemConfig(buildNetworkForm(config))
       const { form: advForm } = buildAdvancedForm(config)
       const advancedSystem = buildAdvancedSystemConfig(advForm)
 
       await invoke('save_system_config', {
         config: {
-          ...basicSystem,
+          ...downloadsSystem,
+          ...btSystem,
+          ...networkSystem,
           ...advancedSystem,
           // Override with runtime values — secret may have been auto-generated
           'rpc-secret': secret,

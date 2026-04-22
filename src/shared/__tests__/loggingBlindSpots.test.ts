@@ -541,17 +541,6 @@ describe('Silent-catch elimination: components/about/AboutPanel.vue', () => {
   })
 })
 
-describe('Silent-catch elimination: components/preference/Basic.vue', () => {
-  let source: string
-  beforeAll(() => {
-    source = fs.readFileSync(path.join(SRC_ROOT, 'src', 'components', 'preference', 'Basic.vue'), 'utf-8')
-  })
-
-  it('clipboard catch calls logger.debug', () => {
-    expect(source).toContain("logger.debug('Basic.clipboard'")
-  })
-})
-
 describe('Silent-catch elimination: components/preference/Advanced.vue', () => {
   let source: string
   beforeAll(() => {

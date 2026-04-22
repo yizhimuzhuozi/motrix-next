@@ -10,7 +10,7 @@
  * These tests are written RED-first (TDD) — they must FAIL before implementation.
  */
 import { describe, it, expect } from 'vitest'
-import { buildBasicForm } from '../useBasicPreference'
+import { buildGeneralForm } from '../useGeneralPreference'
 import type { AppConfig } from '@shared/types'
 import { DEFAULT_APP_CONFIG } from '@shared/constants'
 import { userKeys } from '@shared/configKeys'
@@ -34,13 +34,13 @@ describe('configKeys: mac-style-controls removal', () => {
 // ── macStyleControls removal from BasicForm ─────────────────────────
 
 describe('BasicForm: macStyleControls removal', () => {
-  it('buildBasicForm output does not include macStyleControls', () => {
-    const form = buildBasicForm({} as AppConfig)
+  it('buildGeneralForm output does not include macStyleControls', () => {
+    const form = buildGeneralForm({} as AppConfig)
     expect(form).not.toHaveProperty('macStyleControls')
   })
 
-  it('buildBasicForm ignores macStyleControls in input config', () => {
-    const form = buildBasicForm({ macStyleControls: true } as unknown as AppConfig)
+  it('buildGeneralForm ignores macStyleControls in input config', () => {
+    const form = buildGeneralForm({ macStyleControls: true } as unknown as AppConfig)
     expect(form).not.toHaveProperty('macStyleControls')
   })
 })
