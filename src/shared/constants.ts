@@ -277,7 +277,7 @@ export const DEFAULT_APP_CONFIG = {
   proxy: { enable: false, server: '', bypass: '', scope: ['download', 'update-app', 'update-trackers'] },
   protocols: { magnet: true, thunder: false, motrixnext: true },
   clipboard: { enable: true, http: true, ftp: true, magnet: true, thunder: true, btHash: true },
-  autoSubmitFromExtension: false,
+  autoSubmitFromExtension: true,
   userAgent:
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
   logLevel: 'debug', // captures full diagnostic output for bug reports out of the box
