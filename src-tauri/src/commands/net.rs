@@ -102,8 +102,7 @@ pub(crate) fn extract_basename(url: &str) -> String {
     };
     let raw = pathname
         .split('/')
-        .filter(|s| !s.is_empty())
-        .last()
+        .rfind(|s| !s.is_empty())
         .unwrap_or("");
 
     // Percent-decode (e.g. "%E4%B8%AD" → "中")
@@ -128,9 +127,7 @@ pub(crate) fn has_extension(name: &str) -> bool {
         }
         let ext = &name[dot_pos + 1..];
         // Extension must be 1–10 chars, all alphanumeric
-        !ext.is_empty()
-            && ext.len() <= 10
-            && ext.chars().all(|c| c.is_ascii_alphanumeric())
+        !ext.is_empty() && ext.len() <= 10 && ext.chars().all(|c| c.is_ascii_alphanumeric())
     } else {
         false
     }
@@ -240,7 +237,9 @@ mod tests {
     #[test]
     fn extract_basename_strips_query() {
         assert_eq!(
-            extract_basename("https://pbs.twimg.com/media/HCo_0zsbkAEov7s?format=jpg&name=4096x4096"),
+            extract_basename(
+                "https://pbs.twimg.com/media/HCo_0zsbkAEov7s?format=jpg&name=4096x4096"
+            ),
             "HCo_0zsbkAEov7s"
         );
     }
