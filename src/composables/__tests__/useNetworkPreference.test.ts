@@ -190,9 +190,9 @@ describe('buildNetworkForm', () => {
     expect(form.timeout).toBe(60)
   })
 
-  it('defaults fileAllocation to trunc', () => {
+  it('defaults fileAllocation to none', () => {
     const form = buildNetworkForm(emptyConfig)
-    expect(form.fileAllocation).toBe('trunc')
+    expect(form.fileAllocation).toBe('none')
   })
 
   it('reads fileAllocation from config', () => {
@@ -239,7 +239,7 @@ describe('buildNetworkSystemConfig', () => {
     dhtListenPort: 26701,
     connectTimeout: 10,
     timeout: 10,
-    fileAllocation: 'trunc',
+    fileAllocation: 'none',
     userAgent: '',
   }
 
@@ -255,7 +255,7 @@ describe('buildNetworkSystemConfig', () => {
     const config = buildNetworkSystemConfig(baseForm)
     expect(config['connect-timeout']).toBe('10')
     expect(config['timeout']).toBe('10')
-    expect(config['file-allocation']).toBe('trunc')
+    expect(config['file-allocation']).toBe('none')
   })
 
   it('emits custom connect-timeout and timeout values', () => {
@@ -349,7 +349,7 @@ describe('transformNetworkForStore', () => {
     dhtListenPort: 26701,
     connectTimeout: 10,
     timeout: 10,
-    fileAllocation: 'trunc',
+    fileAllocation: 'none',
     userAgent: '',
   }
 
@@ -396,7 +396,7 @@ describe('validateNetworkForm', () => {
     dhtListenPort: 26701,
     connectTimeout: 10,
     timeout: 10,
-    fileAllocation: 'trunc',
+    fileAllocation: 'none',
     userAgent: '',
   }
 

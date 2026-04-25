@@ -310,7 +310,7 @@ export const DEFAULT_APP_CONFIG = {
   retryWait: 10, // seconds; aria2 waits this long after 503 before retrying
   connectTimeout: 10, // seconds to establish connection
   timeout: 10, // seconds for data transfer after connection
-  fileAllocation: 'trunc', // 'none' | 'trunc' | 'prealloc' | 'falloc'
+  fileAllocation: 'none', // 'none' | 'trunc' | 'prealloc' | 'falloc'
 
   // ── Task Sorting ─────────────────────────────────────────────
   taskSort: DEFAULT_TASK_SORT,

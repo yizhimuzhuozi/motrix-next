@@ -703,6 +703,8 @@ pub fn run() {
                 .level_for("maxminddb", log::LevelFilter::Warn)
                 .level_for("sqlx", log::LevelFilter::Warn)
                 .level_for("zbus", log::LevelFilter::Warn)
+                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("reqwest", log::LevelFilter::Warn)
                 .filter(|metadata| {
                     !metadata.target().starts_with("tao")
                         && !metadata.target().starts_with("tracing")

@@ -121,7 +121,7 @@ export function buildNetworkSystemConfig(f: NetworkForm): Record<string, string>
     'user-agent': f.userAgent || '',
     'connect-timeout': String(f.connectTimeout),
     timeout: String(f.timeout),
-    'file-allocation': f.fileAllocation || 'trunc',
+    'file-allocation': f.fileAllocation || 'none',
     'all-proxy': proxyForDownloads ? f.proxy.server : '',
     'no-proxy': proxyForDownloads ? f.proxy.bypass || '' : '',
   }
