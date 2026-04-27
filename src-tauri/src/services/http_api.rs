@@ -329,20 +329,17 @@ async fn handle_resume_all(
 
 // ── Helper Functions ────────────────────────────────────────────────
 
-/// Read the API secret for extension authentication.
-///
-/// Tries `extensionApiSecret` first (new independent key), falls back
-/// to `rpcSecret` for backward compatibility during migration.
+/// Reads the `extensionApiSecret` for HTTP API authentication.
+/// This secret is fully independent from `rpcSecret` (used for aria2 RPC).
+/// Returns empty string if not configured (auth disabled).
 fn read_api_secret(app: &AppHandle) -> String {
     app.store("config.json")
         .ok()
         .and_then(|s| s.get("preferences"))
         .and_then(|p| {
-            // Prefer extensionApiSecret, fall back to rpcSecret
             p.get("extensionApiSecret")
                 .and_then(|v| v.as_str().map(String::from))
                 .filter(|s| !s.is_empty())
-                .or_else(|| p.get("rpcSecret")?.as_str().map(String::from))
         })
         .unwrap_or_default()
 }

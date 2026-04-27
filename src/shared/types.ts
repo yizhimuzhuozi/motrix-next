@@ -247,9 +247,10 @@ export interface AppConfig {
    *  downloads.  Defaults to 16801 (one above the aria2 RPC port). */
   extensionApiPort: number
   /** Shared secret for the extension HTTP API.  The browser extension must
-   *  send this as a `Bearer` token in the `Authorization` header.  When empty,
-   *  authentication is disabled (not recommended). */
-  extensionApiSecret: string
+   *  send this as a `Bearer` token in the `Authorization` header.
+   *  Absent from defaults — auto-generated on first launch in main.ts.
+   *  undefined → auto-generate. '' → user intentionally cleared. */
+  extensionApiSecret?: string
   rpcSecret: string
   listenPort: number
   dhtListenPort: number

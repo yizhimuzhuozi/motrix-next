@@ -170,6 +170,7 @@ export const usePreferenceStore = defineStore('preference', () => {
         ...DEFAULT_APP_CONFIG,
         locale: currentLocale,
         rpcSecret: generateSecret(),
+        extensionApiSecret: generateSecret(),
       } as AppConfig
       await store.set(STORE_KEY, defaults)
       await store.save()

@@ -102,8 +102,8 @@ export function buildAdvancedForm(config: AppConfig): {
 
   // Extension API secret: auto-generate if never set
   const hasApiSecret = config.extensionApiSecret != null
-  const extensionApiSecret = hasApiSecret ? config.extensionApiSecret : generateSecret()
-  const generatedApiSecret = hasApiSecret ? null : extensionApiSecret
+  const extensionApiSecret = hasApiSecret ? config.extensionApiSecret! : generateSecret()
+  const generatedApiSecret: string | null = hasApiSecret ? null : extensionApiSecret
 
   return {
     form: {
