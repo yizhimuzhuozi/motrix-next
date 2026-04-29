@@ -187,15 +187,8 @@ pub async fn aria2_add_uri(
         if let Some(out_val) = opts.get("out").and_then(|v| v.as_str()).map(String::from) {
             match sanitize_out_option(&out_val) {
                 Some(ref clean) if *clean != out_val => {
-                    log::warn!(
-                        "aria2:add-uri sanitized out: {:?} → {:?}",
-                        out_val,
-                        clean
-                    );
-                    opts.insert(
-                        "out".to_string(),
-                        serde_json::Value::String(clean.clone()),
-                    );
+                    log::warn!("aria2:add-uri sanitized out: {:?} → {:?}", out_val, clean);
+                    opts.insert("out".to_string(), serde_json::Value::String(clean.clone()));
                 }
                 None => {
                     log::warn!("aria2:add-uri removed invalid out option");
@@ -548,10 +541,7 @@ mod tests {
 
     #[test]
     fn extensionless_filename_preserved() {
-        assert_eq!(
-            sanitize_out_option("README").as_deref(),
-            Some("README")
-        );
+        assert_eq!(sanitize_out_option("README").as_deref(), Some("README"));
     }
 
     #[test]
@@ -562,4 +552,3 @@ mod tests {
         );
     }
 }
-
