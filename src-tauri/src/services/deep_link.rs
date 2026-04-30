@@ -8,11 +8,35 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Lightweight mode destroys the main WebView when the user minimizes to tray.
 /// External inputs must therefore survive the gap between native wake-up and
 /// frontend listener registration.
-pub struct PendingDeepLinkState(pub Mutex<Vec<String>>);
+#[derive(Debug, Default)]
+struct PendingDeepLinks {
+    queue: Vec<String>,
+    frontend_ready: bool,
+}
+
+pub struct PendingDeepLinkState(Mutex<PendingDeepLinks>);
 
 impl PendingDeepLinkState {
     pub fn new() -> Self {
-        Self(Mutex::new(Vec::new()))
+        Self(Mutex::new(PendingDeepLinks::default()))
+    }
+
+    fn set_frontend_ready(&self, ready: bool) {
+        match self.0.lock() {
+            Ok(mut inner) => {
+                inner.frontend_ready = ready;
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().frontend_ready = ready;
+            }
+        }
+    }
+
+    fn frontend_ready(&self) -> bool {
+        self.0
+            .lock()
+            .map(|inner| inner.frontend_ready)
+            .unwrap_or(false)
     }
 }
 
@@ -40,8 +64,26 @@ pub fn filter_external_input_args(args: &[String]) -> Vec<String> {
 /// Drain pending external inputs for the frontend boot path.
 pub fn take_pending_deep_links(state: &PendingDeepLinkState) -> Vec<String> {
     match state.0.lock() {
-        Ok(mut queue) => std::mem::take(&mut *queue),
-        Err(poisoned) => std::mem::take(&mut *poisoned.into_inner()),
+        Ok(mut inner) => {
+            inner.frontend_ready = true;
+            std::mem::take(&mut inner.queue)
+        }
+        Err(poisoned) => {
+            let mut inner = poisoned.into_inner();
+            inner.frontend_ready = true;
+            std::mem::take(&mut inner.queue)
+        }
+    }
+}
+
+/// Mark the frontend event listeners as unavailable.
+///
+/// Lightweight mode destroys the WebView while keeping the process alive. The
+/// next recreated WebView must register listeners and drain pending inputs
+/// before native code can safely emit directly to it again.
+pub fn mark_frontend_unready(app: &AppHandle) {
+    if let Some(state) = app.try_state::<PendingDeepLinkState>() {
+        state.set_frontend_ready(false);
     }
 }
 
@@ -59,7 +101,8 @@ pub fn route_external_inputs(app: &AppHandle, urls: Vec<String>, source: &'stati
         urls.len()
     );
 
-    if window_was_alive {
+    let frontend_ready = is_frontend_ready(app);
+    if window_was_alive && frontend_ready {
         wake_main_window(app, source);
         match app.emit("deep-link-open", &urls) {
             Ok(()) => return,
@@ -76,21 +119,23 @@ pub fn route_external_inputs(app: &AppHandle, urls: Vec<String>, source: &'stati
 fn queue_pending_deep_links(app: &AppHandle, urls: &[String], source: &'static str) {
     match app.try_state::<PendingDeepLinkState>() {
         Some(state) => match state.0.lock() {
-            Ok(mut queue) => {
-                queue.extend(urls.iter().cloned());
+            Ok(mut inner) => {
+                let added = append_unique_pending(&mut inner.queue, urls);
                 log::info!(
-                    "deep_link:queued source={source} count={} pending={}",
+                    "deep_link:queued source={source} count={} added={} pending={}",
                     urls.len(),
-                    queue.len()
+                    added,
+                    inner.queue.len()
                 );
             }
             Err(poisoned) => {
-                let mut queue = poisoned.into_inner();
-                queue.extend(urls.iter().cloned());
+                let mut inner = poisoned.into_inner();
+                let added = append_unique_pending(&mut inner.queue, urls);
                 log::warn!(
-                    "deep_link:queued-after-poison source={source} count={} pending={}",
+                    "deep_link:queued-after-poison source={source} count={} added={} pending={}",
                     urls.len(),
-                    queue.len()
+                    added,
+                    inner.queue.len()
                 );
             }
         },
@@ -101,6 +146,24 @@ fn queue_pending_deep_links(app: &AppHandle, urls: &[String], source: &'static s
             );
         }
     }
+}
+
+fn append_unique_pending(queue: &mut Vec<String>, urls: &[String]) -> usize {
+    let mut added = 0;
+    for url in urls {
+        if queue.iter().any(|pending| pending == url) {
+            continue;
+        }
+        queue.push(url.clone());
+        added += 1;
+    }
+    added
+}
+
+fn is_frontend_ready(app: &AppHandle) -> bool {
+    app.try_state::<PendingDeepLinkState>()
+        .map(|state| state.frontend_ready())
+        .unwrap_or(false)
 }
 
 fn schedule_main_window_wake(app: &AppHandle, source: &'static str) {
@@ -136,7 +199,10 @@ fn wake_main_window(app: &AppHandle, source: &'static str) {
 
 #[cfg(test)]
 mod tests {
-    use super::filter_external_input_args;
+    use super::{
+        append_unique_pending, filter_external_input_args, take_pending_deep_links,
+        PendingDeepLinkState,
+    };
 
     #[test]
     fn filters_supported_external_inputs_from_argv() {
@@ -159,5 +225,74 @@ mod tests {
                 "magnet:?xt=urn:btih:abc".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn pending_queue_deduplicates_urls_while_preserving_order() {
+        let mut queue = vec!["file:///Users/example/ubuntu.torrent".to_string()];
+        let added = append_unique_pending(
+            &mut queue,
+            &[
+                "file:///Users/example/ubuntu.torrent".to_string(),
+                "magnet:?xt=urn:btih:abc".to_string(),
+                "magnet:?xt=urn:btih:abc".to_string(),
+                "/Users/example/Fedora.meta4".to_string(),
+            ],
+        );
+
+        assert_eq!(added, 2);
+        assert_eq!(
+            queue,
+            vec![
+                "file:///Users/example/ubuntu.torrent".to_string(),
+                "magnet:?xt=urn:btih:abc".to_string(),
+                "/Users/example/Fedora.meta4".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn take_pending_deep_links_drains_queue_once() {
+        let state = PendingDeepLinkState::new();
+        {
+            let mut inner = state.0.lock().expect("pending deep-link state poisoned");
+            append_unique_pending(
+                &mut inner.queue,
+                &[
+                    "file:///Users/example/ubuntu.torrent".to_string(),
+                    "magnet:?xt=urn:btih:abc".to_string(),
+                ],
+            );
+        }
+
+        assert_eq!(
+            take_pending_deep_links(&state),
+            vec![
+                "file:///Users/example/ubuntu.torrent".to_string(),
+                "magnet:?xt=urn:btih:abc".to_string(),
+            ]
+        );
+        assert!(take_pending_deep_links(&state).is_empty());
+    }
+
+    #[test]
+    fn take_pending_deep_links_marks_frontend_ready() {
+        let state = PendingDeepLinkState::new();
+        assert!(!state.frontend_ready());
+
+        let _ = take_pending_deep_links(&state);
+
+        assert!(state.frontend_ready());
+    }
+
+    #[test]
+    fn frontend_ready_flag_can_be_cleared_after_webview_destruction() {
+        let state = PendingDeepLinkState::new();
+        let _ = take_pending_deep_links(&state);
+        assert!(state.frontend_ready());
+
+        state.set_frontend_ready(false);
+
+        assert!(!state.frontend_ready());
     }
 }

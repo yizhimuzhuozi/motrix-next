@@ -125,6 +125,7 @@ pub(crate) fn handle_minimize_to_tray(app: &tauri::AppHandle, window: &tauri::We
 
     if lightweight {
         log::info!("tray:lightweight-destroy label={}", window.label());
+        services::deep_link::mark_frontend_unready(app);
         let _ = window.destroy();
     } else {
         log::info!("tray:hide label={}", window.label());

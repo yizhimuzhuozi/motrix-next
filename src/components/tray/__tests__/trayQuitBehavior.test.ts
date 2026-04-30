@@ -91,6 +91,15 @@ describe('tray.rs — new-task recreates window in lightweight mode', () => {
     const newTaskMatch = resolverBody!.match(/"tray-new-task"\s*=>\s*Some/)
     expect(newTaskMatch).toBeNull()
   })
+
+  it('marks deep-link frontend readiness stale before recreating the main window', () => {
+    const createWindowBody = extractGetOrCreateMainWindow(source)
+    expect(createWindowBody).toBeTruthy()
+    expect(createWindowBody).toContain('mark_frontend_unready')
+    expect(createWindowBody!.indexOf('mark_frontend_unready')).toBeLessThan(
+      createWindowBody!.indexOf('builder.build()'),
+    )
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════
@@ -374,6 +383,21 @@ function extractOnMenuEvent(source: string): string | null {
  */
 function extractResolverBody(source: string): string | null {
   const marker = 'fn resolve_tray_action'
+  const idx = source.indexOf(marker)
+  if (idx === -1) return null
+  const braceStart = source.indexOf('{', idx)
+  if (braceStart === -1) return null
+  let depth = 0
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++
+    if (source[i] === '}') depth--
+    if (depth === 0) return source.slice(idx, i + 1)
+  }
+  return null
+}
+
+function extractGetOrCreateMainWindow(source: string): string | null {
+  const marker = 'pub fn get_or_create_main_window'
   const idx = source.indexOf(marker)
   if (idx === -1) return null
   const braceStart = source.indexOf('{', idx)

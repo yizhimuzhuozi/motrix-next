@@ -78,6 +78,12 @@ describe('lib.rs — CloseRequested show-exit-dialog emit', () => {
     expect(helperBody).toContain('window.destroy()')
   })
 
+  it('marks deep-link frontend readiness stale before lightweight destroy', () => {
+    const helperBody = extractBody(source, 'fn handle_minimize_to_tray')
+    expect(helperBody).toContain('mark_frontend_unready')
+    expect(helperBody.indexOf('mark_frontend_unready')).toBeLessThan(helperBody.indexOf('window.destroy()'))
+  })
+
   it('emits "show-exit-dialog" when should_hide is false', () => {
     // The else branch (or !should_hide path) must emit the event
     expect(crBlock).toContain('show-exit-dialog')

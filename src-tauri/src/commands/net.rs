@@ -172,32 +172,47 @@ pub(crate) fn has_extension(name: &str) -> bool {
 ///   - `filename="report.pdf"` (quoted)
 ///   - `filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf` (encoded)
 ///
+/// Also decodes RFC 2047 MIME encoded-words when real-world servers place
+/// them inside `filename=` despite RFC 6266 discouraging that format.
+///
 /// `filename*` takes precedence over `filename` when both are present.
 pub(crate) fn parse_cd_filename(header: &str) -> Option<String> {
-    let mut filename: Option<String> = None;
-    let mut filename_star: Option<String> = None;
+    let parsed = content_disposition::parse_content_disposition(header);
+    let candidate = select_content_disposition_filename(&parsed)?;
+    Some(decode_rfc2047_filename(candidate))
+}
 
-    for part in header.split(';') {
-        let part = part.trim();
-
-        if let Some(value) = part.strip_prefix("filename*=") {
-            // RFC 5987: charset'language'value — we only handle UTF-8
-            if let Some(encoded) = value.split("''").nth(1) {
-                if let Ok(decoded) = urlencoding::decode(encoded) {
-                    filename_star = Some(decoded.to_string());
-                }
-            }
-        } else if let Some(value) = part.strip_prefix("filename=") {
-            // Strip surrounding quotes
-            let trimmed = value.trim_matches('"').trim_matches('\'');
-            if !trimmed.is_empty() {
-                filename = Some(trimmed.to_string());
-            }
+fn select_content_disposition_filename(
+    parsed: &content_disposition::ParsedContentDisposition,
+) -> Option<String> {
+    if let Some(filename_star) = parsed.params.get("filename*") {
+        let star_only = content_disposition::parse_content_disposition(&format!(
+            "attachment; filename*={filename_star}"
+        ));
+        if let Some(decoded) = star_only.filename_full().filter(|name| !name.is_empty()) {
+            return Some(decoded);
         }
     }
 
-    // filename* takes precedence per RFC 6266 §4.3
-    filename_star.or(filename)
+    parsed.filename_full().filter(|name| !name.is_empty())
+}
+
+fn decode_rfc2047_filename(filename: String) -> String {
+    if !filename.contains("=?") {
+        return filename;
+    }
+
+    match rfc2047_decoder::Decoder::new()
+        .too_long_encoded_word_strategy(rfc2047_decoder::RecoverStrategy::Decode)
+        .decode(filename.as_bytes())
+    {
+        Ok(decoded) if !decoded.is_empty() => decoded,
+        Ok(_) => filename,
+        Err(error) => {
+            log::warn!("parse_cd_filename: RFC 2047 decode failed: {error}");
+            filename
+        }
+    }
 }
 
 // ── Remote byte fetching ────────────────────────────────────────────────
@@ -348,6 +363,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_cd_filename_decodes_rfc2047_base64_filename() {
+        assert_eq!(
+            parse_cd_filename("attachment; filename=\"=?UTF-8?B?0JjRgtC+0LPQuF8yMDI2LmRvY3g=?=\""),
+            Some("Итоги_2026.docx".into())
+        );
+    }
+
+    #[test]
+    fn parse_cd_filename_decodes_rfc2047_quoted_printable_filename() {
+        assert_eq!(
+            parse_cd_filename("attachment; filename=\"=?UTF-8?Q?=E6=8A=A5=E5=91=8A.pdf?=\""),
+            Some("报告.pdf".into())
+        );
+    }
+
     #[tokio::test]
     async fn resolve_filename_sends_referer_and_cookie_headers() {
         use axum::{extract::State, http::HeaderMap, routing::head, Router};
@@ -407,6 +438,33 @@ mod tests {
             Some("https://mail.google.com/mail/u/0/#inbox")
         );
         assert_eq!(captured.cookie.as_deref(), Some("COMPASS=gmail=abc"));
+    }
+
+    #[tokio::test]
+    async fn resolve_filename_decodes_rfc2047_content_disposition_filename() {
+        use axum::{routing::head, Router};
+        use std::net::SocketAddr;
+        use tokio::net::TcpListener;
+
+        async fn handle_head() -> [(&'static str, &'static str); 1] {
+            [(
+                "content-disposition",
+                "attachment; filename=\"=?UTF-8?B?0JjRgtC+0LPQuF8yMDI2LmRvY3g=?=\"",
+            )]
+        }
+
+        let app = Router::new().route("/attachment", head(handle_head));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let resolved = resolve_filename(format!("http://{addr}/attachment"), None, None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some("Итоги_2026.docx".to_string()));
     }
 
     #[test]

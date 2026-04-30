@@ -3,6 +3,7 @@ import { defineComponent, nextTick, reactive, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
 const listenMock = vi.fn()
+const invokeMock = vi.fn()
 const routerBeforeEachMock = vi.fn()
 const dragDropListenerMock = vi.fn()
 const openDialogMock = vi.fn()
@@ -23,6 +24,7 @@ vi.mock('@tauri-apps/api/webview', () => ({
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
+    unminimize: vi.fn().mockResolvedValue(undefined),
     show: vi.fn().mockResolvedValue(undefined),
     setFocus: vi.fn().mockResolvedValue(undefined),
   }),
@@ -60,7 +62,7 @@ vi.mock('@shared/logger', () => ({
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue([]),
+  invoke: (...args: unknown[]) => invokeMock(...args),
 }))
 
 import { useAppEvents } from '../useAppEvents'
@@ -153,6 +155,7 @@ describe('useAppEvents', () => {
     dragDropListenerMock.mockImplementation(async () => vi.fn().mockName('unlisten:drag-drop'))
     openDialogMock.mockResolvedValue(null)
     openUrlMock.mockResolvedValue(undefined)
+    invokeMock.mockResolvedValue([])
   })
 
   it('returns a teardown that unregisters engine listeners, the watcher, and the router guard', async () => {
@@ -210,5 +213,26 @@ describe('useAppEvents', () => {
     const removeGuard = routerBeforeEachMock.mock.results[0]?.value as (() => void) | undefined
     expect(removeGuard).toBeDefined()
     expect(removeGuard).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not process external input when the Rust pending queue is empty', async () => {
+    const { deps, appStore } = createDeps()
+    const { setupListeners } = mountComposable(deps)
+
+    await setupListeners()
+
+    expect(invokeMock).toHaveBeenCalledWith('take_pending_deep_links')
+    expect(appStore.handleDeepLinkUrls).not.toHaveBeenCalled()
+  })
+
+  it('processes external input drained from the Rust pending queue once listeners are ready', async () => {
+    invokeMock.mockResolvedValueOnce(['file:///Users/example/ubuntu.torrent'])
+    const { deps, appStore } = createDeps()
+    const { setupListeners } = mountComposable(deps)
+
+    await setupListeners()
+
+    expect(appStore.handleDeepLinkUrls).toHaveBeenCalledTimes(1)
+    expect(appStore.handleDeepLinkUrls).toHaveBeenCalledWith(['file:///Users/example/ubuntu.torrent'])
   })
 })

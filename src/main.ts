@@ -130,7 +130,7 @@ window.addEventListener('unhandledrejection', (e) => {
   //  Phase 1 (critical path)   – loadPreference → locale → window.show()
   //  Phase 2 (engine, async)   – rpcSecret → save config → start engine
   //                              → on_engine_ready (Rust) → wait_for_engine
-  //  Phase 3 (non-critical)    – deep-link, autostart (parallel)
+  //  Phase 3 (non-critical)    – autostart, protocol sync (parallel)
   //  Phase 4 (deferred)        – update check, tracker sync, FS warmup,
   //                              clipboard monitor
   // ---------------------------------------------------------------------------
@@ -218,28 +218,6 @@ window.addEventListener('unhandledrejection', (e) => {
     setEngineReady(true)
     logger.info('Engine', `Rust aria2 client connected via invoke() on port ${port}`)
     return true
-  }
-
-  /** Setup deep-link handler to accept URLs/files from OS. */
-  async function setupDeepLinks(): Promise<void> {
-    try {
-      const { getCurrent } = await import('@tauri-apps/plugin-deep-link')
-      const startUrls = await getCurrent()
-      if (startUrls && startUrls.length > 0) {
-        appStore.handleDeepLinkUrls(startUrls)
-      }
-      // Runtime deep-link handling is unified in useAppEvents.ts:
-      //
-      //   macOS:         listen('deep-link-open') ← from Rust on_open_url()
-      //   Windows/Linux: listen('deep-link-open') ← from Rust single-instance routing
-      //
-      // Do NOT register onOpenUrl() here — it listens to the same
-      // underlying "deep-link://new-url" event that the Rust-side
-      // on_open_url() callback already forwards, causing
-      // handleDeepLinkUrls() to fire multiple times per URL.
-    } catch (e) {
-      logger.warn('DeepLink', 'setup failed: ' + (e as Error).message)
-    }
   }
 
   /**
@@ -389,7 +367,13 @@ window.addEventListener('unhandledrejection', (e) => {
     const enginePromise = initEngine(port, secret, config)
 
     // ── Phase 3: non-critical IPC (parallel) ──────────────────────────────
-    Promise.allSettled([setupDeepLinks(), syncAutostart(config), syncProtocolHandlers(config)])
+    //
+    // External input routing is owned by Rust and consumed from
+    // `take_pending_deep_links` after MainLayout registers listeners. Do not
+    // call tauri-plugin-deep-link `getCurrent()` here: that value is
+    // process-level plugin state, so lightweight-mode WebView recreation would
+    // replay stale torrent/protocol inputs.
+    Promise.allSettled([syncAutostart(config), syncProtocolHandlers(config)])
 
     // Start UPnP port mapping if enabled (fire-and-forget)
     if (config.enableUpnp) {
