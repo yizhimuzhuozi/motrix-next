@@ -462,6 +462,31 @@ describe('submitManualUris', () => {
     expect(call.outs).toEqual(['215.zip'])
   })
 
+  it('passes referer and cookie to resolve_filename for authenticated extensionless URLs', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    ;(invoke as ReturnType<typeof vi.fn>).mockResolvedValueOnce('Итоги_2026.docx')
+
+    await submitManualUris(
+      {
+        ...baseForm,
+        uris: 'https://mail-attachment.googleusercontent.com/attachment/u/0/',
+        referer: 'https://mail.google.com/mail/u/0/#inbox',
+        cookie: 'COMPASS=gmail=abc',
+      },
+      { dir: '/dl', referer: 'https://mail.google.com/mail/u/0/#inbox', header: ['Cookie: COMPASS=gmail=abc'] },
+      mockTaskStore,
+    )
+
+    expect(invoke).toHaveBeenCalledWith('resolve_filename', {
+      url: 'https://mail-attachment.googleusercontent.com/attachment/u/0/',
+      proxy: null,
+      referer: 'https://mail.google.com/mail/u/0/#inbox',
+      cookie: 'COMPASS=gmail=abc',
+    })
+    const call = (mockTaskStore.addUri as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(call.outs).toEqual(['Итоги_2026.docx'])
+  })
+
   it('does not include magnet URIs in regular addUri call (they use separate addMagnetUri path)', async () => {
     await submitManualUris(
       { ...baseForm, uris: 'http://example.com/file%20name.zip\nmagnet:?xt=urn:btih:abc123' },

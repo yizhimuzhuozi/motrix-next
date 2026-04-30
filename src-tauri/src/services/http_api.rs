@@ -20,6 +20,7 @@
 use crate::aria2::client::Aria2State;
 use crate::error::AppError;
 use crate::services::config::RuntimeConfigState;
+use crate::services::deep_link;
 use axum::{
     extract::State,
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
@@ -29,33 +30,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-
-// ── Pending Deep-Link State ─────────────────────────────────────────
-
-/// Stores deep-link URLs for frontend consumption after window recreation.
-///
-/// When lightweight mode destroys the WebView, `route_to_frontend` must
-/// recreate it before emitting events.  The new WebView needs time to load
-/// (`index.html` → Vue mount → `setupListeners()`), so `app.emit()` is a
-/// no-op during this window.  This state bridges the gap:
-///
-///   1. Rust writes the deep-link URL here.
-///   2. If the window already existed (listener active), Rust emits
-///      immediately and clears the queue.
-///   3. If the window was just created, the frontend's boot sequence
-///      calls `take_pending_deep_links` to consume the queued URLs.
-pub struct PendingDeepLinkState(pub StdMutex<Vec<String>>);
-
-impl PendingDeepLinkState {
-    pub fn new() -> Self {
-        Self(StdMutex::new(Vec::new()))
-    }
-}
 
 // ── Request / Response Types ────────────────────────────────────────
 
@@ -362,61 +340,10 @@ fn read_api_secret(app: &AppHandle) -> String {
         .unwrap_or_default()
 }
 
-/// Route a download request to the frontend via deep-link event.
-///
-/// Handles the window-recreation timing gap in lightweight mode:
-///   - **Window exists** → emit `deep-link-open` directly (listener is active)
-///   - **Window destroyed** → queue URL in `PendingDeepLinkState`, recreate
-///     window, let the frontend pull the URL via `take_pending_deep_links`
-///     after its boot sequence completes
-///
-/// This mirrors the window-recreation pattern used by `tray-new-task` and
-/// macOS `on_open_url` handlers.
+/// Route a download request through the shared external-input channel.
 fn route_to_frontend(app: &AppHandle, req: &AddRequest) {
     let deep_link_str = build_deep_link_url(req);
-
-    // Queue the URL for the frontend — consumed either via emit (immediate)
-    // or via take_pending_deep_links (after window recreation boot).
-    if let Some(state) = app.try_state::<PendingDeepLinkState>() {
-        if let Ok(mut queue) = state.0.lock() {
-            queue.push(deep_link_str.clone());
-        }
-    }
-
-    // Snapshot: does the window (and its frontend listener) already exist?
-    let window_was_alive = app.get_webview_window("main").is_some();
-
-    log::debug!(
-        "http_api: route_to_frontend window_alive={window_was_alive} url={}",
-        req.url
-    );
-
-    // Ensure the window exists — recreates if destroyed in lightweight mode.
-    #[cfg(target_os = "macos")]
-    {
-        use tauri::ActivationPolicy;
-        let _ = app.set_activation_policy(ActivationPolicy::Regular);
-    }
-    if let Some(window) = crate::tray::get_or_create_main_window(app) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-
-    if window_was_alive {
-        // Frontend listener is active — emit directly and drain the queue
-        // (the frontend will process via the listener, not the pull path).
-        if let Some(state) = app.try_state::<PendingDeepLinkState>() {
-            if let Ok(mut queue) = state.0.lock() {
-                queue.clear();
-            }
-        }
-        if let Err(e) = app.emit("deep-link-open", vec![deep_link_str]) {
-            log::error!("http_api: failed to emit deep-link-open: {e}");
-        }
-    }
-    // else: window was just recreated — the Vue app will boot, call
-    // `take_pending_deep_links`, and process the queued URLs.
+    deep_link::route_external_inputs(app, vec![deep_link_str], "http-api");
 }
 
 /// Build a `motrixnext://new?url=X&referer=Y&cookie=Z` deep-link URL.

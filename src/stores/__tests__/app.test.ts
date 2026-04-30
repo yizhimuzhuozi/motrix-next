@@ -567,6 +567,16 @@ describe('useAppStore', () => {
       expect(store.pendingCookie).toBe('__puus=abc')
       expect(store.pendingFilename).toBe('无常幽鬼V0.1.xmgic')
     })
+
+    it('ignores generic browser fallback filename from extension deep link', () => {
+      const store = useAppStore()
+      const url = encodeURIComponent('https://mail-attachment.googleusercontent.com/attachment/u/0/')
+      store.handleDeepLinkUrls([`motrixnext://new?url=${url}&filename=download`])
+
+      expect(store.pendingBatch).toHaveLength(1)
+      expect(store.pendingFilename).toBe('')
+      expect(store.pendingBatch[0].displayName).not.toBe('download')
+    })
   })
 
   // ── autoSubmitFromExtension ───────────────────────────────────────

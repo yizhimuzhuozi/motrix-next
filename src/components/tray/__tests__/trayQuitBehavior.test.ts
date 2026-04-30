@@ -26,6 +26,7 @@ import * as path from 'node:path'
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..')
 const MAIN_LAYOUT = path.join(PROJECT_ROOT, 'src', 'layouts', 'MainLayout.vue')
 const TRAY_RS = path.join(PROJECT_ROOT, 'src-tauri', 'src', 'tray.rs')
+const APP_EVENTS_TS = path.join(PROJECT_ROOT, 'src', 'composables', 'useAppEvents.ts')
 
 // ═══════════════════════════════════════════════════════════════════
 // Group 1: Rust — tray-quit handled natively (not emit)
@@ -106,10 +107,10 @@ describe('MainLayout.vue — window close still shows exit dialog', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// Group 4: Rust — single-instance window recreation (issue #196)
+// Group 4: Rust — single-instance external input routing (issue #196/#268)
 // ═══════════════════════════════════════════════════════════════════
 
-describe('lib.rs — single-instance uses get_or_create_main_window', () => {
+describe('lib.rs — single-instance queues external input before waking the window', () => {
   let source: string
 
   beforeAll(() => {
@@ -117,15 +118,14 @@ describe('lib.rs — single-instance uses get_or_create_main_window', () => {
     source = fs.readFileSync(libPath, 'utf-8')
   })
 
-  it('uses get_or_create_main_window in single-instance callback', () => {
+  it('routes argv through the shared deep-link service', () => {
     const singleInstanceBlock = extractSingleInstanceCallback(source)
     expect(singleInstanceBlock).toBeTruthy()
-    // Must use get_or_create_main_window (not get_webview_window)
-    // because in lightweight mode the window may have been destroyed
-    expect(singleInstanceBlock).toContain('get_or_create_main_window')
+    expect(singleInstanceBlock).toContain('filter_external_input_args')
+    expect(singleInstanceBlock).toContain('route_external_inputs')
   })
 
-  it('does NOT use get_webview_window("main") as the primary lookup in single-instance', () => {
+  it('does not rebuild or emit directly in the single-instance callback', () => {
     const singleInstanceBlock = extractSingleInstanceCallback(source)
     expect(singleInstanceBlock).toBeTruthy()
     // Strip Rust // comments so we only check executable code
@@ -133,17 +133,18 @@ describe('lib.rs — single-instance uses get_or_create_main_window', () => {
       .split('\n')
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n')
-    // get_webview_window returns None when window is destroyed,
-    // so single-instance must use get_or_create_main_window instead
+    // Window recreation is scheduled by the shared service when needed.
     expect(codeOnly).not.toMatch(/get_webview_window\(\s*"main"\s*\)/)
+    expect(codeOnly).not.toContain('get_or_create_main_window')
+    expect(codeOnly).not.toContain('emit("single-instance-triggered"')
   })
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// Group 5: Rust — deep-link recreates window before emit
+// Group 5: Rust — macOS deep-link queues before window wake
 // ═══════════════════════════════════════════════════════════════════
 
-describe('lib.rs — deep-link recreates window before emit', () => {
+describe('lib.rs — macOS deep-link queues external input before waking the window', () => {
   let source: string
 
   beforeAll(() => {
@@ -151,10 +152,38 @@ describe('lib.rs — deep-link recreates window before emit', () => {
     source = fs.readFileSync(libPath, 'utf-8')
   })
 
-  it('calls get_or_create_main_window in deep-link handler', () => {
+  it('routes URLs through the shared deep-link service', () => {
     const deepLinkBlock = extractDeepLinkHandler(source)
     expect(deepLinkBlock).toBeTruthy()
-    expect(deepLinkBlock).toContain('get_or_create_main_window')
+    expect(deepLinkBlock).toContain('route_external_inputs')
+  })
+
+  it('does not rebuild or emit directly inside on_open_url', () => {
+    const deepLinkBlock = extractDeepLinkHandler(source)
+    expect(deepLinkBlock).toBeTruthy()
+    const codeOnly = deepLinkBlock!
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n')
+    expect(codeOnly).not.toContain('get_or_create_main_window')
+    expect(codeOnly).not.toContain('emit("deep-link-open"')
+  })
+})
+
+describe('useAppEvents.ts — legacy single-instance events use shared deep-link processing', () => {
+  it('surfaces the window before processing single-instance URLs', () => {
+    const source = fs.readFileSync(APP_EVENTS_TS, 'utf-8')
+    const listenerBlock = extractSingleInstanceListener(source)
+    expect(listenerBlock).toBeTruthy()
+    expect(listenerBlock).toContain('processIncomingDeepLinks(urls)')
+    expect(listenerBlock).not.toContain('appStore.handleDeepLinkUrls(urls)')
+  })
+
+  it('accepts magnet links that do not contain ://', () => {
+    const source = fs.readFileSync(APP_EVENTS_TS, 'utf-8')
+    const listenerBlock = extractSingleInstanceListener(source)
+    expect(listenerBlock).toBeTruthy()
+    expect(listenerBlock).toContain("lower.startsWith('magnet:')")
   })
 })
 
@@ -403,6 +432,21 @@ function extractSingleInstanceCallback(source: string): string | null {
  */
 function extractDeepLinkHandler(source: string): string | null {
   const marker = 'on_open_url'
+  const idx = source.indexOf(marker)
+  if (idx === -1) return null
+  const braceStart = source.indexOf('{', idx)
+  if (braceStart === -1) return null
+  let depth = 0
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++
+    if (source[i] === '}') depth--
+    if (depth === 0) return source.slice(idx, i + 1)
+  }
+  return null
+}
+
+function extractSingleInstanceListener(source: string): string | null {
+  const marker = "listen<string[]>('single-instance-triggered'"
   const idx = source.indexOf(marker)
   if (idx === -1) return null
   const braceStart = source.indexOf('{', idx)

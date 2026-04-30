@@ -241,7 +241,18 @@ export async function submitManualUris(
           const pathFilename = extractDecodedFilename(uri)
           if (!pathFilename || hasExtension(pathFilename)) return ''
           try {
-            return (await invoke<string | null>('resolve_filename', { url: uri, proxy: downloadProxy ?? null })) ?? ''
+            const args: {
+              url: string
+              proxy: string | null
+              referer?: string
+              cookie?: string
+            } = {
+              url: uri,
+              proxy: downloadProxy ?? null,
+            }
+            if (form.referer) args.referer = form.referer
+            if (form.cookie) args.cookie = form.cookie
+            return (await invoke<string | null>('resolve_filename', args)) ?? ''
           } catch {
             return '' // HEAD failure → graceful degradation
           }

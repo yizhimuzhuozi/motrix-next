@@ -234,6 +234,8 @@ export function hasExtension(filename: string): boolean {
 
 // ── External filename hint resolution ───────────────────────────────
 
+const GENERIC_EXTERNAL_FILENAME_HINTS = new Set(['download'])
+
 /**
  * Sanitizes a raw string into a filesystem-safe filename.
  *
@@ -307,6 +309,8 @@ export function resolveExternalFilenameHint(url: string, rawHint: string): strin
   // Cloud drives (Baidu, Quark) provide correct filenames like "报告.pdf"
   // that the URL path (a CDN hash) cannot reproduce.
   if (hasExtension(cleaned)) return cleaned
+
+  if (GENERIC_EXTERNAL_FILENAME_HINTS.has(cleaned.toLowerCase())) return ''
 
   // Hint is extensionless — compare with the URL's own basename.
   // If they match, the hint adds no value; let resolve_filename run

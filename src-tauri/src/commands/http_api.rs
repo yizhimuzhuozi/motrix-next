@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::services::http_api;
+use crate::services::{deep_link, http_api};
 
 /// Restart the embedded HTTP API server on a new port.
 ///
@@ -14,17 +14,14 @@ pub async fn restart_http_api(app: tauri::AppHandle, port: u16) -> Result<(), Ap
 /// Drain and return all pending deep-link URLs.
 ///
 /// Called by the frontend during its boot sequence (`setupListeners` in
-/// `useAppEvents.ts`) to consume deep-link URLs that were queued by
-/// `route_to_frontend` while the WebView was being recreated.
+/// `useAppEvents.ts`) to consume deep-link URLs that were queued by native
+/// external-input handlers while the WebView was being recreated.
 ///
 /// Returns an empty vec if no URLs are pending (normal startup, or the
 /// window was already alive when the download was routed).
 #[tauri::command]
 pub fn take_pending_deep_links(
-    state: tauri::State<'_, http_api::PendingDeepLinkState>,
+    state: tauri::State<'_, deep_link::PendingDeepLinkState>,
 ) -> Vec<String> {
-    match state.0.lock() {
-        Ok(mut queue) => std::mem::take(&mut *queue),
-        Err(poisoned) => std::mem::take(&mut *poisoned.into_inner()),
-    }
+    deep_link::take_pending_deep_links(state.inner())
 }

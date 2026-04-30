@@ -172,7 +172,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(services::speed::SpeedSchedulerState::new());
     app.manage(services::monitor::TaskMonitorState::new());
     app.manage(services::http_api::HttpApiState::new());
-    app.manage(services::http_api::PendingDeepLinkState::new());
+    app.manage(services::deep_link::PendingDeepLinkState::new());
 
     // App lifecycle — tracks cold-start vs runtime phase for autostart
     // visibility decisions.  See AppLifecycleState doc and issue #206.
@@ -254,15 +254,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // On macOS, runtime deep links arrive via RunEvent::Opened → the
     // plugin emits "deep-link://new-url".  We listen for that event and
-    // re-emit it as "deep-link-open" so the frontend (useAppEvents.ts)
-    // can handle it with window-surfacing logic.
+    // route it through the shared external-input service. If lightweight
+    // mode destroyed the WebView, the service queues the URLs and schedules
+    // window wake-up outside this native callback.
     //
     // On Windows/Linux this listener is compile-time excluded because
     // runtime deep links there arrive via the single-instance plugin,
-    // which already: (a) calls handle_cli_arguments → emits
-    // "deep-link://new-url", and (b) invokes our callback → emits
-    // "single-instance-triggered".  The frontend handles case (b) via
-    // listen('single-instance-triggered') in useAppEvents.ts.
+    // which invokes the single-instance callback below. That callback uses
+    // the same shared external-input service and emits "deep-link-open"
+    // only when an existing frontend listener is already alive.
     // Registering on_open_url on those platforms would cause
     // handleDeepLinkUrls() to fire twice per URL (once from (a) hitting
     // this listener, once from (b) hitting useAppEvents).
@@ -271,16 +271,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let app_handle = app.handle().clone();
         app.deep_link().on_open_url(move |event| {
             let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
-            // Ensure the window exists before emitting — in lightweight mode
-            // the WebView may have been destroyed, making emit a no-op.
-            use tauri::ActivationPolicy;
-            let _ = app_handle.set_activation_policy(ActivationPolicy::Regular);
-            if let Some(w) = tray::get_or_create_main_window(&app_handle) {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-            let _ = app_handle.emit("deep-link-open", &urls);
+            services::deep_link::route_external_inputs(&app_handle, urls, "macos-open-url");
         });
     }
 
@@ -751,21 +742,8 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Use get_or_create_main_window() instead of get_webview_window()
-            // because in lightweight mode the WebView may have been destroyed.
-            // get_webview_window("main") would return None, silently failing.
-            // Recreating the window matches the tray "show" behavior. Issue #196.
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::ActivationPolicy;
-                let _ = app.set_activation_policy(ActivationPolicy::Regular);
-            }
-            if let Some(w) = tray::get_or_create_main_window(app) {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-            let _ = app.emit("single-instance-triggered", &argv);
+            let urls = services::deep_link::filter_external_input_args(&argv);
+            services::deep_link::route_external_inputs(app, urls, "single-instance");
         }));
     }
 

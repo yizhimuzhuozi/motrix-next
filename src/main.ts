@@ -230,8 +230,8 @@ window.addEventListener('unhandledrejection', (e) => {
       }
       // Runtime deep-link handling is unified in useAppEvents.ts:
       //
-      //   macOS:         listen('deep-link-open')          ← from Rust on_open_url()
-      //   Windows/Linux: listen('single-instance-triggered') ← from single-instance callback
+      //   macOS:         listen('deep-link-open') ← from Rust on_open_url()
+      //   Windows/Linux: listen('deep-link-open') ← from Rust single-instance routing
       //
       // Do NOT register onOpenUrl() here — it listens to the same
       // underlying "deep-link://new-url" event that the Rust-side

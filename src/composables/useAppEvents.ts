@@ -427,16 +427,22 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
     )
 
     const unlistenSingleInstance = registerCleanup(
-      await listen<string[]>('single-instance-triggered', (event) => {
+      await listen<string[]>('single-instance-triggered', async (event) => {
         const argv = event.payload
-        const urls = argv.filter(
-          (a) =>
+        const urls = argv.filter((a) => {
+          const lower = a.toLowerCase()
+          return (
             !a.startsWith('-') &&
-            (a.includes('://') || a.endsWith('.torrent') || a.endsWith('.metalink') || a.endsWith('.meta4')),
-        )
+            (lower.includes('://') ||
+              lower.startsWith('magnet:') ||
+              lower.endsWith('.torrent') ||
+              lower.endsWith('.metalink') ||
+              lower.endsWith('.meta4'))
+          )
+        })
         if (urls.length > 0) {
           logger.info('SingleInstance', `forwarding ${urls.length} URL(s) from second instance`)
-          appStore.handleDeepLinkUrls(urls)
+          await processIncomingDeepLinks(urls)
         }
       }),
     )
@@ -451,10 +457,10 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
     await setupEngineWatchers()
     setupNavGuard()
 
+    const { unlistenDeepLink, unlistenSingleInstance } = await setupExternalInputListeners()
     const unlistenDragDrop = await setupDragDropListener()
     const unlistenMenuEvent = await setupMenuListener()
     const unlistenTrayMenu = await setupTrayListener()
-    const { unlistenDeepLink, unlistenSingleInstance } = await setupExternalInputListeners()
 
     // After all listeners are registered, consume any deep-link URLs
     // queued by Rust during window recreation (lightweight mode timing gap).

@@ -57,6 +57,8 @@ pub(crate) const HEAD_TIMEOUT_SECS: u64 = 5;
 pub async fn resolve_filename(
     url: String,
     proxy: Option<String>,
+    referer: Option<String>,
+    cookie: Option<String>,
 ) -> Result<Option<String>, AppError> {
     // 1. Extract basename from the URL path
     let basename = extract_basename(&url);
@@ -74,8 +76,15 @@ pub async fn resolve_filename(
         .build()
         .map_err(|e| AppError::Io(format!("HEAD client init failed: {e}")))?;
 
-    let resp = client
-        .head(&url)
+    let mut req = client.head(&url);
+    if let Some(referer) = referer.as_deref().filter(|v| !v.trim().is_empty()) {
+        req = req.header(reqwest::header::REFERER, referer);
+    }
+    if let Some(cookie) = cookie.as_deref().filter(|v| !v.trim().is_empty()) {
+        req = req.header(reqwest::header::COOKIE, cookie);
+    }
+
+    let resp = req
         .send()
         .await
         .map_err(|e| AppError::Io(format!("HEAD request failed: {e}")))?;
@@ -337,6 +346,67 @@ mod tests {
             parse_cd_filename("attachment; filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf"),
             Some("報告.pdf".into())
         );
+    }
+
+    #[tokio::test]
+    async fn resolve_filename_sends_referer_and_cookie_headers() {
+        use axum::{extract::State, http::HeaderMap, routing::head, Router};
+        use std::net::SocketAddr;
+        use std::sync::{Arc, Mutex};
+        use tokio::net::TcpListener;
+
+        #[derive(Default)]
+        struct CapturedHeaders {
+            referer: Option<String>,
+            cookie: Option<String>,
+        }
+
+        async fn handle_head(
+            State(captured): State<Arc<Mutex<CapturedHeaders>>>,
+            headers: HeaderMap,
+        ) -> [(&'static str, &'static str); 1] {
+            let mut captured = captured.lock().expect("captured headers mutex poisoned");
+            captured.referer = headers
+                .get(reqwest::header::REFERER)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+            captured.cookie = headers
+                .get(reqwest::header::COOKIE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+
+            [(
+                "content-disposition",
+                "attachment; filename*=UTF-8''%D0%98%D1%82%D0%BE%D0%B3%D0%B8_2026.docx",
+            )]
+        }
+
+        let captured = Arc::new(Mutex::new(CapturedHeaders::default()));
+        let app = Router::new()
+            .route("/attachment", head(handle_head))
+            .with_state(Arc::clone(&captured));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let resolved = resolve_filename(
+            format!("http://{addr}/attachment"),
+            None,
+            Some("https://mail.google.com/mail/u/0/#inbox".to_string()),
+            Some("COMPASS=gmail=abc".to_string()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resolved, Some("Итоги_2026.docx".to_string()));
+        let captured = captured.lock().expect("captured headers mutex poisoned");
+        assert_eq!(
+            captured.referer.as_deref(),
+            Some("https://mail.google.com/mail/u/0/#inbox")
+        );
+        assert_eq!(captured.cookie.as_deref(), Some("COMPASS=gmail=abc"));
     }
 
     #[test]

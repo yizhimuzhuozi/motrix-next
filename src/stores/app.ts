@@ -283,11 +283,11 @@ export const useAppStore = defineStore('app', () => {
                 `url=${downloadUrl} kind=${kind} referer=${referer ? 'present' : 'none'} cookie=${cookie ? 'present' : 'none'} filename=${filename || 'none'} autoSubmit=${autoSubmit}`,
               )
               if (autoSubmit && kind === 'uri') {
-                void autoSubmitExtensionUrl(downloadUrl, referer, cookie, filename)
+                void autoSubmitExtensionUrl(downloadUrl, referer, cookie, resolvedHint)
               } else {
                 const item = createBatchItem(kind, downloadUrl)
-                if (filename) {
-                  item.displayName = filename
+                if (resolvedHint) {
+                  item.displayName = resolvedHint
                 }
                 items.push(item)
               }
@@ -337,13 +337,18 @@ export const useAppStore = defineStore('app', () => {
    * Auto-submits a single extension URL using the user's default settings.
    * Equivalent to opening AddTask and clicking Submit without any changes.
    */
-  async function autoSubmitExtensionUrl(url: string, referer: string, cookie: string, filename: string): Promise<void> {
+  async function autoSubmitExtensionUrl(
+    url: string,
+    referer: string,
+    cookie: string,
+    filenameHint: string,
+  ): Promise<void> {
     const preferenceStore = usePreferenceStore()
     const taskStore = useTaskStore()
 
     const form: AddTaskForm = {
       uris: url,
-      out: resolveExternalFilenameHint(url, filename),
+      out: filenameHint,
       dir: preferenceStore.config.dir,
       split: preferenceStore.config.split ?? 16,
       userAgent: '',

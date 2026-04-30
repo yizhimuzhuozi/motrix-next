@@ -475,6 +475,12 @@ describe('resolveExternalFilenameHint', () => {
     expect(resolveExternalFilenameHint('https://cdn.example.com/abc123', 'abc123')).toBe('')
   })
 
+  it('rejects generic browser fallback filename without extension', () => {
+    expect(
+      resolveExternalFilenameHint('https://mail-attachment.googleusercontent.com/attachment/u/0/', 'download'),
+    ).toBe('')
+  })
+
   // ── Accept: extensionless but different from URL basename ─────────
 
   it('accepts extensionless hint when different from URL basename (cloud drive real name)', () => {

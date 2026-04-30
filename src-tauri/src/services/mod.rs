@@ -13,6 +13,7 @@
 //! 4. Stops old background services and spawns fresh ones
 
 pub mod config;
+pub mod deep_link;
 pub mod http_api;
 pub mod monitor;
 pub mod speed;
