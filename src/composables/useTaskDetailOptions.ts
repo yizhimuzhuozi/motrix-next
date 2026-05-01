@@ -23,6 +23,7 @@ import { ref, reactive, computed, watch, type Ref } from 'vue'
 import { isEngineReady } from '@/api/aria2'
 import { isGlobalProxyConfigured } from '@/composables/useAddTaskSubmit'
 import { isValidAria2ProxyUrl } from '@shared/utils/aria2Proxy'
+import { sanitizeHeaderValue, sanitizeHttpHeaderOptions } from '@shared/utils/headerSanitize'
 import { TASK_STATUS } from '@shared/constants'
 import type { Aria2Task, Aria2EngineOptions, ProxyConfig } from '@shared/types'
 import { logger } from '@shared/logger'
@@ -91,8 +92,10 @@ export function parseHeaders(raw: string | string[] | undefined): {
  */
 export function buildHeaders(cookie: string, authorization: string): string[] {
   const headers: string[] = []
-  if (cookie) headers.push(`Cookie: ${cookie}`)
-  if (authorization) headers.push(`Authorization: ${authorization}`)
+  const cleanCookie = sanitizeHeaderValue(cookie)
+  const cleanAuthorization = sanitizeHeaderValue(authorization)
+  if (cleanCookie) headers.push(`Cookie: ${cleanCookie}`)
+  if (cleanAuthorization) headers.push(`Authorization: ${cleanAuthorization}`)
   return headers
 }
 
@@ -163,12 +166,18 @@ function buildChangedOptions(
   resolvedProxy: string,
 ): Aria2EngineOptions {
   const options: Aria2EngineOptions = {}
+  const sanitizedHeaders = sanitizeHttpHeaderOptions({
+    userAgent: form.userAgent,
+    referer: form.referer,
+    cookie: form.cookie,
+    authorization: form.authorization,
+  })
 
   if (form.userAgent !== loaded.userAgent) {
-    options['user-agent'] = form.userAgent
+    options['user-agent'] = sanitizedHeaders.userAgent ?? ''
   }
   if (form.referer !== loaded.referer) {
-    options.referer = form.referer
+    options.referer = sanitizedHeaders.referer ?? ''
   }
   if (form.cookie !== loaded.cookie || form.authorization !== loaded.authorization) {
     options.header = buildHeaders(form.cookie, form.authorization)

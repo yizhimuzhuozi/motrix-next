@@ -240,7 +240,16 @@ fn build_history_meta_json(event: &TaskEvent) -> Option<String> {
 ///
 /// The resulting record uses `ON CONFLICT(gid) DO UPDATE` when inserted,
 /// so duplicate writes from both Rust and frontend are idempotent.
-pub fn build_history_record(event: &TaskEvent, event_name: &str) -> crate::history::HistoryRecord {
+#[cfg(test)]
+fn build_history_record(event: &TaskEvent, event_name: &str) -> crate::history::HistoryRecord {
+    build_history_record_with_added_at(event, event_name, None)
+}
+
+pub fn build_history_record_with_added_at(
+    event: &TaskEvent,
+    event_name: &str,
+    added_at: Option<String>,
+) -> crate::history::HistoryRecord {
     let status = match event_name {
         events::TASK_COMPLETE | events::BT_COMPLETE => "complete",
         events::TASK_ERROR => "error",
@@ -255,6 +264,7 @@ pub fn build_history_record(event: &TaskEvent, event_name: &str) -> crate::histo
 
     let total_length = event.total_length.parse::<i64>().ok();
     let now = chrono::Utc::now().to_rfc3339();
+    let added_at = added_at.unwrap_or_else(|| now.clone());
 
     // Build structured JSON meta matching the frontend's buildHistoryMeta() format.
     // This ensures historyRecordToTask() can correctly reconstruct multi-file BT
@@ -270,7 +280,7 @@ pub fn build_history_record(event: &TaskEvent, event_name: &str) -> crate::histo
         total_length,
         status: status.to_string(),
         task_type,
-        added_at: Some(now.clone()),
+        added_at: Some(added_at),
         created_at: None,
         completed_at: Some(now),
         meta,
@@ -454,12 +464,33 @@ async fn monitor_loop(
                         || event_name == events::BT_COMPLETE
                         || event_name == events::TASK_ERROR
                     {
-                        let record = build_history_record(payload, event_name);
                         let db = db_state.0.clone();
+                        let payload = payload.clone();
                         // Spawn a non-blocking write — monitor loop must not
                         // block on DB I/O to keep polling responsive.
                         let event_name_owned = event_name.clone();
                         tokio::spawn(async move {
+                            let existing_added_at = match db.get_task_birth(&payload.gid).await {
+                                Ok(added_at) => added_at,
+                                Err(e) => {
+                                    log::warn!(
+                                        "task_monitor: task_birth lookup failed for {event_name_owned}: {e}"
+                                    );
+                                    None
+                                }
+                            };
+                            let record = build_history_record_with_added_at(
+                                &payload,
+                                &event_name_owned,
+                                existing_added_at,
+                            );
+                            if let Some(added_at) = record.added_at.as_deref() {
+                                if let Err(e) = db.record_task_birth(&record.gid, added_at).await {
+                                    log::warn!(
+                                        "task_monitor: task_birth write failed for {event_name_owned}: {e}"
+                                    );
+                                }
+                            }
                             if let Err(e) = db.add_record(&record).await {
                                 log::warn!(
                                     "task_monitor: history write failed for {event_name_owned}: {e}"
@@ -940,6 +971,20 @@ mod tests {
         assert_eq!(record.status, "complete");
         assert_eq!(record.name, "test.zip");
         assert!(record.completed_at.is_some());
+    }
+
+    #[test]
+    fn build_history_record_with_added_at_uses_persisted_task_birth() {
+        let task = make_task("g1", "complete");
+        let event = TaskEvent::from_aria2(&task);
+        let record = build_history_record_with_added_at(
+            &event,
+            events::TASK_COMPLETE,
+            Some("2025-01-01T00:00:00Z".to_string()),
+        );
+
+        assert_eq!(record.added_at.as_deref(), Some("2025-01-01T00:00:00Z"));
+        assert_ne!(record.completed_at, record.added_at);
     }
 
     #[test]

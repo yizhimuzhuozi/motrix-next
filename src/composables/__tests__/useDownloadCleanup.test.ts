@@ -19,12 +19,17 @@ vi.mock('@tauri-apps/api/path', () => ({
   join: (...parts: string[]) => Promise.resolve(parts.join('/')),
 }))
 
-// Mock invoke — routes check_path_exists and trash_file to separate handlers
+// Mock invoke — routes filesystem-sensitive operations through Rust IPC.
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (cmd: string, args?: Record<string, unknown>) => {
+  invoke: async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd === 'check_path_exists') return mockCheckPathExists(args)
     if (cmd === 'trash_file') return mockTrashFile(args)
     if (cmd === 'remove_file') return mockRemoveFile(args)
+    if (cmd === 'read_local_file') return mockReadFile(args?.path)
+    if (cmd === 'list_dir_files') {
+      const entries = await mockReadDir(args)
+      return entries.filter((entry: { isFile?: boolean }) => entry.isFile).map((entry: { name: string }) => entry.name)
+    }
     return Promise.reject(new Error(`Unexpected invoke: ${cmd}`))
   },
 }))

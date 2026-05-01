@@ -236,6 +236,19 @@ impl HistoryDb {
         Ok(())
     }
 
+    /// Return the first recorded birth timestamp for a task GID.
+    pub async fn get_task_birth(&self, gid: &str) -> Result<Option<String>, AppError> {
+        let conn = self.conn.lock().await;
+        let added_at = conn
+            .query_row(
+                "SELECT added_at FROM task_birth WHERE gid = ?1",
+                params![gid],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(added_at)
+    }
+
     /// Load all birth records for pre-populating in-memory maps.
     pub async fn load_birth_records(&self) -> Result<Vec<(String, String)>, AppError> {
         let conn = self.conn.lock().await;
@@ -513,6 +526,20 @@ mod tests {
         let births = db.load_birth_records().await.unwrap();
         assert_eq!(births.len(), 1);
         assert_eq!(births[0].1, "2025-01-01T00:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn get_task_birth_returns_persisted_added_at() {
+        let db = HistoryDb::open_in_memory().unwrap();
+        db.record_task_birth("g1", "2025-01-01T00:00:00Z")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            db.get_task_birth("g1").await.unwrap().as_deref(),
+            Some("2025-01-01T00:00:00Z")
+        );
+        assert_eq!(db.get_task_birth("missing").await.unwrap(), None);
     }
 
     // ── Integrity check ─────────────────────────────────────────────

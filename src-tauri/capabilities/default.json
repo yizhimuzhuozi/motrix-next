@@ -17,14 +17,9 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "opener:default",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [{ "path": "**" }]
-    },
     "store:default",
     "shell:default",
     "shell:allow-open",
-    "shell:allow-execute",
     "dialog:default",
     "notification:default",
     "process:default",
@@ -43,8 +38,7 @@
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$APPLOG/**" },
-        { "path": "$TEMP/**" },
-        { "path": "**" }
+        { "path": "$TEMP/**" }
       ]
     },
     "clipboard-manager:allow-read-text",

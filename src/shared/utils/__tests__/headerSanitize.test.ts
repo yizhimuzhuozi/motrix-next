@@ -7,7 +7,7 @@
  * from textarea input, which causes HTTP 400 from some CDNs).
  */
 import { describe, it, expect } from 'vitest'
-import { hasUnsafeHeaderChars, sanitizeHeaderValue } from '../headerSanitize'
+import { hasUnsafeHeaderChars, sanitizeHeaderValue, sanitizeHttpHeaderOptions } from '../headerSanitize'
 
 describe('hasUnsafeHeaderChars', () => {
   it('returns false for a clean single-line string', () => {
@@ -115,5 +115,29 @@ describe('sanitizeHeaderValue', () => {
     const dirty = 'netdisk;P2SP;3.0.20.138;netdisk;7.55.5.102;android-android;moparse\n'
     const clean = 'netdisk;P2SP;3.0.20.138;netdisk;7.55.5.102;android-android;moparse'
     expect(sanitizeHeaderValue(dirty)).toBe(clean)
+  })
+})
+
+describe('sanitizeHttpHeaderOptions', () => {
+  it('sanitizes all per-task HTTP header values before they reach aria2', () => {
+    expect(
+      sanitizeHttpHeaderOptions({
+        userAgent: 'Agent\r\nInjected: bad',
+        referer: 'https://example.com/\n',
+        cookie: 'session=abc\r\nX-Evil: 1',
+        authorization: 'Bearer token\nAnother: bad',
+      }),
+    ).toEqual({
+      userAgent: 'AgentInjected: bad',
+      referer: 'https://example.com/',
+      cookie: 'session=abcX-Evil: 1',
+      authorization: 'Bearer tokenAnother: bad',
+    })
+  })
+
+  it('preserves undefined optional fields', () => {
+    expect(sanitizeHttpHeaderOptions({ userAgent: 'Agent/1.0' })).toEqual({
+      userAgent: 'Agent/1.0',
+    })
   })
 })

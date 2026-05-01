@@ -63,6 +63,13 @@ describe('buildHeaders', () => {
     expect(buildHeaders('session=abc', 'Bearer xyz')).toEqual(['Cookie: session=abc', 'Authorization: Bearer xyz'])
   })
 
+  it('sanitizes Cookie and Authorization values before building headers', () => {
+    expect(buildHeaders('session=abc\r\nX-Evil: 1', 'Bearer xyz\nInjected: bad')).toEqual([
+      'Cookie: session=abcX-Evil: 1',
+      'Authorization: Bearer xyzInjected: bad',
+    ])
+  })
+
   it('builds array with only Cookie', () => {
     expect(buildHeaders('session=abc', '')).toEqual(['Cookie: session=abc'])
   })

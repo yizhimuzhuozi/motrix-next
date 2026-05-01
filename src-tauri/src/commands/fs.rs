@@ -26,8 +26,10 @@ fn sanitize_config_snapshot(raw: &Value) -> Value {
         .get_mut("preferences")
         .and_then(Value::as_object_mut)
     {
-        if let Some(secret) = prefs.get_mut("rpcSecret") {
-            *secret = Value::String("[REDACTED]".into());
+        for key in ["rpcSecret", "extensionApiSecret"] {
+            if let Some(secret) = prefs.get_mut(key) {
+                *secret = Value::String("[REDACTED]".into());
+            }
         }
         if let Some(cookie) = prefs.get_mut("cookie") {
             *cookie = Value::String("[REDACTED]".into());
@@ -235,10 +237,11 @@ mod export_tests {
     }
 
     #[test]
-    fn sanitize_config_snapshot_redacts_rpc_secret_cookie_and_proxy_server() {
+    fn sanitize_config_snapshot_redacts_api_secrets_cookie_and_proxy_server() {
         let raw = serde_json::json!({
             "preferences": {
                 "rpcSecret": "secret",
+                "extensionApiSecret": "api-secret",
                 "cookie": "session=abc",
                 "proxy": {
                     "server": "http://user:pass@example.com:8080"
@@ -252,6 +255,10 @@ mod export_tests {
             .expect("preferences object must exist");
         assert_eq!(
             prefs.get("rpcSecret").and_then(Value::as_str),
+            Some("[REDACTED]")
+        );
+        assert_eq!(
+            prefs.get("extensionApiSecret").and_then(Value::as_str),
             Some("[REDACTED]")
         );
         assert_eq!(
@@ -294,6 +301,34 @@ pub fn check_path_is_dir(path: String) -> bool {
     let result = std::path::Path::new(&path).is_dir();
     log::debug!("check_path_is_dir: path={path:?} result={result}");
     result
+}
+
+/// Reads a local file selected or referenced by the user.
+///
+/// This command keeps arbitrary user-path reads behind Rust IPC instead of
+/// granting the frontend plugin a wildcard filesystem scope.
+#[tauri::command]
+pub fn read_local_file(path: String) -> Result<Vec<u8>, AppError> {
+    std::fs::read(&path).map_err(|e| AppError::Io(format!("Failed to read file: {e}")))
+}
+
+/// Lists regular file names in a directory.
+///
+/// Used for aria2 metadata cleanup without exposing a wildcard frontend FS
+/// scope. Directory traversal stays in Rust, and only file names are returned.
+#[tauri::command]
+pub fn list_dir_files(path: String) -> Result<Vec<String>, AppError> {
+    let entries =
+        std::fs::read_dir(&path).map_err(|e| AppError::Io(format!("Failed to read dir: {e}")))?;
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        if entry.path().is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                files.push(name.to_string());
+            }
+        }
+    }
+    Ok(files)
 }
 
 /// Normalizes a file-system path for safe use with OS shell APIs.

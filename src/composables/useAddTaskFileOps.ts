@@ -5,7 +5,7 @@
  * Uses dependency injection for store access and i18n to enable testability.
  */
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { logger } from '@shared/logger'
 import { parseTorrentBuffer, uint8ToBase64 } from '@/composables/useTorrentParser'
 import { detectKind, createBatchItem } from '@shared/utils/batchHelpers'
@@ -26,7 +26,7 @@ interface FileOpsDeps {
  */
 export async function resolveFileItem(item: BatchItem, t: (key: string) => string) {
   try {
-    const bytes = await readFile(item.source)
+    const bytes = await invoke<number[]>('read_local_file', { path: item.source })
     const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
     item.payload = uint8ToBase64(uint8)
 

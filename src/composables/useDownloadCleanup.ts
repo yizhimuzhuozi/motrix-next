@@ -2,7 +2,6 @@
  *
  * Pure, testable functions — side effects (FS access) are injected via imports.
  */
-import { readDir } from '@tauri-apps/plugin-fs'
 import { join } from '@tauri-apps/api/path'
 import { invoke } from '@tauri-apps/api/core'
 import { removePath } from '@/composables/useFileDelete'
@@ -93,8 +92,7 @@ const HEX40_METADATA_RE = /^[0-9a-f]{40}\.(torrent|meta4)$/
  * parsing/infoHash extraction to the shared torrent adapter.
  */
 async function defaultHashExtractor(filePath: string): Promise<string | null> {
-  const { readFile } = await import('@tauri-apps/plugin-fs')
-  const bytes = await readFile(filePath)
+  const bytes = await invoke<number[]>('read_local_file', { path: filePath })
   const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   return getTorrentInfoHash(uint8)
 }
@@ -134,20 +132,20 @@ export async function cleanupAria2MetadataFiles(
   if (!dir || !infoHash) return false
 
   try {
-    const entries = await readDir(dir)
-    const candidates = entries.filter((e) => e.isFile && HEX40_METADATA_RE.test(e.name))
+    const entries = await invoke<string[]>('list_dir_files', { path: dir })
+    const candidates = entries.filter((name) => HEX40_METADATA_RE.test(name))
 
     let torrentMatched = false
 
-    for (const entry of candidates) {
-      const filePath = await join(dir, entry.name)
+    for (const name of candidates) {
+      const filePath = await join(dir, name)
       try {
-        if (entry.name.endsWith('.meta4')) {
+        if (name.endsWith('.meta4')) {
           // .meta4 files can't be parsed for infoHash — they use SHA1(content) naming.
           // Since the only .meta4 files matching hex40 pattern are aria2-generated,
           // we clean all of them for the given dir.
           const removed = await removePath(filePath)
-          if (removed) logger.debug('cleanupAria2Metadata', `removed ${entry.name}`)
+          if (removed) logger.debug('cleanupAria2Metadata', `removed ${name}`)
           continue
         }
 
@@ -155,12 +153,12 @@ export async function cleanupAria2MetadataFiles(
         const hash = await extractHash(filePath)
         if (hash === infoHash) {
           const removed = await removePath(filePath)
-          if (removed) logger.debug('cleanupAria2Metadata', `removed ${entry.name}`)
+          if (removed) logger.debug('cleanupAria2Metadata', `removed ${name}`)
           torrentMatched = removed
           return torrentMatched
         }
       } catch (e) {
-        logger.debug('cleanupAria2Metadata', `skipping ${entry.name}: ${e}`)
+        logger.debug('cleanupAria2Metadata', `skipping ${name}: ${e}`)
         continue
       }
     }

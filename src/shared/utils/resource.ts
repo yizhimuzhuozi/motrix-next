@@ -13,11 +13,18 @@ import type { ClipboardConfig } from '@shared/types'
 /** Decodes a Thunder (迅雷) protocol link to its original HTTP/FTP URL. */
 export const decodeThunderLink = (url = ''): string => {
   if (!url.startsWith('thunder://')) return url
-  let result = url.trim()
-  result = result.split('thunder://')[1]
-  result = atob(result)
-  result = result.substring(2, result.length - 2)
-  return result
+  const trimmed = url.trim()
+  const payload = trimmed.slice('thunder://'.length)
+  if (!payload) return url
+
+  try {
+    const decoded = atob(payload)
+    if (!decoded.startsWith('AA') || !decoded.endsWith('ZZ')) return url
+    const result = decoded.substring(2, decoded.length - 2)
+    return result || url
+  } catch {
+    return url
+  }
 }
 
 export const splitTaskLinks = (links = ''): string[] => {

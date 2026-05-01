@@ -816,6 +816,8 @@ pub fn run() {
             commands::export_diagnostic_logs,
             commands::check_path_exists,
             commands::check_path_is_dir,
+            commands::read_local_file,
+            commands::list_dir_files,
             commands::show_item_in_dir,
             commands::open_path_normalized,
             commands::remove_file,

@@ -24,3 +24,21 @@ export function hasUnsafeHeaderChars(value: string): boolean {
 export function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n]+/g, '').trim()
 }
+
+export interface HttpHeaderOptions {
+  userAgent?: string
+  referer?: string
+  cookie?: string
+  authorization?: string
+}
+
+export function sanitizeHttpHeaderOptions(options: HttpHeaderOptions): HttpHeaderOptions {
+  const sanitized: HttpHeaderOptions = {}
+
+  if (options.userAgent !== undefined) sanitized.userAgent = sanitizeHeaderValue(options.userAgent)
+  if (options.referer !== undefined) sanitized.referer = sanitizeHeaderValue(options.referer)
+  if (options.cookie !== undefined) sanitized.cookie = sanitizeHeaderValue(options.cookie)
+  if (options.authorization !== undefined) sanitized.authorization = sanitizeHeaderValue(options.authorization)
+
+  return sanitized
+}

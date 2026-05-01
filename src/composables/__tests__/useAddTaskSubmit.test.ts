@@ -155,6 +155,20 @@ describe('buildEngineOptions', () => {
     expect(opts.header).toEqual(['Cookie: session=abc', 'Authorization: Bearer token'])
   })
 
+  it('sanitizes every HTTP header value before building aria2 options', () => {
+    const opts = buildEngineOptions({
+      ...baseForm,
+      userAgent: 'MyUA\r\nInjected: bad',
+      referer: 'https://r.com\n',
+      cookie: 'session=abc\r\nX-Evil: 1',
+      authorization: 'Bearer token\nAnother: bad',
+    })
+
+    expect(opts['user-agent']).toBe('MyUAInjected: bad')
+    expect(opts.referer).toBe('https://r.com')
+    expect(opts.header).toEqual(['Cookie: session=abcX-Evil: 1', 'Authorization: Bearer tokenAnother: bad'])
+  })
+
   it('omits header when no cookie or auth', () => {
     const opts = buildEngineOptions(baseForm)
     expect(opts.header).toBeUndefined()
@@ -485,6 +499,29 @@ describe('submitManualUris', () => {
     })
     const call = (mockTaskStore.addUri as ReturnType<typeof vi.fn>).mock.calls[0][0]
     expect(call.outs).toEqual(['Итоги_2026.docx'])
+  })
+
+  it('sanitizes referer and cookie before passing them to resolve_filename', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    ;(invoke as ReturnType<typeof vi.fn>).mockResolvedValueOnce('safe.zip')
+
+    await submitManualUris(
+      {
+        ...baseForm,
+        uris: 'https://example.com/download',
+        referer: 'https://example.com/\r\nInjected: bad',
+        cookie: 'session=abc\nX-Evil: 1',
+      },
+      { dir: '/dl' },
+      mockTaskStore,
+    )
+
+    expect(invoke).toHaveBeenCalledWith('resolve_filename', {
+      url: 'https://example.com/download',
+      proxy: null,
+      referer: 'https://example.com/Injected: bad',
+      cookie: 'session=abcX-Evil: 1',
+    })
   })
 
   it('does not include magnet URIs in regular addUri call (they use separate addMagnetUri path)', async () => {

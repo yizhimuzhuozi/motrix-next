@@ -28,6 +28,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { logger } from '@shared/logger'
 import type { Aria2EngineOptions, BatchItem, FileCategory, ProxyConfig } from '@shared/types'
 import { isMagnetUri } from '@/composables/useMagnetFlow'
+import { sanitizeHttpHeaderOptions } from '@shared/utils/headerSanitize'
 
 export interface AddTaskForm {
   uris: string
@@ -66,6 +67,12 @@ export interface ManualUriSubmitResult {
  * Pure function — no side effects, fully testable.
  */
 export function buildEngineOptions(form: AddTaskForm): Aria2EngineOptions {
+  const headers = sanitizeHttpHeaderOptions({
+    userAgent: form.userAgent,
+    referer: form.referer,
+    cookie: form.cookie,
+    authorization: form.authorization,
+  })
   const options: Aria2EngineOptions = {
     dir: form.dir,
     split: String(form.split),
@@ -75,13 +82,13 @@ export function buildEngineOptions(form: AddTaskForm): Aria2EngineOptions {
     // controlled independently. See: aria2 download_helper.cc:394-401.
   }
   if (form.out) options.out = form.out
-  if (form.userAgent) options['user-agent'] = form.userAgent
-  if (form.referer) options.referer = form.referer
+  if (headers.userAgent) options['user-agent'] = headers.userAgent
+  if (headers.referer) options.referer = headers.referer
 
-  const headers: string[] = []
-  if (form.cookie) headers.push(`Cookie: ${form.cookie}`)
-  if (form.authorization) headers.push(`Authorization: ${form.authorization}`)
-  if (headers.length > 0) options.header = headers
+  const headerLines: string[] = []
+  if (headers.cookie) headerLines.push(`Cookie: ${headers.cookie}`)
+  if (headers.authorization) headerLines.push(`Authorization: ${headers.authorization}`)
+  if (headerLines.length > 0) options.header = headerLines
 
   // Always set all-proxy — empty string clears any inherited global proxy.
   // Without this, mode 'none' would silently inherit the engine-level proxy.
@@ -241,6 +248,10 @@ export async function submitManualUris(
           const pathFilename = extractDecodedFilename(uri)
           if (!pathFilename || hasExtension(pathFilename)) return ''
           try {
+            const sanitizedHeaders = sanitizeHttpHeaderOptions({
+              referer: form.referer,
+              cookie: form.cookie,
+            })
             const args: {
               url: string
               proxy: string | null
@@ -250,8 +261,8 @@ export async function submitManualUris(
               url: uri,
               proxy: downloadProxy ?? null,
             }
-            if (form.referer) args.referer = form.referer
-            if (form.cookie) args.cookie = form.cookie
+            if (sanitizedHeaders.referer) args.referer = sanitizedHeaders.referer
+            if (sanitizedHeaders.cookie) args.cookie = sanitizedHeaders.cookie
             return (await invoke<string | null>('resolve_filename', args)) ?? ''
           } catch {
             return '' // HEAD failure → graceful degradation
