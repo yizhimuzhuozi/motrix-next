@@ -25,6 +25,13 @@ interface DeepLinkHandlingResult {
   ignored: number
 }
 
+type PendingFrontendActionChannel = 'menu-event' | 'tray-menu-action'
+
+interface PendingFrontendAction {
+  channel: PendingFrontendActionChannel
+  action: string
+}
+
 interface AppEventsDeps {
   t: (key: string, params?: Record<string, unknown>) => string
   appStore: {
@@ -255,51 +262,7 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
   async function setupMenuListener() {
     return registerCleanup(
       await listen<string>('menu-event', async (event) => {
-        const action = event.payload
-        switch (action) {
-          case 'about':
-            deps.onAbout()
-            break
-          case 'new-task':
-            await getCurrentWindow().unminimize()
-            await getCurrentWindow().show()
-            await getCurrentWindow().setFocus()
-            appStore.showAddTaskDialog()
-            break
-          case 'open-torrent': {
-            const selected = await openDialog({
-              multiple: true,
-              filters: [{ name: 'Torrent / Metalink', extensions: ['torrent', 'metalink', 'meta4'] }],
-            })
-            if (typeof selected === 'string') {
-              const skipped = appStore.enqueueBatch([createBatchItem(detectKind(selected), selected)])
-              if (skipped > 0) message.warning(t('task.duplicate-task'))
-            } else if (Array.isArray(selected) && selected.length > 0) {
-              const skipped = appStore.enqueueBatch(selected.map((p) => createBatchItem(detectKind(p), p)))
-              if (skipped > 0) message.warning(t('task.duplicate-task'))
-            }
-            break
-          }
-          case 'preferences':
-            router.push('/preference').catch(() => {
-              /* duplicate navigation */
-            })
-            break
-          case 'resume-all':
-            if (!(await taskStore.hasPausedTasks())) break
-            taskStore.resumeAllTask().catch((e) => logger.error('TrayMenu', e))
-            break
-          case 'pause-all':
-            if (!(await taskStore.hasActiveTasks())) break
-            taskStore.pauseAllTask().catch((e) => logger.error('TrayMenu', e))
-            break
-          case 'release-notes':
-            openUrl('https://github.com/AnInsomniacy/motrix-next/releases').catch((e) => logger.error('TrayMenu', e))
-            break
-          case 'report-issue':
-            openUrl('https://github.com/AnInsomniacy/motrix-next/issues').catch((e) => logger.error('TrayMenu', e))
-            break
-        }
+        await handleMenuAction(event.payload)
       }),
     )
   }
@@ -308,89 +271,136 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
   async function setupTrayListener() {
     return registerCleanup(
       await listen<string>('tray-menu-action', async (event) => {
-        const action = event.payload
-        const mainWindow = getCurrentWindow()
-        switch (action) {
-          case 'show':
-            await mainWindow.unminimize()
-            await mainWindow.show()
-            await mainWindow.setFocus()
-            break
-          case 'new-task':
-            await mainWindow.unminimize()
-            await mainWindow.show()
-            await mainWindow.setFocus()
-            appStore.showAddTaskDialog()
-            break
-          case 'resume-all':
-            await mainWindow.unminimize()
-            await mainWindow.show()
-            await mainWindow.setFocus()
-            if (!(await taskStore.hasPausedTasks())) {
-              message.info(t('task.no-paused-tasks'))
-              break
-            }
-            if (!isEngineReady()) {
-              message.warning(t('app.engine-not-ready'))
-            } else {
-              navDialog.warning({
-                title: t('task.resume-all-task'),
-                content: t('task.resume-all-task-confirm') || 'Resume all tasks?',
-                positiveText: t('app.yes'),
-                negativeText: t('app.no'),
-                onPositiveClick: () => {
-                  taskStore
-                    .resumeAllTask()
-                    .then(() => message.success(t('task.resume-all-task-success')))
-                    .catch(() => message.error(t('task.resume-all-task-fail')))
-                },
-              })
-            }
-            break
-          case 'pause-all':
-            await mainWindow.unminimize()
-            await mainWindow.show()
-            await mainWindow.setFocus()
-            if (!(await taskStore.hasActiveTasks())) {
-              message.info(t('task.no-active-tasks'))
-              break
-            }
-            if (!isEngineReady()) {
-              message.warning(t('app.engine-not-ready'))
-            } else {
-              const d = navDialog.warning({
-                title: t('task.pause-all-task'),
-                content: t('task.pause-all-task-confirm') || 'Pause all tasks?',
-                positiveText: t('app.yes'),
-                negativeText: t('app.no'),
-                onPositiveClick: () => {
-                  d.loading = true
-                  d.negativeButtonProps = { disabled: true }
-                  d.closable = false
-                  d.maskClosable = false
-                  taskStore
-                    .pauseAllTask()
-                    .then(async () => {
-                      await new Promise((r) => setTimeout(r, 500))
-                      await taskStore.fetchList()
-                      message.success(t('task.pause-all-task-success'))
-                      d.destroy()
-                    })
-                    .catch(() => {
-                      message.error(t('task.pause-all-task-fail'))
-                      d.destroy()
-                    })
-                  return false
-                },
-              })
-            }
-            break
-          case 'quit':
-            await handleExitConfirm()
-            break
-        }
+        await handleTrayAction(event.payload)
       }),
     )
+  }
+
+  async function surfaceMainWindow() {
+    const mainWindow = getCurrentWindow()
+    await mainWindow.unminimize()
+    await mainWindow.show()
+    await mainWindow.setFocus()
+  }
+
+  async function handleMenuAction(action: string) {
+    switch (action) {
+      case 'about':
+        deps.onAbout()
+        break
+      case 'new-task':
+        await surfaceMainWindow()
+        appStore.showAddTaskDialog()
+        break
+      case 'open-torrent': {
+        const selected = await openDialog({
+          multiple: true,
+          filters: [{ name: 'Torrent / Metalink', extensions: ['torrent', 'metalink', 'meta4'] }],
+        })
+        if (typeof selected === 'string') {
+          const skipped = appStore.enqueueBatch([createBatchItem(detectKind(selected), selected)])
+          if (skipped > 0) message.warning(t('task.duplicate-task'))
+        } else if (Array.isArray(selected) && selected.length > 0) {
+          const skipped = appStore.enqueueBatch(selected.map((p) => createBatchItem(detectKind(p), p)))
+          if (skipped > 0) message.warning(t('task.duplicate-task'))
+        }
+        break
+      }
+      case 'preferences':
+        router.push('/preference').catch(() => {
+          /* duplicate navigation */
+        })
+        break
+      case 'resume-all':
+        if (!(await taskStore.hasPausedTasks())) break
+        taskStore.resumeAllTask().catch((e) => logger.error('TrayMenu', e))
+        break
+      case 'pause-all':
+        if (!(await taskStore.hasActiveTasks())) break
+        taskStore.pauseAllTask().catch((e) => logger.error('TrayMenu', e))
+        break
+      case 'release-notes':
+        openUrl('https://github.com/AnInsomniacy/motrix-next/releases').catch((e) => logger.error('TrayMenu', e))
+        break
+      case 'report-issue':
+        openUrl('https://github.com/AnInsomniacy/motrix-next/issues').catch((e) => logger.error('TrayMenu', e))
+        break
+    }
+  }
+
+  async function handleTrayAction(action: string) {
+    switch (action) {
+      case 'show':
+        await surfaceMainWindow()
+        break
+      case 'new-task':
+        await surfaceMainWindow()
+        appStore.showAddTaskDialog()
+        break
+      case 'resume-all':
+        await surfaceMainWindow()
+        if (!(await taskStore.hasPausedTasks())) {
+          message.info(t('task.no-paused-tasks'))
+          break
+        }
+        if (!isEngineReady()) {
+          message.warning(t('app.engine-not-ready'))
+        } else {
+          navDialog.warning({
+            title: t('task.resume-all-task'),
+            content: t('task.resume-all-task-confirm') || 'Resume all tasks?',
+            positiveText: t('app.yes'),
+            negativeText: t('app.no'),
+            onPositiveClick: () => {
+              taskStore
+                .resumeAllTask()
+                .then(() => message.success(t('task.resume-all-task-success')))
+                .catch(() => message.error(t('task.resume-all-task-fail')))
+            },
+          })
+        }
+        break
+      case 'pause-all': {
+        await surfaceMainWindow()
+        if (!(await taskStore.hasActiveTasks())) {
+          message.info(t('task.no-active-tasks'))
+          break
+        }
+        if (!isEngineReady()) {
+          message.warning(t('app.engine-not-ready'))
+          break
+        }
+        const d = navDialog.warning({
+          title: t('task.pause-all-task'),
+          content: t('task.pause-all-task-confirm') || 'Pause all tasks?',
+          positiveText: t('app.yes'),
+          negativeText: t('app.no'),
+          onPositiveClick: () => {
+            d.loading = true
+            d.negativeButtonProps = { disabled: true }
+            d.closable = false
+            d.maskClosable = false
+            taskStore
+              .pauseAllTask()
+              .then(async () => {
+                await new Promise((r) => setTimeout(r, 500))
+                await taskStore.fetchList()
+                message.success(t('task.pause-all-task-success'))
+                d.destroy()
+              })
+              .catch(() => {
+                message.error(t('task.pause-all-task-fail'))
+                d.destroy()
+              })
+            return false
+          },
+        })
+        break
+      }
+      case 'quit':
+        await handleExitConfirm()
+        break
+    }
   }
 
   // ─── Drag & drop .torrent / .metalink files ──────────────────────
@@ -532,8 +542,19 @@ export function useAppEvents(deps: AppEventsDeps): AppEventsReturn {
         logger.info('AppEvents', `consuming ${pendingUrls.length} pending deep-link(s) from window recreation`)
         await processIncomingDeepLinks(pendingUrls)
       }
+      const pendingActions = await invoke<PendingFrontendAction[]>('take_pending_frontend_actions')
+      if (pendingActions.length > 0) {
+        logger.info('AppEvents', `consuming ${pendingActions.length} pending frontend action(s) from window recreation`)
+        for (const pendingAction of pendingActions) {
+          if (pendingAction.channel === 'menu-event') {
+            await handleMenuAction(pendingAction.action)
+          } else if (pendingAction.channel === 'tray-menu-action') {
+            await handleTrayAction(pendingAction.action)
+          }
+        }
+      }
     } catch (e) {
-      logger.debug('AppEvents.pendingDeepLinks', e)
+      logger.debug('AppEvents.pendingNativeEvents', e)
     }
 
     return { unlistenDragDrop, unlistenMenuEvent, unlistenTrayMenu, unlistenDeepLink, unlistenSingleInstance, teardown }

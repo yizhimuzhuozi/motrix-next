@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::services::{deep_link, http_api};
+use crate::services::{deep_link, frontend_action, http_api};
 
 /// Restart the embedded HTTP API server on a new port.
 ///
@@ -24,4 +24,16 @@ pub fn take_pending_deep_links(
     state: tauri::State<'_, deep_link::PendingDeepLinkState>,
 ) -> Vec<String> {
     deep_link::take_pending_deep_links(state.inner())
+}
+
+/// Drain and return all pending frontend UI actions.
+///
+/// Called by the frontend during its boot sequence after menu and tray
+/// listeners are registered. This prevents lightweight-mode WebView
+/// recreation from dropping native tray or menu actions.
+#[tauri::command]
+pub fn take_pending_frontend_actions(
+    state: tauri::State<'_, frontend_action::PendingFrontendActionState>,
+) -> Vec<frontend_action::PendingFrontendAction> {
+    frontend_action::take_pending_frontend_actions(state.inner())
 }

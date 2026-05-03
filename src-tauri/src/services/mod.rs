@@ -14,6 +14,7 @@
 
 pub mod config;
 pub mod deep_link;
+pub mod frontend_action;
 pub mod http_api;
 pub mod monitor;
 pub mod speed;

@@ -15,7 +15,7 @@
  *
  * Verifies:
  * 1. Rust: tray-quit calls app.exit(0) directly (NOT emit to frontend)
- * 2. Rust: tray-new-task recreates window before emitting (NOT raw emit)
+ * 2. Rust: tray-new-task queues frontend actions across WebView recreation
  * 3. Vue: tray quit case in frontend is kept for backward compat but redundant
  * 4. Vue: onCloseRequested still allows showExitDialog for window close
  */
@@ -60,10 +60,10 @@ describe('tray.rs — quit handled natively via app.exit()', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// Group 2: Rust — tray-new-task recreates window before emit
+// Group 2: Rust — tray-new-task queues action across WebView recreation
 // ═══════════════════════════════════════════════════════════════════
 
-describe('tray.rs — new-task recreates window in lightweight mode', () => {
+describe('tray.rs — new-task queues frontend action in lightweight mode', () => {
   let source: string
 
   beforeAll(() => {
@@ -76,14 +76,13 @@ describe('tray.rs — new-task recreates window in lightweight mode', () => {
     expect(menuEventBlock).toContain('"tray-new-task"')
   })
 
-  it('activates the main window before emitting new-task', () => {
+  it('dispatches new-task through the frontend action queue', () => {
     const menuEventBlock = extractOnMenuEvent(source)
     expect(menuEventBlock).toBeTruthy()
-    // Must recreate window before emit to ensure frontend exists
-    expect(menuEventBlock).toContain('activate_main_window')
-    expect(menuEventBlock).toContain('tray-menu-action')
-    expect(menuEventBlock).toContain('"new-task"')
-    expect(menuEventBlock!.indexOf('activate_main_window')).toBeLessThan(menuEventBlock!.indexOf('tray-menu-action'))
+    expect(menuEventBlock).toContain('dispatch_frontend_action')
+    expect(menuEventBlock).toContain('FrontendActionChannel::TrayMenuAction')
+    expect(menuEventBlock).toContain('FrontendActionKind::NewTask')
+    expect(menuEventBlock).not.toContain('app.emit("tray-menu-action", "new-task")')
   })
 
   it('does NOT route tray-new-task through resolve_tray_action', () => {
@@ -93,11 +92,15 @@ describe('tray.rs — new-task recreates window in lightweight mode', () => {
     expect(newTaskMatch).toBeNull()
   })
 
-  it('marks deep-link frontend readiness stale before recreating the main window', () => {
+  it('marks frontend readiness stale before recreating the main window', () => {
     const createWindowBody = extractGetOrCreateMainWindow(source)
     expect(createWindowBody).toBeTruthy()
     expect(createWindowBody).toContain('mark_frontend_unready')
+    expect(createWindowBody).toContain('mark_frontend_actions_unready')
     expect(createWindowBody!.indexOf('mark_frontend_unready')).toBeLessThan(
+      createWindowBody!.indexOf('builder.build()'),
+    )
+    expect(createWindowBody!.indexOf('mark_frontend_actions_unready')).toBeLessThan(
       createWindowBody!.indexOf('builder.build()'),
     )
   })
@@ -160,6 +163,23 @@ describe('lib.rs — single-instance queues external input before waking the win
     // Window recreation is scheduled by the shared service when needed.
     expect(codeOnly).not.toMatch(/get_webview_window\(\s*"main"\s*\)/)
     expect(codeOnly).not.toContain('emit("single-instance-triggered"')
+  })
+})
+
+describe('lib.rs — native menu actions queue across WebView recreation', () => {
+  let source: string
+
+  beforeAll(() => {
+    const libPath = path.join(PROJECT_ROOT, 'src-tauri', 'src', 'lib.rs')
+    source = fs.readFileSync(libPath, 'utf-8')
+  })
+
+  it('routes frontend-bound native menu actions through the frontend action queue', () => {
+    const menuBlock = extractNativeMenuEventBlock(source)
+    expect(menuBlock).toBeTruthy()
+    expect(menuBlock).toContain('dispatch_frontend_action')
+    expect(menuBlock).toContain('FrontendActionChannel::MenuEvent')
+    expect(menuBlock).not.toContain('app.emit("menu-event", event.id().as_ref())')
   })
 })
 
@@ -470,6 +490,21 @@ function extractSingleInstanceCallback(source: string): string | null {
  */
 function extractDeepLinkHandler(source: string): string | null {
   const marker = 'on_open_url'
+  const idx = source.indexOf(marker)
+  if (idx === -1) return null
+  const braceStart = source.indexOf('{', idx)
+  if (braceStart === -1) return null
+  let depth = 0
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++
+    if (source[i] === '}') depth--
+    if (depth === 0) return source.slice(idx, i + 1)
+  }
+  return null
+}
+
+function extractNativeMenuEventBlock(source: string): string | null {
+  const marker = 'app.on_menu_event'
   const idx = source.indexOf(marker)
   if (idx === -1) return null
   const braceStart = source.indexOf('{', idx)

@@ -55,6 +55,7 @@ pub fn get_or_create_main_window(app: &AppHandle) -> Option<tauri::WebviewWindow
     // Window was destroyed — recreate from config.
     log::warn!("tray:window-not-found label=main — recreating after compositor force-close");
     crate::services::deep_link::mark_frontend_unready(app);
+    crate::services::frontend_action::mark_frontend_actions_unready(app);
 
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Motrix Next")
@@ -220,14 +221,13 @@ pub fn setup_tray(app: &AppHandle) -> Result<TrayMenuState, Box<dyn std::error::
                     app.exit(0);
                 }
                 "tray-new-task" => {
-                    // Ensure the window exists before emitting the "new-task" event.
-                    // In lightweight mode, destroy() killed the WebView — emit would
-                    // go nowhere. Recreate the window first so the newly loaded
-                    // frontend can receive the event and open the Add Task dialog.
-                    log::info!("tray:new-task — ensuring window exists");
-                    activate_main_window(app, "tray-new-task");
-                    // Emit to the (now existing) frontend to open the Add Task dialog
-                    let _ = app.emit("tray-menu-action", "new-task");
+                    log::info!("tray:new-task — dispatching frontend action");
+                    crate::services::frontend_action::dispatch_frontend_action(
+                        app,
+                        crate::services::frontend_action::FrontendActionChannel::TrayMenuAction,
+                        crate::services::frontend_action::FrontendActionKind::NewTask,
+                        "tray-new-task",
+                    );
                 }
                 _ => {
                     if let Some(action) = resolve_tray_action(id) {

@@ -242,7 +242,10 @@ describe('useAppEvents', () => {
   })
 
   it('processes external input drained from the Rust pending queue once listeners are ready', async () => {
-    invokeMock.mockResolvedValueOnce(['file:///Users/example/ubuntu.torrent'])
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'take_pending_deep_links') return ['file:///Users/example/ubuntu.torrent']
+      return []
+    })
     const { deps, appStore } = createDeps()
     const { setupListeners } = mountComposable(deps)
 
@@ -250,6 +253,22 @@ describe('useAppEvents', () => {
 
     expect(appStore.handleDeepLinkUrls).toHaveBeenCalledTimes(1)
     expect(appStore.handleDeepLinkUrls).toHaveBeenCalledWith(['file:///Users/example/ubuntu.torrent'])
+  })
+
+  it('opens the add-task dialog from a pending tray action after listeners are ready', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'take_pending_frontend_actions') {
+        return [{ channel: 'tray-menu-action', action: 'new-task' }]
+      }
+      return []
+    })
+    const { deps, appStore } = createDeps()
+    const { setupListeners } = mountComposable(deps)
+
+    await setupListeners()
+
+    expect(invokeMock).toHaveBeenCalledWith('take_pending_frontend_actions')
+    expect(appStore.showAddTaskDialog).toHaveBeenCalledTimes(1)
   })
 
   it('continues routing external input when focusing the restored window fails', async () => {

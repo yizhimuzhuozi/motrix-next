@@ -126,6 +126,7 @@ pub(crate) fn handle_minimize_to_tray(app: &tauri::AppHandle, window: &tauri::We
     if lightweight {
         log::info!("tray:lightweight-destroy label={}", window.label());
         services::deep_link::mark_frontend_unready(app);
+        services::frontend_action::mark_frontend_actions_unready(app);
         let _ = window.destroy();
     } else {
         log::info!("tray:hide label={}", window.label());
@@ -174,6 +175,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(services::monitor::TaskMonitorState::new());
     app.manage(services::http_api::HttpApiState::new());
     app.manage(services::deep_link::PendingDeepLinkState::new());
+    app.manage(services::frontend_action::PendingFrontendActionState::new());
 
     // App lifecycle — tracks cold-start vs runtime phase for autostart
     // visibility decisions.  See AppLifecycleState doc and issue #206.
@@ -233,20 +235,16 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 let _ = app.emit("show-exit-dialog", ());
             }
         }
-        "about" | "new-task" | "open-torrent" | "preferences" => {
-            // These menu actions open in-app dialogs — ensure the window
-            // exists before emitting. In lightweight mode the WebView may
-            // have been destroyed, making emit a no-op.
-            tray::activate_main_window(app, "native-menu-action");
-            let _ = app.emit("menu-event", event.id().as_ref());
+        id => {
+            if let Some(action) = services::frontend_action::menu_action_from_id(id) {
+                services::frontend_action::dispatch_frontend_action(
+                    app,
+                    services::frontend_action::FrontendActionChannel::MenuEvent,
+                    action,
+                    "native-menu-action",
+                );
+            }
         }
-        "release-notes" => {
-            let _ = app.emit("menu-event", "release-notes");
-        }
-        "report-issue" => {
-            let _ = app.emit("menu-event", "report-issue");
-        }
-        _ => {}
     });
 
     // On macOS, runtime deep links arrive via RunEvent::Opened → the
@@ -840,6 +838,7 @@ pub fn run() {
             commands::refresh_runtime_config,
             commands::restart_http_api,
             commands::take_pending_deep_links,
+            commands::take_pending_frontend_actions,
             commands::history_add_record,
             commands::history_get_records,
             commands::history_remove_record,
