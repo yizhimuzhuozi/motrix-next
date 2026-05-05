@@ -276,9 +276,9 @@ export interface AppConfig {
   clearCompletedOnExit: boolean
   /** When true, the system shuts down after all downloads complete. */
   shutdownWhenComplete: boolean
-  /** When true, prevents system sleep and display dimming while downloads are active.
+  /** When true, prevents system idle sleep while downloads are active.
    *  Uses OS-native APIs: macOS IOPMAssertion, Windows SetThreadExecutionState,
-   *  Linux D-Bus org.freedesktop.ScreenSaver + systemd Inhibit. */
+   *  Linux systemd Inhibit. */
   keepAwake: boolean
   /** Maximum number of retries per download (0 = unlimited). Maps to aria2 --max-tries. */
   maxTries: number

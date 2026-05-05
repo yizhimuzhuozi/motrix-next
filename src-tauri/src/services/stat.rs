@@ -364,10 +364,11 @@ async fn stat_loop(
     let mut interval_state = IntervalState::new();
 
     // Keep-awake RAII guard: held while downloads are active, dropped when idle.
-    // The guard prevents system sleep/display dimming via OS-native APIs:
-    //   macOS:   IOPMAssertionCreateWithName (PreventUserIdleDisplaySleep)
-    //   Windows: SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)
-    //   Linux:   org.freedesktop.ScreenSaver.Inhibit + systemd Inhibit (D-Bus)
+    // The guard prevents system idle sleep via OS-native APIs while allowing
+    // the display to turn off according to the user's power settings:
+    //   macOS:   IOPMAssertionCreateWithName (PreventUserIdleSystemSleep)
+    //   Windows: SetThreadExecutionState(ES_SYSTEM_REQUIRED)
+    //   Linux:   systemd Inhibit("idle") (D-Bus)
     let mut awake_guard: Option<KeepAwake> = None;
 
     loop {
@@ -443,7 +444,6 @@ async fn stat_loop(
             if cfg.keep_awake && num_active > 0 {
                 if awake_guard.is_none() {
                     match keepawake::Builder::default()
-                        .display(true)
                         .idle(true)
                         .reason("Active downloads in progress")
                         .app_name("Motrix Next")
@@ -733,12 +733,24 @@ mod tests {
     fn keepawake_builder_compiles() {
         let _: fn() -> Result<KeepAwake, keepawake::Error> = || {
             keepawake::Builder::default()
-                .display(true)
                 .idle(true)
                 .reason("test")
                 .app_name("test")
                 .app_reverse_domain("com.test")
                 .create()
         };
+    }
+
+    #[test]
+    fn keepawake_does_not_request_display_awake() {
+        let source = include_str!("stat.rs");
+        let production_source = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("stat.rs should contain production source before tests");
+        assert!(
+            !production_source.contains(".display(true)"),
+            "downloads must prevent system idle sleep without forcing the display to stay awake"
+        );
     }
 }

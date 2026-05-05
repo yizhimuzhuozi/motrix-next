@@ -45,9 +45,9 @@ pub struct RuntimeConfig {
     /// Whether to shut down the system after all downloads complete.
     #[serde(default)]
     pub shutdown_when_complete: bool,
-    /// Whether to prevent system sleep/display dimming during active downloads.
+    /// Whether to prevent system idle sleep during active downloads.
     /// Uses `keepawake` crate (macOS IOPMAssertion, Windows SetThreadExecutionState,
-    /// Linux D-Bus org.freedesktop.ScreenSaver.Inhibit + systemd Inhibit).
+    /// Linux systemd Inhibit).
     #[serde(default)]
     pub keep_awake: bool,
     /// Port for the embedded HTTP API (browser extension communication).
