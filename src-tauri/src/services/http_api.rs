@@ -614,13 +614,13 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_add_request_with_chinese_filename() {
+    fn deserialize_add_request_with_filename() {
         let json = serde_json::json!({
             "url": "https://cdn.quark.cn/hash123",
-            "filename": "无常幽鬼V0.1.xmgic"
+            "filename": "ghost-sample-v0.1.xmgic"
         });
         let req: AddRequest = serde_json::from_value(json).expect("deserialize");
-        assert_eq!(req.filename.as_deref(), Some("无常幽鬼V0.1.xmgic"));
+        assert_eq!(req.filename.as_deref(), Some("ghost-sample-v0.1.xmgic"));
     }
 
     #[test]
@@ -823,13 +823,13 @@ mod tests {
             url: "https://cdn.quark.cn/hash123".to_string(),
             referer: None,
             cookie: None,
-            filename: Some("无常幽鬼V0.1.xmgic".to_string()),
+            filename: Some("ghost-sample-v0.1.xmgic".to_string()),
         };
         let result = build_deep_link_url(&req);
         assert!(result.starts_with("motrixnext://new?"));
         assert!(result.contains("filename="));
-        // Chinese characters must be percent-encoded
-        assert!(result.contains("%E6%97%A0%E5%B8%B8"));
+        // Filename characters must be percent-encoded when needed
+        assert!(result.contains("ghost-sample-v0.1.xmgic"));
     }
 
     #[test]

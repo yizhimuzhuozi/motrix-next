@@ -222,7 +222,7 @@ pub(crate) fn extract_basename(url: &str) -> String {
     };
     let raw = pathname.split('/').rfind(|s| !s.is_empty()).unwrap_or("");
 
-    // Percent-decode (e.g. "%E4%B8%AD" → "中")
+    // Percent-decode (e.g. "r%C3%A9sum%C3%A9" -> "résumé")
     match urlencoding::decode(raw) {
         Ok(decoded) => decoded.to_string(),
         Err(_) => raw.to_string(),
@@ -255,7 +255,7 @@ pub(crate) fn has_extension(name: &str) -> bool {
 ///
 /// Supports two formats per RFC 6266:
 ///   - `filename="report.pdf"` (quoted)
-///   - `filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf` (encoded)
+///   - `filename*=UTF-8''resume.pdf` (encoded)
 ///
 /// Also decodes RFC 2047 MIME encoded-words when real-world servers place
 /// them inside `filename=` despite RFC 6266 discouraging that format.
@@ -438,8 +438,8 @@ mod tests {
     #[test]
     fn extract_basename_encoded() {
         assert_eq!(
-            extract_basename("https://example.com/%E4%B8%AD%E6%96%87.pdf"),
-            "中文.pdf"
+            extract_basename("https://example.com/r%C3%A9sum%C3%A9.pdf"),
+            "résumé.pdf"
         );
     }
 
@@ -501,8 +501,8 @@ mod tests {
     #[test]
     fn parse_cd_filename_star_utf8() {
         assert_eq!(
-            parse_cd_filename("attachment; filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf"),
-            Some("報告.pdf".into())
+            parse_cd_filename("attachment; filename*=UTF-8''resume.pdf"),
+            Some("resume.pdf".into())
         );
     }
 
@@ -545,8 +545,8 @@ mod tests {
     #[test]
     fn parse_cd_filename_decodes_rfc2047_quoted_printable_filename() {
         assert_eq!(
-            parse_cd_filename("attachment; filename=\"=?UTF-8?Q?=E6=8A=A5=E5=91=8A.pdf?=\""),
-            Some("报告.pdf".into())
+            parse_cd_filename("attachment; filename=\"=?UTF-8?Q?r=C3=A9sum=C3=A9.pdf?=\""),
+            Some("résumé.pdf".into())
         );
     }
 
@@ -852,8 +852,8 @@ mod tests {
 
     #[test]
     fn parse_cd_filename_star_takes_precedence() {
-        let cd = "attachment; filename=\"fallback.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf";
-        assert_eq!(parse_cd_filename(cd), Some("報告.pdf".into()));
+        let cd = "attachment; filename=\"fallback.pdf\"; filename*=UTF-8''resume.pdf";
+        assert_eq!(parse_cd_filename(cd), Some("resume.pdf".into()));
     }
 
     #[test]

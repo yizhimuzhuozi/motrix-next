@@ -210,9 +210,9 @@ describe('extractMagnetDisplayName', () => {
     expect(extractMagnetDisplayName(uri)).toBe('Ubuntu 24.04 LTS')
   })
 
-  it('decodes percent-encoded CJK dn values', () => {
-    const uri = 'magnet:?xt=urn:btih:abc&dn=%E6%94%BE%E8%AA%B2%E5%BE%8C'
-    expect(extractMagnetDisplayName(uri)).toBe('放課後')
+  it('decodes percent-encoded UTF-8 dn values', () => {
+    const uri = 'magnet:?xt=urn:btih:abc&dn=caf%C3%A9'
+    expect(extractMagnetDisplayName(uri)).toBe('café')
   })
 
   it('returns empty string when dn is absent', () => {
@@ -264,7 +264,7 @@ describe('decodePathSegment', () => {
   })
 
   it('decodes UTF-8 percent sequences', () => {
-    expect(decodePathSegment('%E4%B8%AD%E6%96%87')).toBe('中文')
+    expect(decodePathSegment('r%C3%A9sum%C3%A9')).toBe('résumé')
   })
 
   it('returns original string for malformed percent sequence', () => {
@@ -293,7 +293,7 @@ describe('extractDecodedFilename', () => {
   })
 
   it('decodes UTF-8 percent sequences', () => {
-    expect(extractDecodedFilename('http://example.com/file%E4%B8%AD%E6%96%87.txt')).toBe('file中文.txt')
+    expect(extractDecodedFilename('http://example.com/file-r%C3%A9sum%C3%A9.txt')).toBe('file-résumé.txt')
   })
 
   it('returns unencoded filename unchanged', () => {
@@ -427,8 +427,8 @@ describe('sanitizeAria2OutHint', () => {
     expect(sanitizeAria2OutHint('Makefile')).toBe('Makefile')
   })
 
-  it('preserves CJK filenames', () => {
-    expect(sanitizeAria2OutHint('报告.pdf')).toBe('报告.pdf')
+  it('preserves accented filenames', () => {
+    expect(sanitizeAria2OutHint('résumé.pdf')).toBe('résumé.pdf')
   })
 
   it('returns empty for empty input', () => {
@@ -452,7 +452,7 @@ describe('resolveExternalFilenameHint', () => {
   // ── Accept: hint has extension ─────────────────────────────────────
 
   it('accepts cloud drive filename with extension', () => {
-    expect(resolveExternalFilenameHint('https://cdn.cloud.com/abc123', '报告.pdf')).toBe('报告.pdf')
+    expect(resolveExternalFilenameHint('https://cdn.cloud.com/abc123', 'résumé.pdf')).toBe('résumé.pdf')
   })
 
   it('accepts RFC 2047 encoded-word external filename hints after decoding', () => {

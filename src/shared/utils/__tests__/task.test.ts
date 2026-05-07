@@ -255,9 +255,9 @@ describe('getTaskDisplayName', () => {
 
   it('decodes UTF-8 percent sequences in filename', () => {
     const task = createMockTask({
-      files: [createMockFile({ path: '/downloads/file%E4%B8%AD%E6%96%87.txt' })],
+      files: [createMockFile({ path: '/downloads/file-r%C3%A9sum%C3%A9.txt' })],
     })
-    expect(getTaskDisplayName(task)).toBe('file中文.txt')
+    expect(getTaskDisplayName(task)).toBe('file-résumé.txt')
   })
 
   it('returns default name for null task', () => {

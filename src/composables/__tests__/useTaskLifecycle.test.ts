@@ -208,7 +208,7 @@ describe('buildHistoryRecord', () => {
       files: [
         {
           index: '1',
-          path: '/downloads/%E4%B8%AD%E6%96%87.txt',
+          path: '/downloads/r%C3%A9sum%C3%A9.txt',
           length: '100',
           completedLength: '100',
           selected: 'true',
@@ -217,7 +217,7 @@ describe('buildHistoryRecord', () => {
       ],
     })
     const record = buildHistoryRecord(task)
-    expect(record.name).toBe('中文.txt')
+    expect(record.name).toBe('résumé.txt')
   })
 
   it('returns original path segment when percent sequence is malformed', () => {

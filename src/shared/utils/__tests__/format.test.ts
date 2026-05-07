@@ -86,10 +86,10 @@ describe('timeFormat', () => {
     expect(timeFormat(100000, {})).toContain('> 1 day')
   })
   it('applies custom i18n labels', () => {
-    const result = timeFormat(3661, { i18n: { hour: '时', minute: '分', second: '秒' } })
-    expect(result).toContain('1时')
-    expect(result).toContain('1分')
-    expect(result).toContain('1秒')
+    const result = timeFormat(3661, { i18n: { hour: 'hr', minute: 'min', second: 'sec' } })
+    expect(result).toContain('1hr')
+    expect(result).toContain('1min')
+    expect(result).toContain('1sec')
   })
   it('applies prefix and suffix', () => {
     const result = timeFormat(60, { prefix: 'ETA:', suffix: 'left' })

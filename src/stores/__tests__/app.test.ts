@@ -536,12 +536,12 @@ describe('useAppStore', () => {
     it('extracts filename from motrixnext://new deep link', () => {
       const store = useAppStore()
       const url = encodeURIComponent('https://cdn.quark.cn/hash123')
-      const filename = encodeURIComponent('无常幽鬼V0.1.xmgic')
+      const filename = encodeURIComponent('ghost-sample-v0.1.xmgic')
       store.handleDeepLinkUrls([`motrixnext://new?url=${url}&filename=${filename}`])
 
       expect(store.pendingBatch).toHaveLength(1)
       expect(store.pendingBatch[0].source).toBe('https://cdn.quark.cn/hash123')
-      expect(store.pendingFilename).toBe('无常幽鬼V0.1.xmgic')
+      expect(store.pendingFilename).toBe('ghost-sample-v0.1.xmgic')
     })
 
     it('sets pendingFilename to empty when deep link has no filename param', () => {
@@ -569,13 +569,13 @@ describe('useAppStore', () => {
       const url = encodeURIComponent('https://cdn.quark.cn/hash123')
       const referer = encodeURIComponent('https://pan.quark.cn')
       const cookie = encodeURIComponent('__puus=abc')
-      const filename = encodeURIComponent('无常幽鬼V0.1.xmgic')
+      const filename = encodeURIComponent('ghost-sample-v0.1.xmgic')
       store.handleDeepLinkUrls([`motrixnext://new?url=${url}&referer=${referer}&cookie=${cookie}&filename=${filename}`])
 
       expect(store.pendingBatch).toHaveLength(1)
       expect(store.pendingReferer).toBe('https://pan.quark.cn')
       expect(store.pendingCookie).toBe('__puus=abc')
-      expect(store.pendingFilename).toBe('无常幽鬼V0.1.xmgic')
+      expect(store.pendingFilename).toBe('ghost-sample-v0.1.xmgic')
     })
 
     it('ignores generic browser fallback filename from extension deep link', () => {

@@ -416,10 +416,10 @@ mod tests {
     }
 
     #[test]
-    fn cjk_filename_preserved() {
+    fn accented_filename_preserved() {
         assert_eq!(
-            sanitize_out_option("C:/下载/文件.zip").as_deref(),
-            Some("文件.zip")
+            sanitize_out_option("C:/Downloads/résumé.zip").as_deref(),
+            Some("résumé.zip")
         );
     }
 
