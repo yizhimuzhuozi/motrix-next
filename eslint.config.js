@@ -30,6 +30,15 @@ export default [
             'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
         },
     },
+    // Test files: describe/it nesting naturally produces large function bodies.
+    // Relax max-lines to 500 and disable per-function limit entirely.
+    {
+        files: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+        rules: {
+            'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
+            'max-lines-per-function': 'off',
+        },
+    },
     ...pluginVue.configs['flat/recommended'],
     {
         files: ['src/**/*.vue'],
@@ -55,7 +64,8 @@ export default [
             'vue/max-attributes-per-line': 'off',
             'vue/first-attribute-linebreak': 'off',
             'vue/html-closing-bracket-newline': 'off',
-            'max-lines': ['warn', { max: 350, skipBlankLines: true, skipComments: true }],
+            // SFC includes template + script + style — 350 is unrealistic.
+            'max-lines': ['warn', { max: 1000, skipBlankLines: true, skipComments: true }],
             'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
         },
     },

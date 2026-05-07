@@ -176,9 +176,17 @@ describe('formatOptionsForEngine', () => {
     const result = formatOptionsForEngine({ trackerSource: ['a', 'b'] })
     expect(result['tracker-source']).toBe('a\nb')
   })
-  it('skips null/undefined/empty-string values', () => {
-    const result = formatOptionsForEngine({ a: undefined, b: null, c: '' })
-    expect(Object.keys(result).length).toBe(0)
+  it('skips null and undefined values', () => {
+    const result = formatOptionsForEngine({ a: undefined, b: null })
+    expect(Object.keys(result)).toHaveLength(0)
+  })
+
+  it('forwards empty-string values (aria2 uses them to clear options like all-proxy)', () => {
+    // Verified in aria2 source: HttpProxyOptionHandler::parseArg (OptionHandlerImpl.cc:504)
+    // accepts empty string to clear the proxy. Filtering '' prevents proxy disable.
+    const result = formatOptionsForEngine({ allProxy: '', noProxy: '' })
+    expect(result['all-proxy']).toBe('')
+    expect(result['no-proxy']).toBe('')
   })
   it('keeps numeric 0 value (converted to string)', () => {
     const result = formatOptionsForEngine({ seedTime: 0 })
@@ -209,6 +217,13 @@ describe('parseHeader', () => {
   })
   it('returns empty for whitespace-only string', () => {
     expect(parseHeader('   ')).toEqual({})
+  })
+  it('ignores malformed header lines without creating an empty key', () => {
+    const result = parseHeader('Content-Type: text/html\nmalformed line\nAuthorization: Bearer abc')
+    expect(result).toEqual({
+      contentType: 'text/html',
+      authorization: 'Bearer abc',
+    })
   })
 })
 

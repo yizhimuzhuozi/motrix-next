@@ -172,8 +172,13 @@ describe('sidecar binaries', () => {
           // IMAGE_FILE_MACHINE_AMD64 = 0x8664
           expect(machine).toBe(0x8664)
         } else if (target.includes('aarch64')) {
-          // IMAGE_FILE_MACHINE_ARM64 = 0xAA64
-          expect(machine).toBe(0xaa64)
+          // Windows ARM ships the x64 aria2c binary: aria2 has no official
+          // ARM64 build, and Windows 11 ARM runs x64 transparently via
+          // Prism emulation.  Accept both ARM64 and AMD64 machine types
+          // so the test passes whether using the x64 fallback or a future
+          // native ARM64 build.
+          // IMAGE_FILE_MACHINE_ARM64 = 0xAA64, IMAGE_FILE_MACHINE_AMD64 = 0x8664
+          expect([0xaa64, 0x8664]).toContain(machine)
         }
       })
     }

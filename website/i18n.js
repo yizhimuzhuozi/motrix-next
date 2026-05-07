@@ -245,6 +245,7 @@ async function initI18n() {
     messages = fallbackMessages
   }
   applyTranslations()
+  for (const cb of localeChangeCallbacks) cb()
 }
 
 // Expose globally for inline usage

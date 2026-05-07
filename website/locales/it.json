@@ -89,6 +89,8 @@
   "footer.ack": "Grazie a {link} per le fondamenta",
   "footer.contributing": "Contribuisci",
   "footer.coc": "Codice di condotta",
+  "footer.privacy": "Informativa sulla privacy",
+  "footer.signing": "Politica di firma",
   "footer.license": "MIT — Copyright © 2025-presente AnInsomniacy",
   "dl.modal.title": "Scarica per {os}",
   "dl.modal.download": "Scarica",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Esegui <code>uname -m</code> nel terminale",
   "theme.system": "Sistema",
   "theme.light": "Chiaro",
-  "theme.dark": "Scuro"
+  "theme.dark": "Scuro",
+  "hero.stars": "Stars",
+  "hero.downloads": "Download",
+  "hero.version": "Ultima",
+  "starHistory.title": "Star cronologia"
 }

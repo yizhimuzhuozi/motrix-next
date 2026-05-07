@@ -89,6 +89,8 @@
   "footer.ack": "Благодарност на {link} за основата",
   "footer.contributing": "Принос",
   "footer.coc": "Кодекс за поведение",
+  "footer.privacy": "Политика за поверителност",
+  "footer.signing": "Политика за подписване",
   "footer.license": "MIT — Авторски права © 2025-настоящ AnInsomniacy",
   "dl.modal.title": "Изтегляне за {os}",
   "dl.modal.download": "Изтегляне",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Изпълнете <code>uname -m</code> в терминала",
   "theme.system": "Системна",
   "theme.light": "Светла",
-  "theme.dark": "Тъмна"
+  "theme.dark": "Тъмна",
+  "hero.stars": "Stars",
+  "hero.downloads": "Изтегляния",
+  "hero.version": "Последна",
+  "starHistory.title": "Star история"
 }

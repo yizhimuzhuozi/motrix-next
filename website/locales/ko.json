@@ -89,6 +89,8 @@
   "footer.ack": "기반을 다져준 {link}에 감사",
   "footer.contributing": "기여하기",
   "footer.coc": "행동 강령",
+  "footer.privacy": "개인정보 처리방침",
+  "footer.signing": "서명 정책",
   "footer.license": "MIT — Copyright © 2025-현재 AnInsomniacy",
   "dl.modal.title": "{os}용 다운로드",
   "dl.modal.download": "다운로드",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "터미널에서 <code>uname -m</code> 실행",
   "theme.system": "시스템",
   "theme.light": "라이트",
-  "theme.dark": "다크"
+  "theme.dark": "다크",
+  "hero.stars": "Stars",
+  "hero.downloads": "다운로드",
+  "hero.version": "최신",
+  "starHistory.title": "Star 추이"
 }

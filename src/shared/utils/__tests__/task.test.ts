@@ -1,5 +1,5 @@
 /** @fileoverview Tests for task metadata utilities: progress, naming, BT detection, magnet links. */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   calcProgress,
   calcRatio,
@@ -14,8 +14,15 @@ import {
   checkTaskTitleIsEmpty,
   mergeTaskResult,
   resolveOpenTarget,
+  getRestartDescriptors,
 } from '../task'
 import type { Aria2Task, Aria2File } from '@shared/types'
+
+// Mock Tauri's path.join() — used by resolveOpenTarget for platform-safe path joining.
+// In tests, we simulate it with simple string concatenation using '/'.
+vi.mock('@tauri-apps/api/path', () => ({
+  join: vi.fn((...parts: string[]) => Promise.resolve(parts.join('/'))),
+}))
 
 function createMockTask(overrides: Partial<Aria2Task> = {}): Aria2Task {
   return {
@@ -128,21 +135,16 @@ describe('getTaskName', () => {
 })
 
 describe('getFileNameFromFile', () => {
-  it('returns filename from path', () => {
+  // ── Path-based extraction (aria2 has resolved the filename) ──
+
+  it('returns filename from absolute path', () => {
     const file = createMockFile({ path: '/tmp/download/test.zip' })
     expect(getFileNameFromFile(file)).toBe('test.zip')
   })
 
-  it('returns empty string for undefined file', () => {
-    expect(getFileNameFromFile()).toBe('')
-  })
-
-  it('falls back to first URI when path is empty', () => {
-    const file = createMockFile({
-      path: '',
-      uris: [{ uri: 'https://example.com/file.zip', status: 'used' }],
-    })
-    expect(getFileNameFromFile(file)).toBe('file.zip')
+  it('returns filename from Windows path with backslashes', () => {
+    const file = createMockFile({ path: 'C:\\Downloads\\nested\\test.zip' })
+    expect(getFileNameFromFile(file)).toBe('test.zip')
   })
 
   it('returns full path when no separator found', () => {
@@ -150,8 +152,93 @@ describe('getFileNameFromFile', () => {
     expect(getFileNameFromFile(file)).toBe('plainfile.txt')
   })
 
-  it('returns empty when path and uris are empty', () => {
+  it('returns empty string for undefined file', () => {
+    expect(getFileNameFromFile()).toBe('')
+  })
+
+  // ── URI fallback (path empty — aria2 hasn't resolved yet) ──
+
+  it('falls back to URI filename when path is empty and URI has extension', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://example.com/file.zip', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('file.zip')
+  })
+
+  it('decodes percent-encoded URI filename in fallback', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://example.com/AAA%20BBB.mp3', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('AAA BBB.mp3')
+  })
+
+  it('returns empty for extensionless URI path — redirect/API endpoint', () => {
+    // The exact scenario from bug report: https://datashop.cboe.com/download/sample/215
+    // "215" is not a filename — it's a redirect stub. aria2 will resolve via Content-Disposition.
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://datashop.cboe.com/download/sample/215', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('')
+  })
+
+  it('returns empty for numeric-only URI path segments', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://api.example.com/files/99999', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('')
+  })
+
+  it('returns empty for version-like URI segments without real extension', () => {
+    // "v1.2.3" looks like it has a dot but is not a real filename
+    // Actually it DOES contain a dot, so this would be treated as having an extension.
+    // This is an acceptable trade-off: false positive (showing "v1.2.3" temporarily)
+    // is better than false negative (hiding a real filename).
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://example.com/releases/v1.2.3', status: 'used' }],
+    })
+    // Contains dots → treated as having extension → returned as-is
+    expect(getFileNameFromFile(file)).toBe('v1.2.3')
+  })
+
+  it('returns empty when path and uris are both empty', () => {
     const file = createMockFile({ path: '', uris: [] })
+    expect(getFileNameFromFile(file)).toBe('')
+  })
+
+  it('returns empty for URI with trailing slash and no filename', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://example.com/', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('')
+  })
+
+  it('handles deep path URIs with extension correctly', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://cdn.example.com/a/b/c/deep%20file.tar.gz', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('deep file.tar.gz')
+  })
+
+  it('handles URIs with query parameters', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'https://example.com/report.pdf?token=abc&v=2', status: 'used' }],
+    })
+    expect(getFileNameFromFile(file)).toBe('report.pdf')
+  })
+
+  it('returns empty for invalid URI gracefully', () => {
+    const file = createMockFile({
+      path: '',
+      uris: [{ uri: 'not-a-valid-url', status: 'used' }],
+    })
     expect(getFileNameFromFile(file)).toBe('')
   })
 })
@@ -168,9 +255,9 @@ describe('getTaskDisplayName', () => {
 
   it('decodes UTF-8 percent sequences in filename', () => {
     const task = createMockTask({
-      files: [createMockFile({ path: '/downloads/file%E4%B8%AD%E6%96%87.txt' })],
+      files: [createMockFile({ path: '/downloads/file-r%C3%A9sum%C3%A9.txt' })],
     })
-    expect(getTaskDisplayName(task)).toBe('file中文.txt')
+    expect(getTaskDisplayName(task)).toBe('file-résumé.txt')
   })
 
   it('returns default name for null task', () => {
@@ -433,7 +520,7 @@ describe('mergeTaskResult', () => {
 })
 
 describe('resolveOpenTarget', () => {
-  it('returns torrent root directory for BT multi-file tasks', () => {
+  it('returns torrent root directory for BT multi-file tasks', async () => {
     const task = createMockTask({
       dir: '/downloads',
       bittorrent: { info: { name: 'MyTorrent' } },
@@ -456,10 +543,10 @@ describe('resolveOpenTarget', () => {
         },
       ],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads/MyTorrent')
+    expect(await resolveOpenTarget(task)).toBe('/downloads/MyTorrent')
   })
 
-  it('returns file path for BT single-file tasks', () => {
+  it('returns file path for BT single-file tasks', async () => {
     const task = createMockTask({
       dir: '/downloads',
       bittorrent: { info: { name: 'movie.mp4' } },
@@ -474,10 +561,10 @@ describe('resolveOpenTarget', () => {
         },
       ],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads/movie.mp4')
+    expect(await resolveOpenTarget(task)).toBe('/downloads/movie.mp4')
   })
 
-  it('returns file path for HTTP single-file tasks', () => {
+  it('returns file path for HTTP single-file tasks', async () => {
     const task = createMockTask({
       dir: '/downloads',
       files: [
@@ -491,10 +578,10 @@ describe('resolveOpenTarget', () => {
         },
       ],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads/file.zip')
+    expect(await resolveOpenTarget(task)).toBe('/downloads/file.zip')
   })
 
-  it('prefers selected files over unselected', () => {
+  it('prefers selected files over unselected', async () => {
     const task = createMockTask({
       dir: '/downloads',
       files: [
@@ -516,22 +603,64 @@ describe('resolveOpenTarget', () => {
         },
       ],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads/wanted.mkv')
+    expect(await resolveOpenTarget(task)).toBe('/downloads/wanted.mkv')
   })
 
-  it('falls back to task.dir when files array is empty', () => {
+  it('falls back to task.dir when files array is empty', async () => {
     const task = createMockTask({
       dir: '/downloads',
       files: [],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads')
+    expect(await resolveOpenTarget(task)).toBe('/downloads')
   })
 
-  it('falls back to task.dir when no file path available', () => {
+  it('falls back to task.dir when no file path available', async () => {
     const task = createMockTask({
       dir: '/downloads',
       files: [{ index: '1', path: '', length: '0', completedLength: '0', selected: 'true', uris: [] }],
     })
-    expect(resolveOpenTarget(task)).toBe('/downloads')
+    expect(await resolveOpenTarget(task)).toBe('/downloads')
+  })
+})
+
+// ── getRestartDescriptors ────────────────────────────────────────────
+
+describe('getRestartDescriptors', () => {
+  it('returns [[magnet]] for BT tasks', () => {
+    const task = createMockTask({
+      infoHash: 'abc123',
+      bittorrent: { info: { name: 'test' } },
+      files: [],
+    })
+    const result = getRestartDescriptors(task, true)
+    expect(result).toHaveLength(1)
+    expect(result[0][0]).toContain('magnet:?xt=urn:btih:abc123')
+  })
+
+  it('returns one group per file with all mirror URIs for HTTP tasks', () => {
+    const task = createMockTask({
+      files: [
+        createMockFile({
+          uris: [
+            { uri: 'http://mirror1/a.zip', status: 'used' },
+            { uri: 'http://mirror2/a.zip', status: 'waiting' },
+          ],
+        }),
+        createMockFile({
+          index: '2',
+          path: '/tmp/b.zip',
+          uris: [{ uri: 'http://mirror1/b.zip', status: 'used' }],
+        }),
+      ],
+    })
+    const result = getRestartDescriptors(task)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual(['http://mirror1/a.zip', 'http://mirror2/a.zip'])
+    expect(result[1]).toEqual(['http://mirror1/b.zip'])
+  })
+
+  it('returns empty for task with no files and no BT info', () => {
+    const task = createMockTask({ files: [] })
+    expect(getRestartDescriptors(task)).toEqual([])
   })
 })

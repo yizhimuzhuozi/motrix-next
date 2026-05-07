@@ -108,15 +108,66 @@ export interface ProxyConfig {
   scope?: string[]
 }
 
+/** Result from the `get_system_proxy` Tauri command.
+ *  Mirrors the Rust `SystemProxyInfo` struct (camelCase via serde). */
+export interface SystemProxyInfo {
+  /** Proxy URL, e.g. "http://127.0.0.1:7890" */
+  server: string
+  /** OS bypass list (comma-separated domains/CIDRs) */
+  bypass: string
+  /** True when the detected proxy uses a SOCKS protocol (unsupported by aria2) */
+  isSocks: boolean
+}
+
+export type UpdateChannel = 'stable' | 'beta' | 'latest'
+export type ResolvedUpdateChannel = Exclude<UpdateChannel, 'latest'>
+
 /** Protocol handler registration settings (system-level). */
 export interface ProtocolsConfig {
   magnet: boolean
   thunder: boolean
+  motrixnext: boolean
+}
+
+/** Clipboard auto-detection filter: controls which protocol families
+ *  trigger the "new task" dialog when a URL is detected in the clipboard. */
+export interface ClipboardConfig {
+  /** Master switch — when false, clipboard detection is fully disabled. */
+  enable: boolean
+  /** Detect http:// and https:// URLs. */
+  http: boolean
+  /** Detect ftp:// URLs. */
+  ftp: boolean
+  /** Detect magnet: URIs. */
+  magnet: boolean
+  /** Detect thunder:// (迅雷) links. */
+  thunder: boolean
+  /** Detect bare BitTorrent v1 info hashes (40-char hex / 32-char Base32). */
+  btHash: boolean
+}
+
+/** A file category rule mapping extensions to a download directory. */
+export interface FileCategory {
+  /** Display label — i18n key suffix for built-in categories, user-provided name for custom ones. */
+  label: string
+  /** File extensions (lowercase, no dot prefix) belonging to this category. */
+  extensions: string[]
+  /** Absolute directory path where matching files are saved. */
+  directory: string
+  /** Whether this is a built-in category (cannot be deleted, label resolved via i18n). */
+  builtIn?: boolean
 }
 
 /** Application user preferences with full type coverage. */
 export interface AppConfig {
+  /** Schema version for config migration. Absent in pre-migration configs (treated as 0). */
+  configVersion: number
+  /** Last known DB schema version for upgrade toast detection.
+   *  Stored in config.json so that existing users (who already have config data)
+   *  can be distinguished from fresh installs (who have empty config). */
+  dbSchemaVersion: number
   theme: 'auto' | 'light' | 'dark'
+  colorScheme: string
   locale: string
   dir: string
   split: number
@@ -126,43 +177,88 @@ export interface AppConfig {
   maxOverallUploadLimit: string
   maxDownloadLimit: string
   maxUploadLimit: string
+  /** Whether the Speedometer speed limit toggle is active.
+   *  When true, configured limits are applied to aria2 at runtime.
+   *  When false, aria2 runs with 0 (unlimited) regardless of configured values. */
+  speedLimitEnabled: boolean
+  /** Whether the speed schedule is enabled. When true, the scheduler automatically
+   *  toggles speedLimitEnabled on/off based on time of day and day of week. */
+  speedScheduleEnabled: boolean
+  /** Schedule start time in "HH:mm" format (24-hour). */
+  speedScheduleFrom: string
+  /** Schedule end time in "HH:mm" format (24-hour). Supports overnight spans (e.g. "22:00"→"08:00"). */
+  speedScheduleTo: string
+  /** Day-of-week bitmask: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64.
+   *  0 = every day. Weekdays = 31. Weekends = 96. */
+  speedScheduleDays: number
+  /** Whether smart file classification is active.
+   *  When true, downloads are routed to subdirectories by extension. */
+  fileCategoryEnabled: boolean
+  /** User-configurable file classification rules. */
+  fileCategories: FileCategory[]
   seedTime: number
   seedRatio: number
+  btMaxPeers: number
   openAtLogin: boolean
   autoCheckUpdate: boolean
   autoHideWindow: boolean
   minimizeToTrayOnClose: boolean
   hideDockOnMinimize: boolean
+  lightweightMode: boolean
   autoSyncTracker: boolean
   keepSeeding: boolean
   keepWindowState: boolean
-  macStyleControls: boolean
+
   newTaskShowDownloading: boolean
   noConfirmBeforeDeleteTask: boolean
+  deleteFilesWhenSkipConfirm: boolean
   resumeAllWhenAppLaunched: boolean
   taskNotification: boolean
+  /** OS notification when a download starts (gated by taskNotification). */
+  notifyOnStart: boolean
+  /** OS notification when a download completes or BT enters seeding (gated by taskNotification). */
+  notifyOnComplete: boolean
   showProgressBar: boolean
   traySpeedometer: boolean
   dockBadgeSpeed: boolean
   logLevel: string
   engineBinPath: string
-  engineMaxConnectionPerServer: number
   cookie: string
   proxy: ProxyConfig
   protocols: ProtocolsConfig
+  clipboard: ClipboardConfig
+  /** When true, extension-intercepted URI downloads (HTTP/FTP/magnet) bypass
+   *  the AddTask dialog and submit immediately using user defaults.
+   *  Torrent/metalink URLs always show the dialog regardless — they require
+   *  a fetch→parse→file-select pipeline that cannot be skipped. */
+  autoSubmitFromExtension: boolean
   trackerSource: string[]
+  customTrackerUrls: string[]
   historyDirectories: string[]
   favoriteDirectories: string[]
   lastCheckUpdateTime: number
   lastSyncTrackerTime: number
-  updateChannel: 'stable' | 'beta'
+  /** Linux-only: opt into DMA-BUF GPU hardware rendering (default: false = software).
+   *  If enabling this causes a WebKitGTK crash, the Rust gpu_guard module
+   *  automatically reverts it to false on the next launch. */
+  hardwareRendering: boolean
+  updateChannel: UpdateChannel
   runMode: string
   userAgent: string
   rpcListenPort: number
+  /** Port for the embedded HTTP API that browser extensions use to submit
+   *  downloads.  Defaults to 16801 (one above the aria2 RPC port). */
+  extensionApiPort: number
+  /** Shared secret for the extension HTTP API.  The browser extension must
+   *  send this as a `Bearer` token in the `Authorization` header.
+   *  Absent from defaults — auto-generated on first launch in main.ts.
+   *  undefined → auto-generate. '' → user intentionally cleared. */
+  extensionApiSecret?: string
   rpcSecret: string
   listenPort: number
   dhtListenPort: number
   btTracker: string
+  forceSave: boolean
   btSaveMetadata: boolean
   btLoadSavedMetadata: boolean
   btForceEncryption: boolean
@@ -170,10 +266,33 @@ export interface AppConfig {
   followMetalink: boolean
   pauseMetadata: boolean
   continue: boolean
+  /** When true, aria2 applies the remote server's Last-Modified timestamp
+   *  to the local file instead of using the download-completion time. */
+  remoteTime: boolean
   autoCheckUpdateInterval: number
   enableUpnp: boolean
   deleteTorrentAfterComplete: boolean
   autoDeleteStaleRecords: boolean
+  clearCompletedOnExit: boolean
+  /** When true, the system shuts down after all downloads complete. */
+  shutdownWhenComplete: boolean
+  /** When true, prevents system idle sleep while downloads are active.
+   *  Uses OS-native APIs: macOS IOPMAssertion, Windows SetThreadExecutionState,
+   *  Linux systemd Inhibit. */
+  keepAwake: boolean
+  /** Maximum number of retries per download (0 = unlimited). Maps to aria2 --max-tries. */
+  maxTries: number
+  /** Seconds to wait between retries after HTTP 503 or similar errors. Maps to aria2 --retry-wait. */
+  retryWait: number
+  /** Seconds to wait when establishing a connection. Maps to aria2 --connect-timeout. */
+  connectTimeout: number
+  /** Seconds to wait for data transfer after connection is established. Maps to aria2 --timeout. */
+  timeout: number
+  /** Disk space pre-allocation method. Maps to aria2 --file-allocation.
+   *  Values: 'none' | 'trunc' | 'prealloc' | 'falloc' */
+  fileAllocation: string
+  /** Per-tab sort configuration (field + direction), persisted independently per tab. */
+  taskSort: import('@/composables/useTaskSort').TaskSortConfig
   [key: string]: unknown
 }
 
@@ -187,6 +306,8 @@ export interface AddUriParams {
   uris: string[]
   outs: string[]
   options: Aria2EngineOptions
+  /** Optional file classification config for per-URI directory routing. */
+  fileCategory?: { enabled: boolean; categories: FileCategory[] }
 }
 
 /** Parameters for adding a torrent-based download task. */
@@ -217,6 +338,8 @@ export interface TauriUpdate {
   version: string
   body: string | null
   date: string | null
+  channel: ResolvedUpdateChannel
+  requestedChannel: UpdateChannel
 }
 
 // ── Batch Add Task ──────────────────────────────────────────────────
@@ -244,6 +367,37 @@ export interface BatchItem {
   error?: string
 }
 
+/** Per-file snapshot stored in HistoryMeta.files for multi-file task reconstruction.
+ *
+ * Captures all data needed to fully restore restart, delete, and stale-cleanup
+ * semantics for each individual file within a multi-file download (metalink, etc.). */
+export interface HistoryFileSnapshot {
+  /** Full local file path. */
+  path: string
+  /** File size as string (aria2 convention). */
+  length?: string
+  /** Whether the file was selected for download ("true"/"false"). */
+  selected?: string
+  /** All download URIs for this file — preserving mirrors, not just the first. */
+  uris: string[]
+}
+
+/** Structured meta payload stored as JSON in HistoryRecord.meta.
+ *
+ * This is the single source of truth for multi-file task reconstruction.
+ * All consumers MUST use the centralized helpers in useTaskLifecycle.ts:
+ * - buildHistoryMeta()  — write path
+ * - parseHistoryMeta()  — read path
+ * - extractHistoryFilePaths() — stale cleanup */
+export interface HistoryMeta {
+  /** BT info hash — used for magnet link reconstruction on restart. */
+  infoHash?: string
+  /** BT announce tiers — used to restore tracker-aware magnet restart links. */
+  announceList?: string[][]
+  /** Complete file list with all URIs — present when files.length > 1. */
+  files?: HistoryFileSnapshot[]
+}
+
 /** A completed/errored download record stored in SQLite, independent from the aria2 session. */
 export interface HistoryRecord {
   /** Auto-incremented primary key (present on read, omitted on insert). */
@@ -262,6 +416,9 @@ export interface HistoryRecord {
   status: string
   /** Download type: 'uri', 'torrent', or 'metalink'. */
   task_type?: string
+  /** ISO 8601 timestamp when the task was first added to the download queue.
+   *  Once set, never changes — used for position-stable ordering across all tabs. */
+  added_at?: string
   /** ISO 8601 timestamp when the record was created. */
   created_at?: string
   /** ISO 8601 timestamp when the download finished. */
@@ -272,7 +429,7 @@ export interface HistoryRecord {
 
 /** Aria2 JSON-RPC client API surface consumed by the task store. */
 export interface TaskApi {
-  fetchTaskList: (params: { type: string }) => Promise<Aria2Task[]>
+  fetchTaskList: (params: { type: string; limit?: number }) => Promise<Aria2Task[]>
   fetchTaskItem: (params: { gid: string }) => Promise<Aria2Task>
   fetchTaskItemWithPeers: (params: { gid: string }) => Promise<Aria2Task & { peers: Aria2Peer[] }>
   fetchActiveTaskList: () => Promise<Aria2Task[]>

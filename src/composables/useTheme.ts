@@ -3,9 +3,20 @@ import { ref, watch } from 'vue'
 import { usePreferenceStore } from '@/stores/preference'
 import { APP_THEME } from '@shared/constants'
 
+/** Module-level shared state: all useTheme() callers share the same isDark ref. */
+const isDark = ref(false)
+
+/** Module-level flag: true once the global matchMedia listener is registered. */
+let mediaListenerRegistered = false
+
+/** @internal Reset singleton state for test isolation. */
+export function _resetThemeState() {
+  mediaListenerRegistered = false
+  isDark.value = false
+}
+
 export function useTheme() {
   const preferenceStore = usePreferenceStore()
-  const isDark = ref(false)
 
   function applyTheme(theme?: string) {
     if (!theme || theme === APP_THEME.AUTO) {
@@ -21,12 +32,15 @@ export function useTheme() {
 
   watch(() => preferenceStore.theme, applyTheme, { immediate: true })
 
-  const mq = window.matchMedia('(prefers-color-scheme: dark)')
-  mq.addEventListener('change', () => {
-    if (!preferenceStore.theme || preferenceStore.theme === APP_THEME.AUTO) {
-      applyTheme(APP_THEME.AUTO)
-    }
-  })
+  if (!mediaListenerRegistered) {
+    mediaListenerRegistered = true
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    mq.addEventListener('change', () => {
+      if (!preferenceStore.theme || preferenceStore.theme === APP_THEME.AUTO) {
+        applyTheme(APP_THEME.AUTO)
+      }
+    })
+  }
 
   return { isDark, applyTheme }
 }

@@ -9,6 +9,11 @@ import { isDowngrade } from '@shared/utils/semver'
 // ── Types ───────────────────────────────────────────────────────────
 
 export type UpdatePhase = 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'installing' | 'error'
+export type DownloadUpdateStatus = 'downloaded' | 'no-update'
+
+export interface DownloadUpdateResult {
+  status: DownloadUpdateStatus
+}
 
 export interface UpdateProxyConfig {
   enable?: boolean
@@ -47,6 +52,16 @@ export function getActionTarget(phase: UpdatePhase): 'download' | 'cancel' | 'in
   if (phase === 'ready') return 'install'
   if (phase === 'error') return 'retry'
   return null
+}
+
+/** Maps the Rust download result to the next dialog phase. */
+export function resolvePhaseAfterDownload(status: DownloadUpdateStatus): Extract<UpdatePhase, 'ready' | 'up-to-date'> {
+  return status === 'downloaded' ? 'ready' : 'up-to-date'
+}
+
+/** Returns whether the dialog may be closed by generic close affordances. */
+export function shouldAllowUpdateDialogClose(phase: UpdatePhase): boolean {
+  return phase !== 'downloading' && phase !== 'installing'
 }
 
 // ── Version Detection ───────────────────────────────────────────────

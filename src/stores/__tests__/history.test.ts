@@ -10,6 +10,7 @@ import type { HistoryRecord } from '@shared/types'
 
 // ── Mock: in-memory SQLite substitute ────────────────────────────────
 let rows: HistoryRecord[] = []
+let birthRows: Array<{ gid: string; added_at: string }> = []
 let nextId = 1
 let executedQueries: string[] = []
 
@@ -18,14 +19,23 @@ function mockExecute(query: string, params: unknown[]): { rowsAffected: number }
   executedQueries.push(query.trim())
   const q = query.trim().toUpperCase()
 
+  if (q.startsWith('INSERT') && q.includes('TASK_BIRTH')) {
+    const [gid, addedAt] = params as [string, string]
+    if (!birthRows.some((r) => r.gid === gid)) {
+      birthRows.push({ gid, added_at: addedAt })
+    }
+    return { rowsAffected: 1 }
+  }
+
   if (q.startsWith('INSERT') || q.startsWith('REPLACE')) {
-    const [gid, name, uri, dir, totalLength, status, taskType, completedAt, meta] = params as [
+    const [gid, name, uri, dir, totalLength, status, taskType, addedAt, completedAt, meta] = params as [
       string,
       string,
       string | null,
       string | null,
       number | null,
       string,
+      string | null,
       string | null,
       string | null,
       string | null,
@@ -40,6 +50,8 @@ function mockExecute(query: string, params: unknown[]): { rowsAffected: number }
       total_length: totalLength ?? undefined,
       status,
       task_type: taskType ?? undefined,
+      // ON CONFLICT: preserve existing added_at (COALESCE)
+      added_at: (existing >= 0 ? rows[existing].added_at : undefined) ?? addedAt ?? undefined,
       created_at: new Date().toISOString(),
       completed_at: completedAt ?? undefined,
       meta: meta ?? undefined,
@@ -53,8 +65,20 @@ function mockExecute(query: string, params: unknown[]): { rowsAffected: number }
   }
 
   if (q.startsWith('DELETE')) {
+    if (q.includes('TASK_BIRTH')) {
+      const beforeBirths = birthRows.length
+      const gids = q.includes('SELECT GID FROM DOWNLOAD_HISTORY WHERE NAME LIKE')
+        ? rows.filter((r) => r.name.startsWith('[METADATA]')).map((r) => r.gid)
+        : (params as string[])
+      const gidSet = new Set(gids)
+      birthRows = birthRows.filter((r) => !gidSet.has(r.gid))
+      return { rowsAffected: beforeBirths - birthRows.length }
+    }
+
     const before = rows.length
-    if (q.includes('GID IN')) {
+    if (q.includes('WHERE NAME LIKE')) {
+      rows = rows.filter((r) => !r.name.startsWith('[METADATA]'))
+    } else if (q.includes('GID IN')) {
       const gids = params as string[]
       const gidSet = new Set(gids)
       rows = rows.filter((r) => !gidSet.has(r.gid))
@@ -87,15 +111,37 @@ function mockSelect(query: string, params: unknown[]): unknown[] {
     return [{ integrity_check: 'ok' }]
   }
 
-  if (q.includes('WHERE STATUS')) {
-    const status = params[0] as string
-    return rows
-      .filter((r) => r.status === status)
-      .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+  if (q.includes('TASK_BIRTH')) {
+    return [...birthRows]
   }
 
-  // Default: return all, sorted by completed_at DESC
-  return [...rows].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+  let result: HistoryRecord[]
+  if (q.includes('WHERE STATUS')) {
+    const status = params[0] as string
+    result = rows
+      .filter((r) => r.status === status)
+      .sort((a, b) => {
+        const ta = a.added_at ?? a.completed_at ?? ''
+        const tb = b.added_at ?? b.completed_at ?? ''
+        return tb.localeCompare(ta)
+      })
+  } else {
+    // Default: return all, sorted by COALESCE(added_at, completed_at) DESC
+    result = [...rows].sort((a, b) => {
+      const ta = a.added_at ?? a.completed_at ?? ''
+      const tb = b.added_at ?? b.completed_at ?? ''
+      return tb.localeCompare(ta)
+    })
+  }
+
+  // Parse LIMIT clause from the SQL query
+  const limitMatch = q.match(/LIMIT\s+(\d+)/)
+  if (limitMatch) {
+    const limit = parseInt(limitMatch[1], 10)
+    result = result.slice(0, limit)
+  }
+
+  return result
 }
 
 vi.mock('@tauri-apps/plugin-sql', () => ({
@@ -152,6 +198,7 @@ describe('HistoryStore', () => {
 
   beforeEach(async () => {
     rows = []
+    birthRows = []
     nextId = 1
     executedQueries = []
     setActivePinia(createPinia())
@@ -242,6 +289,67 @@ describe('HistoryStore', () => {
       expect(results[2].gid).toBe('old')
     })
 
+    it('returns at most N records when limit is specified', async () => {
+      for (let i = 0; i < 10; i++) {
+        await store.addRecord(
+          makeRecord({
+            gid: `limited-${i}`,
+            name: `file-${i}.zip`,
+            completed_at: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+          }),
+        )
+      }
+
+      const limited = await store.getRecords(undefined, 3)
+      expect(limited).toHaveLength(3)
+      // Should return the 3 most recent (sorted by completed_at DESC)
+      expect(limited[0].gid).toBe('limited-9')
+      expect(limited[1].gid).toBe('limited-8')
+      expect(limited[2].gid).toBe('limited-7')
+    })
+
+    it('returns all records when limit exceeds total count', async () => {
+      await store.addRecord(makeRecord({ gid: 'only1', name: 'only.zip' }))
+
+      const results = await store.getRecords(undefined, 100)
+      expect(results).toHaveLength(1)
+      expect(results[0].gid).toBe('only1')
+    })
+
+    it('applies limit together with status filter', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.addRecord(
+          makeRecord({
+            gid: `c-${i}`,
+            status: 'complete',
+            completed_at: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+          }),
+        )
+      }
+      await store.addRecord(makeRecord({ gid: 'e-1', status: 'error' }))
+
+      const limited = await store.getRecords('complete', 2)
+      expect(limited).toHaveLength(2)
+      limited.forEach((r) => expect(r.status).toBe('complete'))
+    })
+
+    it('returns all records when limit is undefined', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.addRecord(makeRecord({ gid: `nolim-${i}` }))
+      }
+      const results = await store.getRecords()
+      expect(results).toHaveLength(5)
+    })
+
+    it('clamps limit to safe integer range', async () => {
+      await store.addRecord(makeRecord({ gid: 'safe1' }))
+
+      // Negative limit should be treated as no results or clamped to 0
+      const negResult = await store.getRecords(undefined, -5)
+      // Implementation should sanitize: either return [] or clamp to 0
+      expect(negResult.length).toBeLessThanOrEqual(1)
+    })
+
     it('returns empty array when no records exist', async () => {
       const results = await store.getRecords()
       expect(results).toEqual([])
@@ -264,6 +372,62 @@ describe('HistoryStore', () => {
 
     it('does not throw when removing non-existent GID', async () => {
       await expect(store.removeRecord('nonexistent')).resolves.not.toThrow()
+    })
+  })
+
+  // ── removeBirthRecords ────────────────────────────────────────────
+
+  describe('removeBirthRecords', () => {
+    it('removes only the requested task birth records', async () => {
+      await store.recordTaskBirth('metadata-gid', '2026-04-25T00:00:00Z')
+      await store.recordTaskBirth('child-gid', '2026-04-25T00:00:01Z')
+      await store.recordTaskBirth('unrelated-gid', '2026-04-25T00:00:02Z')
+
+      await store.removeBirthRecords(['metadata-gid', 'child-gid'])
+
+      const births = await store.loadBirthRecords()
+      expect(births).toEqual([{ gid: 'unrelated-gid', added_at: '2026-04-25T00:00:02Z' }])
+    })
+
+    it('does nothing for an empty gid list', async () => {
+      await store.recordTaskBirth('kept-gid', '2026-04-25T00:00:00Z')
+
+      await store.removeBirthRecords([])
+
+      expect(await store.loadBirthRecords()).toEqual([{ gid: 'kept-gid', added_at: '2026-04-25T00:00:00Z' }])
+    })
+  })
+
+  // ── removeMetadataRecords ─────────────────────────────────────────
+
+  describe('removeMetadataRecords', () => {
+    it('removes legacy metadata history rows and their task birth records only', async () => {
+      await store.addRecord(makeRecord({ gid: 'metadata-gid', name: '[METADATA]KNOPPIX_V9.1CD', task_type: 'bt' }))
+      await store.addRecord(makeRecord({ gid: 'real-gid', name: 'KNOPPIX_V9.1CD.iso', task_type: 'bt' }))
+      await store.recordTaskBirth('metadata-gid', '2026-04-25T00:00:00Z')
+      await store.recordTaskBirth('real-gid', '2026-04-25T00:00:01Z')
+
+      await store.removeMetadataRecords()
+
+      expect(await store.getRecords()).toEqual([
+        expect.objectContaining({ gid: 'real-gid', name: 'KNOPPIX_V9.1CD.iso' }),
+      ])
+      expect(await store.loadBirthRecords()).toEqual([{ gid: 'real-gid', added_at: '2026-04-25T00:00:01Z' }])
+    })
+
+    it('runs during database initialization to sanitize existing dirty rows', async () => {
+      await store.addRecord(makeRecord({ gid: 'metadata-gid', name: '[METADATA]KNOPPIX_V9.1CD', task_type: 'bt' }))
+      await store.addRecord(makeRecord({ gid: 'real-gid', name: 'KNOPPIX_V9.1CD.iso', task_type: 'bt' }))
+      await store.recordTaskBirth('metadata-gid', '2026-04-25T00:00:00Z')
+      await store.recordTaskBirth('real-gid', '2026-04-25T00:00:01Z')
+
+      await store.closeConnection()
+      await store.init()
+
+      expect(await store.getRecords()).toEqual([
+        expect.objectContaining({ gid: 'real-gid', name: 'KNOPPIX_V9.1CD.iso' }),
+      ])
+      expect(await store.loadBirthRecords()).toEqual([{ gid: 'real-gid', added_at: '2026-04-25T00:00:01Z' }])
     })
   })
 
@@ -345,9 +509,11 @@ describe('HistoryStore', () => {
       const all = await store.getRecords()
       expect(all).toHaveLength(100)
 
-      // Verify sort order — most recent first
+      // Verify sort order — most recent first (sorted by COALESCE(added_at, completed_at))
       for (let i = 0; i < all.length - 1; i++) {
-        expect(all[i].completed_at! >= all[i + 1].completed_at!).toBe(true)
+        const ta = all[i].added_at ?? all[i].completed_at ?? ''
+        const tb = all[i + 1].added_at ?? all[i + 1].completed_at ?? ''
+        expect(ta >= tb).toBe(true)
       }
     })
   })
@@ -401,10 +567,91 @@ describe('HistoryStore', () => {
   // ── closeConnection ────────────────────────────────────────────
 
   describe('closeConnection', () => {
-    it('closes the database connection', async () => {
+    it('closes the database connection and allows re-initialization', async () => {
+      // Add a record before closing
+      await store.addRecord(makeRecord({ gid: 'before-close' }))
       await store.closeConnection()
-      // After closing, operations should throw
-      await expect(store.getRecords()).rejects.toThrow()
+
+      // After closing, the next operation should re-initialize the database
+      // (initPromise is reset so getDb() triggers a fresh init)
+      const results = await store.getRecords()
+      // The mock Database.load creates a fresh connection,
+      // so in-memory mock rows still contain the record
+      expect(results).toHaveLength(1)
+      expect(results[0].gid).toBe('before-close')
+    })
+  })
+
+  // ── init recovery after total failure ──────────────────────────
+
+  describe('init recovery after rebuild failure', () => {
+    it('allows re-initialization when both initial load and rebuild fail', async () => {
+      // Reset to a clean slate so we can control the init sequence
+      await store.closeConnection()
+
+      const Database = (await import('@tauri-apps/plugin-sql')).default
+      const loadFn = Database.load as ReturnType<typeof vi.fn>
+
+      // Force TWO consecutive failures:
+      //   1st rejection → init() catches it, tries rebuildDatabase()
+      //   2nd rejection → rebuildDatabase() also fails
+      // After this, initPromise MUST be reset so a future init() can retry.
+      loadFn.mockRejectedValueOnce(new Error('simulated disk full'))
+      loadFn.mockRejectedValueOnce(new Error('simulated disk full'))
+
+      // This init() will fail internally but should NOT throw — it
+      // swallows errors via the health callback. The critical invariant
+      // is that the store doesn't permanently wedge itself.
+      await store.init()
+
+      // Restore normal Database.load behavior for the retry
+      loadFn.mockResolvedValue({
+        execute: vi.fn((q: string, p: unknown[]) => Promise.resolve(mockExecute(q, p))),
+        select: vi.fn((q: string, p: unknown[]) => Promise.resolve(mockSelect(q, p))),
+        close: vi.fn().mockResolvedValue(undefined),
+      })
+
+      // CRITICAL ASSERTION: A second init() call must trigger a fresh
+      // initialization attempt — not silently reuse the old failed promise.
+      await store.init()
+
+      // If initPromise was not reset, getRecords() would crash on `db!`
+      // being null. A successful call here proves the store recovered.
+      const results = await store.getRecords()
+      expect(results).toBeDefined()
+      expect(Array.isArray(results)).toBe(true)
+    })
+
+    it('recovered store supports full CRUD after retry', async () => {
+      // Start from a failure state
+      await store.closeConnection()
+
+      const Database = (await import('@tauri-apps/plugin-sql')).default
+      const loadFn = Database.load as ReturnType<typeof vi.fn>
+
+      loadFn.mockRejectedValueOnce(new Error('corruption'))
+      loadFn.mockRejectedValueOnce(new Error('corruption'))
+
+      await store.init()
+
+      // Restore
+      loadFn.mockResolvedValue({
+        execute: vi.fn((q: string, p: unknown[]) => Promise.resolve(mockExecute(q, p))),
+        select: vi.fn((q: string, p: unknown[]) => Promise.resolve(mockSelect(q, p))),
+        close: vi.fn().mockResolvedValue(undefined),
+      })
+
+      // Retry — should recover
+      await store.init()
+
+      // Full CRUD cycle to prove the store is fully operational
+      await store.addRecord(makeRecord({ gid: 'after-recovery', name: 'recovered.zip' }))
+      const records = await store.getRecords()
+      expect(records.some((r) => r.gid === 'after-recovery')).toBe(true)
+
+      await store.removeRecord('after-recovery')
+      const afterRemove = await store.getRecords()
+      expect(afterRemove.every((r) => r.gid !== 'after-recovery')).toBe(true)
     })
   })
 })

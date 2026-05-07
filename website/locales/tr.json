@@ -89,6 +89,8 @@
   "footer.ack": "Temelleri atan {link}'e teşekkürler",
   "footer.contributing": "Katkıda Bulun",
   "footer.coc": "Davranış Kuralları",
+  "footer.privacy": "Gizlilik Politikası",
+  "footer.signing": "İmzalama Politikası",
   "footer.license": "MIT — Telif Hakkı © 2025-günümüz AnInsomniacy",
   "dl.modal.title": "{os} için indir",
   "dl.modal.download": "İndir",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Terminalde <code>uname -m</code> komutunu çalıştırın",
   "theme.system": "Sistem",
   "theme.light": "Açık",
-  "theme.dark": "Koyu"
+  "theme.dark": "Koyu",
+  "hero.stars": "Stars",
+  "hero.downloads": "İndirmeler",
+  "hero.version": "Son",
+  "starHistory.title": "Star geçmişi"
 }

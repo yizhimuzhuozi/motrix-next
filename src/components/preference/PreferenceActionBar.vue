@@ -37,15 +37,13 @@ const { t } = useI18n()
   padding: 16px 24px 16px 40px;
 }
 
-/* ── Restart Engine — warm-amber cautionary button ──────────────── */
+/* ── Restart Engine — M3 tertiary maintenance button ────────────── */
 /* Same size/shape as Save & Discard but with extra left gap (32px)  */
-/* from the NSpace group. Amber conveys "proceed with awareness"    */
-/* without the alarm of red/error colors.                           */
+/* from the NSpace group. Tertiary conveys "maintenance tool" — calm, */
+/* professional, visible in dark mode without alarm.                 */
 .restart-engine-action-btn {
-  --btn-amber: #c9a055;
-  --btn-amber-bg: color-mix(in srgb, #c9a055 10%, transparent);
-  color: var(--btn-amber) !important;
-  border-color: var(--btn-amber) !important;
+  color: var(--m3-tertiary) !important;
+  border-color: var(--m3-tertiary) !important;
   transition:
     color 0.35s cubic-bezier(0.2, 0, 0, 1),
     background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
@@ -53,17 +51,18 @@ const { t } = useI18n()
     transform 0.15s cubic-bezier(0.2, 0, 0, 1);
 }
 .restart-engine-action-btn:hover {
-  background-color: var(--btn-amber-bg) !important;
+  color: var(--m3-tertiary) !important;
+  background-color: color-mix(in srgb, var(--m3-tertiary) 10%, transparent) !important;
 }
 .restart-engine-action-btn:active {
   transform: scale(0.97);
 }
 .restart-engine-action-btn :deep(.n-button__border) {
-  border-color: var(--btn-amber) !important;
+  border-color: var(--m3-tertiary) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 .restart-engine-action-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-amber) !important;
+  border-color: var(--m3-tertiary) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 

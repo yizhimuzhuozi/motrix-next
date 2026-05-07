@@ -20,6 +20,9 @@ vi.mock('@bany/curl-to-json', () => ({
     if (input.includes('example.com/search')) {
       return { url: 'https://example.com/search', params: { q: 'test', page: '1' } }
     }
+    if (input.includes('example.com/existing')) {
+      return { url: 'https://example.com/existing?lang=en', params: { q: 'hello world', redirect: 'a&b' } }
+    }
     if (input.includes('example.com/api')) {
       return {
         url: 'https://example.com/api',
@@ -27,6 +30,15 @@ vi.mock('@bany/curl-to-json', () => ({
         cookie: 'session=abc',
         'user-agent': 'CustomUA/1.0',
         referer: 'https://example.com/',
+      }
+    }
+    if (input.includes('example.com/dirty')) {
+      return {
+        url: 'https://example.com/dirty',
+        header: { authorization: 'Bearer token\r\nInjected: bad' },
+        cookie: 'session=abc\nX-Evil: 1',
+        'user-agent': 'CustomUA/1.0\r\nBad: 1',
+        referer: 'https://example.com/\n',
       }
     }
     return { url: input }
@@ -44,6 +56,11 @@ describe('buildUrisFromCurl', () => {
   it('appends query params from curl command', () => {
     const result = buildUrisFromCurl(['curl https://example.com/search'])
     expect(result[0]).toBe('https://example.com/search?q=test&page=1')
+  })
+
+  it('preserves existing query params and URL-encodes appended params', () => {
+    const result = buildUrisFromCurl(['curl https://example.com/existing'])
+    expect(result[0]).toBe('https://example.com/existing?lang=en&q=hello+world&redirect=a%26b')
   })
 
   it('passes non-curl URIs through unchanged', () => {
@@ -75,6 +92,16 @@ describe('buildHeadersFromCurl', () => {
 
   it('handles empty input', () => {
     expect(buildHeadersFromCurl()).toEqual([])
+  })
+
+  it('sanitizes header values extracted from curl commands', () => {
+    const result = buildHeadersFromCurl(['curl https://example.com/dirty'])
+    expect(result[0]).toEqual({
+      authorization: 'Bearer tokenInjected: bad',
+      cookie: 'session=abcX-Evil: 1',
+      'user-agent': 'CustomUA/1.0Bad: 1',
+      referer: 'https://example.com/',
+    })
   })
 })
 

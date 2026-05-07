@@ -94,56 +94,25 @@
   --border-color-light: var(--m3-outline-variant);
   --border-color-lighter: #ebeef5;
 
-  --aside-bg: #e4dfd7;
-  --aside-text: var(--m3-on-surface);
-  --aside-icon-color: rgba(0, 0, 0, 0.55);
-  --aside-icon-hover-bg: rgba(0, 0, 0, 0.08);
+  --aside-bg: var(--m3-surface-container-highest);
+  --aside-icon-hover-bg: color-mix(in srgb, var(--m3-on-surface) 8%, transparent);
 
   --subnav-bg: var(--m3-surface-container);
   --subnav-title: var(--m3-on-surface);
   --subnav-text: var(--m3-on-surface-variant);
   --subnav-active-text: var(--color-primary);
   --subnav-active-bg: var(--m3-surface-container-highest);
-  --subnav-action: var(--m3-on-surface-variant);
 
-  --main-bg: var(--m3-surface);
-  --panel-bg: var(--m3-surface);
+  --main-bg: var(--m3-surface-container-low);
   --panel-title: var(--m3-on-surface);
   --panel-border: var(--m3-outline-variant);
 
   --task-item-bg: var(--m3-surface-container-lowest);
-  --task-item-border: var(--m3-outline-variant);
   --task-item-hover-border: var(--color-primary);
-  --task-item-text: var(--m3-on-surface-variant);
   --task-action-bg: var(--m3-surface-container-lowest);
-  --task-action-border: var(--m3-surface-container-highest);
-  --task-action-color: var(--m3-outline);
-  --task-action-hover-bg: var(--m3-surface-container-high);
-  --task-action-hover-border: var(--m3-outline);
-  --task-action-hover-color: var(--m3-on-surface);
 
-  --speedometer-bg: var(--m3-surface-container);
-  --speedometer-border: var(--m3-outline-variant);
-  --speedometer-hover-border: var(--m3-outline);
-  --speedometer-primary: var(--color-primary);
-  --speedometer-stopped: var(--m3-outline);
-  --speedometer-text: var(--m3-outline);
-
-  --add-task-footer-bg: var(--m3-surface-container-high);
-  --dialog-bg: var(--m3-surface-container-high);
-  --preference-text: var(--m3-on-surface-variant);
-
-  --about-glass-bg: rgba(254, 251, 246, 0.96);
-  --about-glass-ring: rgba(0, 0, 0, 0.08);
   --about-card-bg: var(--m3-surface-container-lowest);
   --about-card-hover-bg: var(--m3-surface-container-high);
-
-  --window-ctrl-border: rgba(0, 0, 0, 0.15);
-  --window-ctrl-bg: rgba(0, 0, 0, 0.05);
-  --window-ctrl-color: rgba(0, 0, 0, 0.55);
-  --window-ctrl-hover-bg: rgba(0, 0, 0, 0.1);
-  --window-ctrl-hover-border: rgba(0, 0, 0, 0.25);
-  --window-ctrl-hover-color: rgba(0, 0, 0, 0.85);
 
   /* macOS traffic light — inactive (unfocused) */
   --tl-inactive: #d4d4d4;
@@ -152,6 +121,13 @@
   --aside-width: 78px;
   --subnav-width: 200px;
   --titlebar-height: 0px;
+
+  /* Unified top offset for the three-column header row (sidebar logo,
+     subnav title, content title).  Sized to clear the macOS traffic-
+     light buttons (28 px system title bar + 24 px breathing room) and
+     keep all platforms visually consistent.  Every column references
+     this single token so alignment stays locked across refactors. */
+  --header-top-offset: 48px;
 
   /* ── Typography ────────────────────────────────────────────────── */
   --font-family:
@@ -239,32 +215,20 @@
   /* ── Legacy Overrides (dark-specific) ──────────────────────────── */
   --border-color-lighter: #3a3730;
 
-  --aside-bg: rgb(20, 20, 22);
-  --aside-text: #fff;
-  --aside-icon-color: rgba(255, 255, 255, 0.7);
-  --aside-icon-hover-bg: rgba(255, 255, 255, 0.15);
+  --aside-bg: var(--m3-surface-container-lowest);
+  --aside-icon-hover-bg: color-mix(in srgb, var(--m3-on-surface) 12%, transparent);
 
   --subnav-active-text: #fff;
 
   /* ── Dark gradient: aside(darkest) → subnav(dark) → main(lighter) ── */
   --subnav-bg: var(--m3-surface-container-low);
   --main-bg: var(--m3-surface-container-high);
-  --panel-bg: var(--m3-surface-container-high);
   --task-item-bg: var(--m3-surface-container);
   --task-action-bg: var(--m3-surface-container);
-
-  --window-ctrl-border: rgba(255, 255, 255, 0.12);
-  --window-ctrl-bg: rgba(255, 255, 255, 0.06);
-  --window-ctrl-color: rgba(255, 255, 255, 0.55);
-  --window-ctrl-hover-bg: rgba(255, 255, 255, 0.12);
-  --window-ctrl-hover-border: rgba(255, 255, 255, 0.2);
-  --window-ctrl-hover-color: rgba(255, 255, 255, 0.9);
 
   /* macOS traffic light — inactive (unfocused) */
   --tl-inactive: #4a4a4a;
 
-  --about-glass-bg: rgba(32, 30, 27, 0.96);
-  --about-glass-ring: rgba(255, 255, 255, 0.1);
   --about-card-bg: var(--m3-surface-container);
   --about-card-hover-bg: var(--m3-surface-container-highest);
 }
@@ -498,13 +462,12 @@ pre,
 
 .n-drawer-container,
 .n-modal-mask {
-  border-radius: 12px;
   overflow: hidden;
 }
 
 /* ── Page hidden: pause all infinite animations ────────────────────── */
-/* Prevents WebView2 from re-compositing transparent layers each frame  */
-/* when the window is minimized or the user switches to another app.    */
+/* Prevents WebView2 from re-compositing layers each frame when the     */
+/* window is minimized or the user switches to another app.             */
 /* Toggled by the useVisibilityPause composable via Page Visibility API */
 .animations-paused *,
 .animations-paused *::before,

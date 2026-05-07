@@ -25,13 +25,14 @@ const mockMatchMedia = vi.fn().mockImplementation(() => ({
 
 Object.defineProperty(window, 'matchMedia', { value: mockMatchMedia, writable: true })
 
-import { useTheme } from '../useTheme'
+import { useTheme, _resetThemeState } from '../useTheme'
 
 describe('useTheme', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mediaQueryMatches = false
     changeListeners.length = 0
+    _resetThemeState()
     document.documentElement.classList.remove('dark')
     document.documentElement.removeAttribute('data-theme')
   })
@@ -108,5 +109,26 @@ describe('useTheme', () => {
     changeListeners.forEach((cb) => cb())
 
     expect(isDark.value).toBe(false)
+  })
+
+  it('shares isDark across multiple useTheme() callers on system theme change', () => {
+    mediaQueryMatches = false
+    const store = usePreferenceStore()
+    store.config.theme = 'auto'
+
+    // Simulate App.vue (first caller) and TaskList.vue (second caller)
+    const first = useTheme()
+    const second = useTheme()
+
+    expect(first.isDark.value).toBe(false)
+    expect(second.isDark.value).toBe(false)
+
+    // Simulate OS dark mode toggle
+    mediaQueryMatches = true
+    changeListeners.forEach((cb) => cb())
+
+    // Both callers must reflect the change
+    expect(first.isDark.value).toBe(true)
+    expect(second.isDark.value).toBe(true)
   })
 })

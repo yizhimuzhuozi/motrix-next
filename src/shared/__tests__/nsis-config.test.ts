@@ -58,6 +58,8 @@ interface NsisConfig {
 
 interface TauriConfig {
   bundle?: {
+    publisher?: string
+    copyright?: string
     windows?: {
       nsis?: NsisConfig
     }
@@ -102,9 +104,20 @@ describe('NSIS installer brand configuration', () => {
       expect(nsis.sidebarImage).toBe('nsis/sidebar.bmp')
     })
 
-    it('sets installMode to "currentUser" (no misleading path selector)', () => {
+    it('sets installMode to "both" (user chooses scope, auto-elevates for OTA)', () => {
       const nsis = getNsisConfig()
-      expect(nsis.installMode).toBe('currentUser')
+      expect(nsis.installMode).toBe('both')
+    })
+
+    it('sets bundle.publisher to "AnInsomniacy" for Windows Apps & Features', () => {
+      const config = loadTauriConfig()
+      expect(config.bundle?.publisher).toBe('AnInsomniacy')
+    })
+
+    it('sets bundle.copyright containing "AnInsomniacy" for macOS Info.plist', () => {
+      const config = loadTauriConfig()
+      expect(config.bundle?.copyright).toBeDefined()
+      expect(config.bundle?.copyright).toContain('AnInsomniacy')
     })
 
     it('enables the language selector dialog', () => {

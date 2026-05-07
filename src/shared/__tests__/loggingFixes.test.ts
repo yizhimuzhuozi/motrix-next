@@ -69,7 +69,7 @@ describe('Fix 3: Export uses save dialog (user chooses path)', () => {
   let appRsSource: string
 
   beforeAll(() => {
-    appRsSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'commands', 'app.rs'), 'utf-8')
+    appRsSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'commands', 'fs.rs'), 'utf-8')
   })
 
   it('Advanced.vue (or its composable) imports the save dialog from @tauri-apps/plugin-dialog', () => {

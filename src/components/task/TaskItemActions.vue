@@ -62,16 +62,19 @@ const actionsMap = computed<Record<string, ActionDef[]>>(() => ({
   ],
   [TASK_STATUS.ERROR]: [
     { key: 'open', icon: OpenOutline, label: t('task.open-file'), event: 'open-file' },
+    { key: 'folder', icon: FolderOpenOutline, label: t('task.show-in-folder'), event: 'folder' },
     { key: 'restart', icon: RefreshOutline, label: t('task.resume-task'), event: 'resume' },
     { key: 'trash', icon: TrashOutline, label: t('task.remove-record'), event: 'delete-record' },
   ],
   [TASK_STATUS.COMPLETE]: [
     { key: 'open', icon: OpenOutline, label: t('task.open-file'), event: 'open-file' },
+    { key: 'folder', icon: FolderOpenOutline, label: t('task.show-in-folder'), event: 'folder' },
     { key: 'restart', icon: RefreshOutline, label: t('task.restart-task'), event: 'resume' },
     { key: 'trash', icon: TrashOutline, label: t('task.remove-record'), event: 'delete-record' },
   ],
   [TASK_STATUS.REMOVED]: [
     { key: 'open', icon: OpenOutline, label: t('task.open-file'), event: 'open-file' },
+    { key: 'folder', icon: FolderOpenOutline, label: t('task.show-in-folder'), event: 'folder' },
     { key: 'restart', icon: RefreshOutline, label: t('task.restart-task'), event: 'resume' },
     { key: 'trash', icon: TrashOutline, label: t('task.remove-record'), event: 'delete-record' },
   ],
@@ -92,12 +95,20 @@ const actionsMap = computed<Record<string, ActionDef[]>>(() => ({
 
 const actions = computed(() => {
   const primary = actionsMap.value[props.status] || []
+  const primaryKeys = new Set(primary.map((a) => a.key))
+
+  // Destructive actions (trash, delete) always go to the far right
+  const destructiveKeys = new Set(['trash', 'delete'])
+  const leading = primary.filter((a) => !destructiveKeys.has(a.key))
+  const trailing = primary.filter((a) => destructiveKeys.has(a.key))
+
   const common: ActionDef[] = [
     { key: 'folder', icon: FolderOpenOutline, label: t('task.show-in-folder'), event: 'folder' },
     { key: 'link', icon: LinkOutline, label: t('task.copy-link'), event: 'copy-link' },
     { key: 'info', icon: InformationCircleOutline, label: t('task.task-detail-title'), event: 'show-info' },
-  ]
-  return [...primary, ...common].reverse()
+  ].filter((a) => !primaryKeys.has(a.key))
+
+  return [...leading, ...common, ...trailing].reverse()
 })
 
 function onAction(event: string) {
@@ -161,7 +172,7 @@ function onRelease(ev: PointerEvent) {
 </script>
 
 <template>
-  <ul class="task-item-actions" @dblclick.stop>
+  <TransitionGroup tag="ul" name="action-item" class="task-item-actions" @dblclick.stop>
     <li
       v-for="action in actions"
       :key="action.key"
@@ -199,7 +210,7 @@ function onRelease(ev: PointerEvent) {
         </template>
       </MTooltip>
     </li>
-  </ul>
+  </TransitionGroup>
 </template>
 
 <style scoped>
@@ -215,22 +226,23 @@ function onRelease(ev: PointerEvent) {
   cursor: default;
   text-align: right;
   direction: rtl;
-  border: 1px solid var(--task-action-border);
-  color: var(--task-action-color);
+  border: 1px solid var(--m3-surface-container-highest);
+  color: var(--m3-outline);
   background-color: var(--task-action-bg);
   border-radius: 18px;
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
   list-style: none;
 }
 .task-item-actions:hover {
-  border-color: var(--task-action-hover-border);
-  background-color: var(--task-action-hover-bg);
+  border-color: var(--m3-outline);
+  background-color: var(--m3-surface-container-high);
   width: auto;
 }
 .task-item-action {
   display: inline-block;
   padding: 6px;
   margin: 0 3px;
+  max-width: 38px;
   font-size: 0;
   cursor: pointer;
   line-height: 20px;
@@ -239,11 +251,15 @@ function onRelease(ev: PointerEvent) {
   transition:
     color 0.15s,
     background-color 0.15s,
-    transform 0.25s cubic-bezier(0.05, 0.7, 0.1, 1);
+    transform 0.25s cubic-bezier(0.05, 0.7, 0.1, 1),
+    max-width 0.2s ease-out,
+    margin 0.2s ease-out,
+    padding 0.2s ease-out,
+    opacity 0.2s ease-out;
   transform-origin: center;
 }
 .task-item-action:hover {
-  color: var(--primary-color, #e0a422);
+  color: var(--color-primary);
 }
 .task-item-action.pressed {
   transform: scale(0.85);
@@ -320,5 +336,46 @@ function onRelease(ev: PointerEvent) {
 .icon-swap-leave-to {
   opacity: 0;
   transform: scale(0.6);
+}
+/* ── TransitionGroup: directional toolbar grow/shrink ────────── */
+
+/* Enter: button slides in horizontally (width 0 → full) */
+.action-item-enter-active {
+  transition:
+    opacity 0.2s ease-out,
+    max-width 0.2s ease-out,
+    margin 0.2s ease-out,
+    padding 0.2s ease-out;
+}
+
+/* Leave: button collapses out horizontally (width full → 0) */
+.action-item-leave-active {
+  transition:
+    opacity 0.15s ease-in,
+    max-width 0.15s ease-in,
+    margin 0.15s ease-in,
+    padding 0.15s ease-in;
+  position: absolute;
+}
+
+.action-item-enter-from {
+  opacity: 0;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.action-item-leave-to {
+  opacity: 0;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+/* Move transition: remaining items slide smoothly to fill gaps */
+.action-item-move {
+  transition: transform 0.2s ease-out;
 }
 </style>

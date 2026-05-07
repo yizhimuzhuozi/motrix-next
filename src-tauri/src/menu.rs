@@ -4,12 +4,18 @@ use tauri::{
 };
 
 pub fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
+    // ── App menu (first submenu = macOS application menu) ────────────
+    //
+    // PredefinedMenuItem variants (hide, hide_others, show_all, quit)
+    // are auto-localized by macOS — no manual i18n required.
+    // "About" uses a custom MenuItem so it routes through on_menu_event
+    // to open the in-app AboutPanel instead of the bare native panel.
     let app_menu = Submenu::with_items(
         app,
         "Motrix Next",
         true,
         &[
-            &PredefinedMenuItem::about(app, Some("About Motrix Next"), Default::default())?,
+            &MenuItem::with_id(app, "about", "About Motrix Next", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -27,8 +33,10 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
         ],
     )?;
 
-    let file_menu = Submenu::with_items(
+    // ── File menu ────────────────────────────────────────────────────
+    let file_menu = Submenu::with_id_and_items(
         app,
+        "file-menu",
         "File",
         true,
         &[
@@ -44,8 +52,12 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
         ],
     )?;
 
-    let edit_menu = Submenu::with_items(
+    // ── Edit menu ────────────────────────────────────────────────────
+    //
+    // All items are PredefinedMenuItem — macOS auto-localizes them.
+    let edit_menu = Submenu::with_id_and_items(
         app,
+        "edit-menu",
         "Edit",
         true,
         &[
@@ -59,20 +71,40 @@ pub fn build_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
         ],
     )?;
 
-    let window_menu = Submenu::with_items(
+    // ── Window menu ──────────────────────────────────────────────────
+    //
+    // Custom items instead of PredefinedMenuItem variants — the
+    // predefined versions call native macOS selectors (miniaturize:,
+    // zoom:, performClose:) which are no-ops on frameless windows.
+    let window_menu = Submenu::with_id_and_items(
         app,
+        "window-menu",
         "Window",
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
-            &PredefinedMenuItem::maximize(app, None)?,
+            &MenuItem::with_id(
+                app,
+                "minimize-window",
+                "Minimize",
+                true,
+                Some("CmdOrCtrl+M"),
+            )?,
+            &MenuItem::with_id(app, "zoom-window", "Zoom", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &MenuItem::with_id(
+                app,
+                "close-window",
+                "Close Window",
+                true,
+                Some("CmdOrCtrl+W"),
+            )?,
         ],
     )?;
 
-    let help_menu = Submenu::with_items(
+    // ── Help menu ────────────────────────────────────────────────────
+    let help_menu = Submenu::with_id_and_items(
         app,
+        "help-menu",
         "Help",
         true,
         &[

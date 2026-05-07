@@ -1,8 +1,37 @@
-/** @fileoverview BT tracker list fetching from external sources with proxy support. */
+/** @fileoverview BT tracker list fetching via Rust backend and data conversion utilities. */
 import { isEmpty } from 'lodash-es'
 import type { ProxyConfig } from '@shared/types'
-import axios from 'axios'
-import { MAX_BT_TRACKER_LENGTH, ONE_SECOND, PROXY_SCOPES } from '@shared/constants'
+import { invoke } from '@tauri-apps/api/core'
+import { MAX_BT_TRACKER_LENGTH, PROXY_SCOPES } from '@shared/constants'
+import { logger } from '@shared/logger'
+
+// ── Types ───────────────────────────────────────────────────────
+
+/** A single tracker source URL that failed during fetch. */
+export interface FailedTrackerSource {
+  url: string
+  reason: string
+}
+
+/** Structured result from the Rust `fetch_tracker_sources` command. */
+export interface FetchTrackerSourcesResult {
+  data: string[]
+  failures: FailedTrackerSource[]
+}
+
+// ── Proxy resolution ────────────────────────────────────────────
+
+/**
+ * Determines the proxy server URL to pass to the Rust backend.
+ * Returns the server string when the proxy is enabled and the scope
+ * includes UPDATE_TRACKERS; otherwise returns `null`.
+ */
+export function computeTrackerProxyServer(proxyConfig: Partial<ProxyConfig>): string | null {
+  const { enable, server, scope = [] as string[] } = proxyConfig
+  return enable && server && scope.includes(PROXY_SCOPES.UPDATE_TRACKERS) ? server : null
+}
+
+// ── Legacy axios proxy converter (retained for test coverage) ───
 
 export const convertToAxiosProxy = (proxyServer = '') => {
   if (!proxyServer) {
@@ -25,41 +54,50 @@ export const convertToAxiosProxy = (proxyServer = '') => {
   return result
 }
 
+// ── Core fetch ──────────────────────────────────────────────────
+
+/**
+ * Fetches BT tracker lists from external source URLs via the Rust backend,
+ * bypassing browser CORS restrictions that block webview-based XHR requests.
+ *
+ * Returns a structured result containing both successful response bodies
+ * and per-URL failure details for granular UI feedback.
+ */
 export const fetchBtTrackerFromSource = async (
   source: string[],
   proxyConfig: Partial<ProxyConfig> = {},
-): Promise<string[]> => {
+): Promise<FetchTrackerSourcesResult> => {
   if (isEmpty(source)) {
-    return []
+    return { data: [], failures: [] }
   }
 
-  const now = Date.now()
-  const { enable, server, scope = [] as string[] } = proxyConfig
-  const proxy =
-    enable && server && scope.includes(PROXY_SCOPES.UPDATE_TRACKERS) ? convertToAxiosProxy(server) : undefined
+  logger.info('TrackerSync', `fetching from ${source.length} source(s)`)
 
-  const promises = source.map(async (url: string) => {
-    return axios
-      .get(`${url}?t=${now}`, {
-        timeout: 30 * ONE_SECOND,
-        proxy: proxy ?? false,
-      })
-      .then((value) => value.data as string)
+  const proxyServer = computeTrackerProxyServer(proxyConfig)
+
+  const result = await invoke<FetchTrackerSourcesResult>('fetch_tracker_sources', {
+    urls: source,
+    proxyServer,
   })
 
-  const results = await Promise.allSettled(promises)
-  const values = results
-    .filter((item): item is PromiseFulfilledResult<string> => item.status === 'fulfilled')
-    .map((item) => item.value)
-  return [...new Set(values)]
+  // Mirror failures to frontend log for DevTools visibility
+  for (const f of result.failures) {
+    logger.warn('TrackerSync', `failed to fetch ${f.url}: ${f.reason}`)
+  }
+
+  logger.info('TrackerSync', `completed: ${result.data.length}/${source.length} succeeded`)
+
+  return result
 }
 
+// ── Data conversion utilities ───────────────────────────────────
+
 export const convertTrackerDataToLine = (arr: string[] = []): string => {
-  return arr
+  const lines = arr
     .join('\r\n')
     .split(/\r?\n/)
     .filter((line) => line.trim() !== '')
-    .join('\r\n')
+  return [...new Set(lines)].join('\r\n')
 }
 
 export const convertTrackerDataToComma = (arr: string[] = []): string => {

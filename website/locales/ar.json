@@ -89,6 +89,8 @@
   "footer.ack": "شكراً لـ {link} لوضع الأساس",
   "footer.contributing": "المساهمة",
   "footer.coc": "قواعد السلوك",
+  "footer.privacy": "سياسة الخصوصية",
+  "footer.signing": "سياسة التوقيع",
   "footer.license": "MIT — حقوق النشر © 2025-الحالي AnInsomniacy",
   "dl.modal.title": "تحميل لـ {os}",
   "dl.modal.download": "تحميل",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "شغّل <code>uname -m</code> في الطرفية",
   "theme.system": "النظام",
   "theme.light": "فاتح",
-  "theme.dark": "داكن"
+  "theme.dark": "داكن",
+  "hero.stars": "Stars",
+  "hero.downloads": "التنزيلات",
+  "hero.version": "الأحدث",
+  "starHistory.title": "Star تاريخ"
 }

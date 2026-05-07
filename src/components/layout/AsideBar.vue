@@ -28,8 +28,8 @@ function showAddTask() {
   <aside class="aside" data-tauri-drag-region>
     <div class="aside-inner" data-tauri-drag-region>
       <h1 class="logo-mini">
-        <a target="_blank" href="https://github.com/AnInsomniacy/motrix-next/">
-          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="18" viewBox="0 0 40 18">
+        <span class="logo-mark" aria-label="Motrix Next">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="18" viewBox="0 0 40 18" aria-hidden="true">
             <rect
               x="0.5"
               y="0.5"
@@ -54,39 +54,67 @@ function showAddTask() {
               NEXT
             </text>
           </svg>
-        </a>
+        </span>
       </h1>
       <ul class="menu top-menu" data-tauri-drag-region>
-        <li class="non-draggable" @click="nav('/task/active')">
+        <li>
           <MTooltip placement="right">
             <template #trigger>
-              <NIcon :size="20"><ListOutline /></NIcon>
+              <button
+                type="button"
+                class="menu-button non-draggable"
+                :aria-label="t('app.task-list')"
+                @click="nav('/task/all')"
+              >
+                <NIcon :size="20"><ListOutline /></NIcon>
+              </button>
             </template>
             {{ t('app.task-list') }}
           </MTooltip>
         </li>
-        <li class="non-draggable" @click="showAddTask">
+        <li>
           <MTooltip placement="right">
             <template #trigger>
-              <NIcon :size="20"><AddOutline /></NIcon>
+              <button
+                type="button"
+                class="menu-button non-draggable"
+                :aria-label="t('app.add-task')"
+                @click="showAddTask"
+              >
+                <NIcon :size="20"><AddOutline /></NIcon>
+              </button>
             </template>
             {{ t('app.add-task') }}
           </MTooltip>
         </li>
       </ul>
       <ul class="menu bottom-menu">
-        <li class="non-draggable" @click="emit('show-about')">
+        <li>
           <MTooltip placement="right">
             <template #trigger>
-              <NIcon :size="20"><HelpCircleOutline /></NIcon>
+              <button
+                type="button"
+                class="menu-button non-draggable"
+                :aria-label="t('app.about')"
+                @click="emit('show-about')"
+              >
+                <NIcon :size="20"><HelpCircleOutline /></NIcon>
+              </button>
             </template>
             {{ t('app.about') }}
           </MTooltip>
         </li>
-        <li class="non-draggable" @click="nav('/preference/basic')">
+        <li>
           <MTooltip placement="right">
             <template #trigger>
-              <NIcon :size="20"><SettingsOutline /></NIcon>
+              <button
+                type="button"
+                class="menu-button non-draggable"
+                :aria-label="t('app.preferences')"
+                @click="nav('/preference/general')"
+              >
+                <NIcon :size="20"><SettingsOutline /></NIcon>
+              </button>
             </template>
             {{ t('app.preferences') }}
           </MTooltip>
@@ -101,7 +129,7 @@ function showAddTask() {
   width: var(--aside-width);
   height: 100%;
   background-color: var(--aside-bg);
-  color: var(--aside-text);
+  color: var(--m3-on-surface);
   flex-shrink: 0;
   z-index: 10;
 }
@@ -114,15 +142,15 @@ function showAddTask() {
   margin: 0;
   padding: 0;
   width: 100%;
-  margin-top: 50px;
+  margin-top: var(--header-top-offset);
 }
-.logo-mini > a {
+.logo-mark {
   display: block;
   width: 40px;
   height: 18px;
   text-align: center;
   font-size: 0;
-  outline: none;
+  color: var(--m3-primary);
   padding: 2px;
   margin: 0 auto;
 }
@@ -134,20 +162,27 @@ function showAddTask() {
   cursor: default;
 }
 .menu > li {
+  margin-top: 24px;
+}
+.menu-button {
   width: 32px;
   height: 32px;
-  margin-top: 24px;
   cursor: pointer;
   border-radius: 16px;
   transition: background-color 0.2s cubic-bezier(0.2, 0, 0, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--aside-icon-color);
+  color: var(--m3-on-surface-variant);
+  background: transparent;
+  border: none;
+  padding: 0;
 }
-.menu > li:hover {
+.menu-button:hover,
+.menu-button:focus-visible {
   background-color: var(--aside-icon-hover-bg);
-  color: var(--aside-text);
+  color: var(--m3-on-surface);
+  outline: none;
 }
 .top-menu {
   flex: 1;

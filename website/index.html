@@ -10,12 +10,7 @@
     />
     <meta name="theme-color" content="#0c0c0e" />
     <link rel="icon" type="image/png" href="assets/logo.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
-      rel="stylesheet"
-    />
+    <!-- System fonts only — SF Pro (macOS), Segoe UI (Windows), Roboto (Android) -->
     <link rel="stylesheet" href="style.css" />
     <!-- Critical: prevent Flash of Untranslated Content -->
     <style>
@@ -148,7 +143,7 @@
             >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
-            <span id="theme-toggle-label" data-i18n="theme.system">System</span>
+            <span id="theme-toggle-label">System</span>
           </button>
           <div class="theme-dropdown" id="theme-dropdown">
             <button class="theme-option" data-theme="system" id="theme-system-hint">
@@ -229,7 +224,7 @@
     <main>
       <section id="hero">
         <div class="hero-watermark" aria-hidden="true">
-          <img src="assets/logo-bolt-light.png" alt="" width="800" height="800" />
+          <img id="hero-watermark-img" src="assets/logo-bolt-light.png" alt="" width="800" height="800" />
         </div>
         <img src="assets/logo.png" alt="Motrix Next" class="hero-logo" width="128" height="128" />
         <h1>Motrix <span class="h1-accent">Next</span></h1>
@@ -303,6 +298,61 @@
             </svg>
             Naive UI</span
           >
+        </div>
+        <div class="hero-stats" id="hero-stats">
+          <span class="hero-stat">
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polygon
+                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+              />
+            </svg>
+            <span class="hero-stat-value loading" id="stat-stars">&middot;&middot;&middot;</span>
+            <span class="hero-stat-label" data-i18n="hero.stars">Stars</span>
+          </span>
+          <span class="hero-stat">
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span class="hero-stat-value loading" id="stat-downloads">&middot;&middot;&middot;</span>
+            <span class="hero-stat-label" data-i18n="hero.downloads">Downloads</span>
+          </span>
+          <span class="hero-stat">
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+              <circle cx="12" cy="12" r="4" />
+            </svg>
+            <span class="hero-stat-value loading" id="stat-version">&middot;&middot;&middot;</span>
+            <span class="hero-stat-label" data-i18n="hero.version">Latest</span>
+          </span>
         </div>
         <div class="hero-actions">
           <a
@@ -410,9 +460,6 @@
       </section>
 
       <section id="rewrite" class="section section-wide">
-        <div class="rewrite-watermark" aria-hidden="true">
-          <img src="assets/logo-bolt-dark.png" alt="" width="500" height="500" loading="lazy" />
-        </div>
         <h2 class="reveal" data-i18n="rewrite.title">A ground-up rewrite.</h2>
         <p class="lead reveal" data-i18n="rewrite.lead">Same download manager spirit, entirely new codebase.</p>
         <div class="table-wrap reveal">
@@ -822,7 +869,7 @@
         <p class="dl-detected reveal" id="dl-detected"></p>
         <a
           href="https://github.com/AnInsomniacy/motrix-next/releases"
-          class="cta cta-lg"
+          class="cta cta-lg reveal"
           id="dl-primary"
           target="_blank"
           rel="noopener"
@@ -843,10 +890,37 @@
           </svg>
           <span id="dl-primary-text" data-i18n="dl.primary.fallback">Download latest release</span>
         </a>
-        <p class="dl-version reveal" id="dl-version"></p>
+
         <button class="dl-toggle reveal" id="dl-toggle" type="button" data-i18n="dl.toggle">All platforms</button>
         <div class="dl-all" id="dl-all">
           <div class="dl-grid" id="dl-grid"></div>
+        </div>
+      </section>
+
+      <section id="star-history" class="section">
+        <h2 class="reveal" data-i18n="starHistory.title">Star History</h2>
+        <div class="star-history-frame reveal">
+          <a
+            href="https://www.star-history.com/?repos=AnInsomniacy%2Fmotrix-next&type=date&legend=top-left"
+            target="_blank"
+            rel="noopener"
+          >
+            <img
+              id="star-history-chart"
+              src="https://api.star-history.com/chart?repos=AnInsomniacy/motrix-next&type=date&theme=dark&legend=top-left"
+              alt="Star History Chart"
+              loading="lazy"
+              onload="this.closest('.star-history-frame').classList.add('loaded')"
+            />
+          </a>
+          <!-- Preload alternate theme so theme switch is instant (no network stall) -->
+          <img
+            id="star-history-preload"
+            aria-hidden="true"
+            style="display:none"
+            loading="lazy"
+            src="https://api.star-history.com/chart?repos=AnInsomniacy/motrix-next&type=date&legend=top-left"
+          />
         </div>
       </section>
     </main>
@@ -881,18 +955,32 @@
       <div class="footer-links">
         <a href="https://github.com/AnInsomniacy/motrix-next" target="_blank" rel="noopener">GitHub</a>
         <a
-          href="https://github.com/AnInsomniacy/motrix-next/blob/master/docs/CONTRIBUTING.md"
+          href="https://github.com/AnInsomniacy/motrix-next/blob/main/docs/CONTRIBUTING.md"
           target="_blank"
           rel="noopener"
           data-i18n="footer.contributing"
           >Contributing</a
         >
         <a
-          href="https://github.com/AnInsomniacy/motrix-next/blob/master/docs/CODE_OF_CONDUCT.md"
+          href="https://github.com/AnInsomniacy/motrix-next/blob/main/docs/CODE_OF_CONDUCT.md"
           target="_blank"
           rel="noopener"
           data-i18n="footer.coc"
           >Code of Conduct</a
+        >
+        <a
+          href="https://github.com/AnInsomniacy/motrix-next/blob/main/docs/PRIVACY.md"
+          target="_blank"
+          rel="noopener"
+          data-i18n="footer.privacy"
+          >Privacy Policy</a
+        >
+        <a
+          href="https://github.com/AnInsomniacy/motrix-next/blob/main/docs/CODE_SIGNING.md"
+          target="_blank"
+          rel="noopener"
+          data-i18n="footer.signing"
+          >Code Signing</a
         >
       </div>
       <p class="footer-license" data-i18n="footer.license">MIT — Copyright &copy; 2025-present AnInsomniacy</p>
@@ -972,7 +1060,7 @@
           os: 'Windows',
           arch: 'ARM64',
           fmt: '.exe',
-          match: (n) => n.includes('aarch64') && n.endsWith('-setup.exe'),
+          match: (n) => /(?:aarch64|arm64)/.test(n) && n.endsWith('-setup.exe'),
         },
         {
           key: 'appimage-x64',
@@ -989,6 +1077,13 @@
           match: (n) => n.includes('amd64') && n.endsWith('.deb'),
         },
         {
+          key: 'rpm-x64',
+          os: 'Linux',
+          arch: 'x64',
+          fmt: '.rpm',
+          match: (n) => n.includes('x86_64') && n.endsWith('.rpm'),
+        },
+        {
           key: 'appimage-arm',
           os: 'Linux',
           arch: 'ARM64',
@@ -1001,6 +1096,13 @@
           arch: 'ARM64',
           fmt: '.deb',
           match: (n) => /(?:aarch64|arm64)/.test(n) && n.endsWith('.deb'),
+        },
+        {
+          key: 'rpm-arm',
+          os: 'Linux',
+          arch: 'ARM64',
+          fmt: '.rpm',
+          match: (n) => n.includes('aarch64') && n.endsWith('.rpm'),
         },
       ]
 
@@ -1030,6 +1132,7 @@
         const ua = navigator.userAgent
         if (ua.includes('Mac')) return 'macOS'
         if (ua.includes('Win')) return 'Windows'
+        if (ua.includes('Android') || ua.includes('CrOS')) return null
         if (ua.includes('Linux')) return 'Linux'
         return null
       }
@@ -1098,7 +1201,7 @@
         const detected = document.getElementById('dl-detected')
         const primary = document.getElementById('dl-primary')
         const primaryText = document.getElementById('dl-primary-text')
-        const versionEl = document.getElementById('dl-version')
+
         const toggle = document.getElementById('dl-toggle')
         const allWrap = document.getElementById('dl-all')
         const grid = document.getElementById('dl-grid')
@@ -1109,7 +1212,7 @@
         let hasPrimaryOS = false
         i18n.onLocaleChange(() => {
           if (os) detected.textContent = i18n.t('dl.detected', { os })
-          if (cachedVer) versionEl.textContent = i18n.t('dl.version', { ver: cachedVer })
+
           if (hasPrimaryOS) {
             primaryText.textContent = i18n.t('dl.primary', { os })
           } else {
@@ -1127,6 +1230,77 @@
         let releaseUrl = 'https://github.com/AnInsomniacy/motrix-next/releases'
         let apiFailed = false
 
+        /** Format a number as compact string: 1234 → "1.2k", 456 → "456" */
+        function compactNumber(n) {
+          if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+          return String(n)
+        }
+
+        /* ── Hero stats: fetch repo info (stars) + all releases (downloads) ── */
+        ;(async () => {
+          const statsEl = document.getElementById('stat-stars')
+          const dlEl = document.getElementById('stat-downloads')
+          const verEl = document.getElementById('stat-version')
+          const allValueEls = [statsEl, dlEl, verEl]
+
+          /** Remove loading animation and set final text for a stat element. */
+          function setStat(el, text) {
+            el.classList.remove('loading')
+            el.textContent = text
+          }
+
+          /** Mark all stats as failed — show em-dash, stop pulsing. */
+          function setAllFailed() {
+            for (const el of allValueEls) setStat(el, '\u2014')
+          }
+
+          // 8-second timeout via AbortController
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+          try {
+            const [repoRes, releasesRes] = await Promise.all([
+              fetch('https://api.github.com/repos/AnInsomniacy/motrix-next', {
+                signal: controller.signal,
+              }),
+              fetch('https://api.github.com/repos/AnInsomniacy/motrix-next/releases?per_page=100', {
+                signal: controller.signal,
+              }),
+            ])
+            clearTimeout(timeoutId)
+
+            // Stars
+            if (repoRes.ok) {
+              const repo = await repoRes.json()
+              setStat(statsEl, compactNumber(repo.stargazers_count || 0))
+            } else {
+              setStat(statsEl, '\u2014')
+            }
+
+            // Downloads + stable version
+            if (releasesRes.ok) {
+              const releases = await releasesRes.json()
+              let totalDownloads = 0
+              for (const release of releases) {
+                for (const asset of release.assets || []) {
+                  totalDownloads += asset.download_count || 0
+                }
+              }
+              setStat(dlEl, compactNumber(totalDownloads))
+
+              // Find the first stable (non-prerelease) version
+              const stable = releases.find((r) => !r.prerelease)
+              setStat(verEl, stable ? stable.tag_name : '\u2014')
+            } else {
+              setStat(dlEl, '\u2014')
+              setStat(verEl, '\u2014')
+            }
+          } catch {
+            clearTimeout(timeoutId)
+            setAllFailed()
+          }
+        })()
+
         try {
           const res = await fetch('https://api.github.com/repos/AnInsomniacy/motrix-next/releases/latest')
           const data = await res.json()
@@ -1135,7 +1309,7 @@
           cachedVer = ver
           releaseUrl = data.html_url || releaseUrl
 
-          versionEl.textContent = i18n.t('dl.version', { ver })
+
 
           for (const p of PLATFORMS) {
             const a = assets.find((a) => p.match(a.name))
@@ -1148,29 +1322,62 @@
             hasPrimaryOS = true
           }
 
-          // Build "All platforms" grid
+          // Build "All platforms" pill strip — grouped by OS + arch
+          const groups = []
+          let lastGroup = ''
           for (const p of PLATFORMS) {
-            const url = resolvedUrls[p.key] || releaseUrl
-            const card = document.createElement('a')
-            card.href = url
-            card.target = '_blank'
-            card.rel = 'noopener'
-            card.className = 'dl-card'
-            card.innerHTML =
-              '<div class="dl-card-icon">' +
-              DL_ICON +
-              '</div>' +
-              '<div class="dl-card-info">' +
-              '<div class="dl-card-name">' +
-              p.os +
-              ' ' +
-              p.arch +
-              '</div>' +
-              '<div class="dl-card-meta">' +
-              p.fmt +
-              '</div>' +
-              '</div>'
-            grid.appendChild(card)
+            const isLinux = p.os === 'Linux'
+            const groupKey = isLinux ? p.os + ' \u00b7 ' + p.arch : p.os
+
+            if (groupKey !== lastGroup) {
+              lastGroup = groupKey
+              groups.push({ key: groupKey, os: p.os, items: [p] })
+            } else {
+              groups[groups.length - 1].items.push(p)
+            }
+          }
+
+          let prevOS = ''
+          for (const g of groups) {
+            // Insert divider between different OS families
+            if (prevOS && prevOS !== g.os) {
+              const divider = document.createElement('div')
+              divider.className = 'dl-divider'
+              grid.appendChild(divider)
+            }
+            prevOS = g.os
+
+            const row = document.createElement('div')
+            row.className = 'dl-row'
+
+            const label = document.createElement('span')
+            label.className = 'dl-row-label'
+            label.textContent = g.key
+            row.appendChild(label)
+
+            const pills = document.createElement('div')
+            pills.className = 'dl-row-pills'
+
+            for (const p of g.items) {
+              const isLinux = p.os === 'Linux'
+              const url = resolvedUrls[p.key] || releaseUrl
+              const pill = document.createElement('a')
+              pill.href = url
+              pill.target = '_blank'
+              pill.rel = 'noopener'
+              pill.className = 'dl-pill'
+
+              // Linux: format (.AppImage/.deb/.rpm) as label
+              // macOS/Windows: architecture as label + format as muted suffix
+              const pillLabel = isLinux ? p.fmt : p.arch
+              const pillMeta = isLinux ? '' : ' ' + p.fmt
+              pill.innerHTML =
+                DL_SMALL_ICON + ' ' + pillLabel + (pillMeta ? '<span class="dl-pill-fmt">' + pillMeta + '</span>' : '')
+              pills.appendChild(pill)
+            }
+
+            row.appendChild(pills)
+            grid.appendChild(row)
           }
         } catch {
           apiFailed = true
@@ -1256,10 +1463,35 @@
           dropdown.querySelectorAll('.theme-option').forEach((opt) => {
             opt.classList.toggle('active', opt.dataset.theme === choice)
           })
+          // Swap hero watermark asset to match theme
+          const wm = document.getElementById('hero-watermark-img')
+          if (wm) wm.src = 'assets/logo-bolt-' + (effective === 'light' ? 'dark' : 'light') + '.png'
+          // Swap star history chart to match theme.
+          // Both images are preloaded at page init (visible + hidden <img>),
+          // so the browser serves them from cache — no shimmer, no stall.
+          const sh = document.getElementById('star-history-chart')
+          const shPreload = document.getElementById('star-history-preload')
+          if (sh && shPreload) {
+            const base = 'https://api.star-history.com/chart?repos=AnInsomniacy/motrix-next&type=date&legend=top-left'
+            const darkUrl = base + '&theme=dark'
+            const lightUrl = base
+            const wantDark = effective === 'dark'
+            // Swap visible ↔ preload src (both are already cached)
+            sh.src = wantDark ? darkUrl : lightUrl
+            shPreload.src = wantDark ? lightUrl : darkUrl
+            // If the image is already cached, onload won't re-fire, so ensure loaded state
+            const frame = sh.closest('.star-history-frame')
+            if (frame && sh.complete && sh.naturalWidth > 0) {
+              frame.classList.add('loaded')
+            }
+          }
         }
 
         // Apply immediately
         applyTheme(getStored())
+
+        // Re-apply label text when locale changes
+        i18n.onLocaleChange(() => applyTheme(getStored()))
 
         // Toggle dropdown
         toggle.addEventListener('click', (e) => {

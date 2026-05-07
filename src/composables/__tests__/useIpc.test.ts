@@ -53,26 +53,6 @@ describe('useIpc', () => {
     expect(mockInvoke).toHaveBeenCalledWith('factory_reset', undefined)
   })
 
-  it('getAppConfig invokes and returns the result', async () => {
-    const fakeConfig = { theme: 'dark', locale: 'en-US' }
-    mockInvoke.mockResolvedValueOnce(fakeConfig)
-
-    const ipc = useIpc()
-    const result = await ipc.getAppConfig()
-
-    expect(mockInvoke).toHaveBeenCalledWith('get_app_config', undefined)
-    expect(result).toEqual(fakeConfig)
-  })
-
-  it('savePreference forwards config as args', async () => {
-    const ipc = useIpc()
-    const config = { theme: 'light' as const }
-
-    await ipc.savePreference(config)
-
-    expect(mockInvoke).toHaveBeenCalledWith('save_preference', { config })
-  })
-
   it('saveSystemConfig forwards config as args', async () => {
     const ipc = useIpc()
     const config = { 'max-concurrent-downloads': '5' }
@@ -140,7 +120,7 @@ describe('useIpc', () => {
 
     const ipc = useIpc()
     try {
-      await ipc.getAppConfig()
+      await ipc.getSystemConfig()
       expect.unreachable('should have thrown')
     } catch (err) {
       // Verify the raw Tauri error object is propagated, not wrapped

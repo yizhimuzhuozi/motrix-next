@@ -81,6 +81,23 @@ describe('tray.rs — native menu attached to TrayIconBuilder', () => {
     expect(source).toMatch(/\.menu\(&menu\)/)
   })
 
+  it('marks the macOS tray icon as a template image', () => {
+    // macOS menu bar icons must be template images so AppKit can adapt
+    // their rendered color to light, dark, and highlighted menu bar states.
+    expect(source).toContain('icon_as_template')
+    expect(source).toContain('TRAY_ICON_IS_TEMPLATE')
+    expect(source).toMatch(/TRAY_ICON_IS_TEMPLATE:\s*bool\s*=\s*cfg!\(target_os\s*=\s*"macos"\)/)
+    expect(source).toMatch(/\.icon_as_template\(TRAY_ICON_IS_TEMPLATE\)/)
+  })
+
+  it('keeps template rendering when the tray icon is refreshed', () => {
+    const refreshBody = extractBody(source, 'pub fn refresh_tray_icon')
+    expect(refreshBody).toBeTruthy()
+    expect(refreshBody).toContain('tray.set_icon(Some(icon))')
+    expect(refreshBody).toContain('TRAY_ICON_IS_TEMPLATE')
+    expect(refreshBody).toContain('tray.set_icon_as_template(true)')
+  })
+
   it('disables menu on left click for macOS (menu_on_left_click)', () => {
     // macOS: .menu() defaults to showing menu on both left and right click.
     // Must explicitly disable left-click menu to preserve left-click = show window.
@@ -112,43 +129,36 @@ describe('tray.rs — on_menu_event unified handler', () => {
     source = fs.readFileSync(TRAY_RS, 'utf-8')
   })
 
-  it('handles "show" menu event with ActivationPolicy on macOS', () => {
+  it('handles "show" menu event through shared window activation', () => {
     const menuEventBlock = extractOnMenuEvent(source)
     expect(menuEventBlock).toBeTruthy()
     expect(menuEventBlock).toContain('"show"')
-    expect(menuEventBlock).toContain('ActivationPolicy')
+    expect(menuEventBlock).toContain('activate_main_window')
   })
 
-  it('dispatches to resolve_tray_action for new-task, resume-all, pause-all, quit', () => {
-    // After extracting resolve_tray_action(), the on_menu_event handler uses
-    // a wildcard `_ => resolve_tray_action(id)` pattern.  Menu ID literals
-    // now live in the resolve_tray_action function.
+  it('shared window activation restores ActivationPolicy on macOS', () => {
+    const activationBody = extractBody(source, 'pub fn activate_main_window')
+    expect(activationBody).toBeTruthy()
+    expect(activationBody).toContain('ActivationPolicy::Regular')
+  })
+
+  it('dispatches pause/resume through resolve_tray_action', () => {
+    // After the lightweight mode fix, only pause/resume go through
+    // resolve_tray_action. quit and new-task are handled natively.
     const menuEventBlock = extractOnMenuEvent(source)
     expect(menuEventBlock).toBeTruthy()
     expect(menuEventBlock).toContain('resolve_tray_action')
     expect(menuEventBlock).toContain('tray-menu-action')
-
-    // Verify the resolve_tray_action function maps all expected IDs
-    const resolverBody = extractResolverBody(source)
-    expect(resolverBody).toBeTruthy()
-    expect(resolverBody).toContain('tray-new-task')
-    expect(resolverBody).toContain('tray-resume-all')
-    expect(resolverBody).toContain('tray-pause-all')
   })
 
-  it('maps tray-quit to "quit" action (not app.exit)', () => {
-    // Quit must go through Vue handleExitConfirm() for consistent exit animation.
-    // After the resolve_tray_action extraction, the quit mapping lives in
-    // the resolver function, not directly in on_menu_event.
-    const resolverBody = extractResolverBody(source)
-    expect(resolverBody).toBeTruthy()
-    expect(resolverBody).toContain('"tray-quit"')
-    expect(resolverBody).toContain('"quit"')
-
-    // Must NOT directly call app.exit in on_menu_event
+  it('handles tray-quit natively via app.exit() (not resolve_tray_action)', () => {
+    // In lightweight mode, the WebView is destroyed — emit to frontend
+    // silently fails. Quit MUST be handled in Rust via app.exit(0)
+    // to ensure the app can always exit. See issue #194.
     const menuEventBlock = extractOnMenuEvent(source)
     expect(menuEventBlock).toBeTruthy()
-    expect(menuEventBlock).not.toMatch(/app\.exit\(/)
+    expect(menuEventBlock).toContain('"tray-quit"')
+    expect(menuEventBlock).toContain('app.exit(')
   })
 
   it('on_menu_event is NOT cfg-gated to Linux only', () => {
@@ -220,11 +230,7 @@ function extractOnMenuEvent(source: string): string | null {
   return null
 }
 
-/**
- * Extract the resolve_tray_action function body.
- */
-function extractResolverBody(source: string): string | null {
-  const marker = 'fn resolve_tray_action'
+function extractBody(source: string, marker: string): string | null {
   const idx = source.indexOf(marker)
   if (idx === -1) return null
   const braceStart = source.indexOf('{', idx)

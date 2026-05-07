@@ -109,6 +109,36 @@ describe('useMagnetFlow', () => {
     it('returns empty array for empty file list', () => {
       expect(parseFilesForSelection([])).toEqual([])
     })
+
+    it('extracts filename from Windows backslash path', () => {
+      const winFiles: Aria2File[] = [
+        {
+          index: '1',
+          path: 'C:\\Users\\test\\Downloads\\movie.mkv',
+          length: '1000',
+          completedLength: '0',
+          selected: 'true',
+          uris: [],
+        },
+      ]
+      const items = parseFilesForSelection(winFiles)
+      expect(items[0].name).toBe('movie.mkv')
+    })
+
+    it('extracts filename from mixed separator path', () => {
+      const mixedFiles: Aria2File[] = [
+        {
+          index: '1',
+          path: 'C:\\Users\\test/Downloads/movie.mkv',
+          length: '1000',
+          completedLength: '0',
+          selected: 'true',
+          uris: [],
+        },
+      ]
+      const items = parseFilesForSelection(mixedFiles)
+      expect(items[0].name).toBe('movie.mkv')
+    })
   })
 
   // ── buildSelectFileOption ───────────────────────────────────────

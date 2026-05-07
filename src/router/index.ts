@@ -10,7 +10,7 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: '/task/active',
+          redirect: '/task/all',
         },
         {
           path: '/task/:status?',
@@ -24,10 +24,25 @@ const router = createRouter({
           component: () => import('@/views/PreferenceView.vue'),
           children: [
             {
-              path: 'basic',
+              path: 'general',
               alias: '',
-              name: 'preference-basic',
-              component: () => import('@/components/preference/Basic.vue'),
+              name: 'preference-general',
+              component: () => import('@/components/preference/General.vue'),
+            },
+            {
+              path: 'downloads',
+              name: 'preference-downloads',
+              component: () => import('@/components/preference/Downloads.vue'),
+            },
+            {
+              path: 'bt',
+              name: 'preference-bt',
+              component: () => import('@/components/preference/BitTorrent.vue'),
+            },
+            {
+              path: 'network',
+              name: 'preference-network',
+              component: () => import('@/components/preference/Network.vue'),
             },
             {
               path: 'advanced',

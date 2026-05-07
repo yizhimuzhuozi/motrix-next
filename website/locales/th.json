@@ -89,6 +89,8 @@
   "footer.ack": "ขอบคุณ {link} สำหรับการวางรากฐาน",
   "footer.contributing": "มีส่วนร่วม",
   "footer.coc": "จรรยาบรรณ",
+  "footer.privacy": "นโยบายความเป็นส่วนตัว",
+  "footer.signing": "นโยบายการลงนาม",
   "footer.license": "MIT — ลิขสิทธิ์ © 2025-ปัจจุบัน AnInsomniacy",
   "dl.modal.title": "ดาวน์โหลดสำหรับ {os}",
   "dl.modal.download": "ดาวน์โหลด",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "รัน <code>uname -m</code> ในเทอร์มินัล",
   "theme.system": "ระบบ",
   "theme.light": "สว่าง",
-  "theme.dark": "มืด"
+  "theme.dark": "มืด",
+  "hero.stars": "Stars",
+  "hero.downloads": "ดาวน์โหลด",
+  "hero.version": "ล่าสุด",
+  "starHistory.title": "Star ประวัติ"
 }

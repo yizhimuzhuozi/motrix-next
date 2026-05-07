@@ -32,7 +32,7 @@ jobs:
           - platform: ubuntu-22.04
             args: --target x86_64-unknown-linux-gnu
             label: linux-x86_64
-          - platform: ubuntu-24.04-arm
+          - platform: ubuntu-22.04-arm
             args: --target aarch64-unknown-linux-gnu
             label: linux-aarch64
 
@@ -63,8 +63,8 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
 
-      # Suppress Ubuntu 24.04 needrestart daemon (auto-restarts services on
-      # package install, can kill the runner agent and cause "operation canceled").
+      # Suppress needrestart daemon (auto-restarts services on package
+      # install, can kill the runner agent and cause "operation canceled").
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -83,7 +83,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          NO_STRIP: ${{ contains(matrix.args, 'aarch64-unknown-linux') && 'true' || '' }}
         with:
           tagName: ${{ github.event.release.tag_name || '' }}
           releaseId: ${{ github.event_name == 'release' && github.event.release.id || '' }}
@@ -133,11 +132,15 @@ jobs:
           read_sig() { [ -f "$1" ] && cat "$1" || echo ""; }
 
           DARWIN_SIG=$(read_sig "sigs/MotrixNext_aarch64.app.tar.gz.sig")
-          DARWIN_X64_SIG=$(read_sig "sigs/MotrixNext_x86_64.app.tar.gz.sig")
+          DARWIN_X64_SIG=$(read_sig "sigs/MotrixNext_x64.app.tar.gz.sig")
           WINDOWS_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_x64-setup.exe.sig")
           WINDOWS_ARM_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_arm64-setup.exe.sig")
           LINUX_X64_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_amd64.AppImage.sig")
           LINUX_ARM_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_aarch64.AppImage.sig")
+          LINUX_X64_DEB_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_amd64.deb.sig")
+          LINUX_ARM_DEB_SIG=$(read_sig "sigs/MotrixNext_${VERSION}_arm64.deb.sig")
+          LINUX_X64_RPM_SIG=$(read_sig "sigs/MotrixNext-${VERSION}-1.x86_64.rpm.sig")
+          LINUX_ARM_RPM_SIG=$(read_sig "sigs/MotrixNext-${VERSION}-1.aarch64.rpm.sig")
 
           jq -n \
             --arg version "$VERSION" \
@@ -146,7 +149,7 @@ jobs:
             --arg darwin_sig "$DARWIN_SIG" \
             --arg darwin_url "$BASE/MotrixNext_aarch64.app.tar.gz" \
             --arg darwin_x64_sig "$DARWIN_X64_SIG" \
-            --arg darwin_x64_url "$BASE/MotrixNext_x86_64.app.tar.gz" \
+            --arg darwin_x64_url "$BASE/MotrixNext_x64.app.tar.gz" \
             --arg win_sig "$WINDOWS_SIG" \
             --arg win_url "$BASE/MotrixNext_${VERSION}_x64-setup.exe" \
             --arg wina_sig "$WINDOWS_ARM_SIG" \
@@ -155,6 +158,14 @@ jobs:
             --arg lx64_url "$BASE/MotrixNext_${VERSION}_amd64.AppImage" \
             --arg larm_sig "$LINUX_ARM_SIG" \
             --arg larm_url "$BASE/MotrixNext_${VERSION}_aarch64.AppImage" \
+            --arg ldebx64_sig "$LINUX_X64_DEB_SIG" \
+            --arg ldebx64_url "$BASE/MotrixNext_${VERSION}_amd64.deb" \
+            --arg ldebarm_sig "$LINUX_ARM_DEB_SIG" \
+            --arg ldebarm_url "$BASE/MotrixNext_${VERSION}_arm64.deb" \
+            --arg lrpmx64_sig "$LINUX_X64_RPM_SIG" \
+            --arg lrpmx64_url "$BASE/MotrixNext-${VERSION}-1.x86_64.rpm" \
+            --arg lrpmarm_sig "$LINUX_ARM_RPM_SIG" \
+            --arg lrpmarm_url "$BASE/MotrixNext-${VERSION}-1.aarch64.rpm" \
             '{
               version: $version,
               notes: $notes,
@@ -165,7 +176,11 @@ jobs:
                 "windows-x86_64": { signature: $win_sig, url: $win_url },
                 "windows-aarch64": { signature: $wina_sig, url: $wina_url },
                 "linux-x86_64": { signature: $lx64_sig, url: $lx64_url },
-                "linux-aarch64": { signature: $larm_sig, url: $larm_url }
+                "linux-aarch64": { signature: $larm_sig, url: $larm_url },
+                "linux-x86_64-deb": { signature: $ldebx64_sig, url: $ldebx64_url },
+                "linux-aarch64-deb": { signature: $ldebarm_sig, url: $ldebarm_url },
+                "linux-x86_64-rpm": { signature: $lrpmx64_sig, url: $lrpmx64_url },
+                "linux-aarch64-rpm": { signature: $lrpmarm_sig, url: $lrpmarm_url }
               }
             }' > "$JSON_FILE"
 
@@ -183,3 +198,77 @@ jobs:
           # Upload (overwrite) the channel JSON to the fixed 'updater' tag
           gh release upload updater "$JSON_FILE" --clobber -R "${{ github.repository }}"
           echo "Uploaded $JSON_FILE to 'updater' release"
+
+  update-homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && !github.event.release.prerelease
+
+    steps:
+      - name: Download macOS artifacts and compute checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+
+          gh release download "$TAG" \
+            -R "${{ github.repository }}" \
+            -p "MotrixNext_aarch64.app.tar.gz" \
+            -p "MotrixNext_x64.app.tar.gz"
+
+          ARM_SHA=$(shasum -a 256 MotrixNext_aarch64.app.tar.gz | cut -d ' ' -f1)
+          INTEL_SHA=$(shasum -a 256 MotrixNext_x64.app.tar.gz | cut -d ' ' -f1)
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "ARM_SHA=$ARM_SHA" >> "$GITHUB_ENV"
+          echo "INTEL_SHA=$INTEL_SHA" >> "$GITHUB_ENV"
+
+      - name: Update Homebrew Cask
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/AnInsomniacy/homebrew-motrix-next.git"
+          cd homebrew-motrix-next
+
+          # Generate the entire cask file from a template instead of using
+          # fragile sed replacements. Shell expands $VERSION, $ARM_SHA, and
+          # $INTEL_SHA; Ruby interpolations (#{version}, #{arch}) pass through
+          # literally because #{ is not shell syntax.
+          cat > Casks/motrix-next.rb << CASK_EOF
+          cask "motrix-next" do
+            arch arm: "aarch64", intel: "x64"
+
+            version "$VERSION"
+            sha256 arm:   "$ARM_SHA",
+                   intel: "$INTEL_SHA"
+
+            url "https://github.com/AnInsomniacy/motrix-next/releases/download/v#{version}/MotrixNext_#{arch}.app.tar.gz"
+            name "Motrix Next"
+            desc "Full-featured download manager built with Tauri"
+            homepage "https://github.com/AnInsomniacy/motrix-next"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            auto_updates true
+
+            app "MotrixNext.app"
+
+            zap trash: [
+              "~/Library/Application Support/com.motrix.next",
+              "~/Library/Caches/com.motrix.next",
+              "~/Library/Logs/com.motrix.next",
+              "~/Library/WebKit/com.motrix.next",
+            ]
+          end
+          CASK_EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/motrix-next.rb
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "motrix-next $VERSION"
+          git push

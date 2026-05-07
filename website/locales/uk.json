@@ -89,6 +89,8 @@
   "footer.ack": "Подяка {link} за основу",
   "footer.contributing": "Зробити внесок",
   "footer.coc": "Кодекс поведінки",
+  "footer.privacy": "Політика конфіденційності",
+  "footer.signing": "Політика підпису",
   "footer.license": "MIT — Copyright © 2025-тепер AnInsomniacy",
   "dl.modal.title": "Завантажити для {os}",
   "dl.modal.download": "Завантажити",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Виконайте <code>uname -m</code> у терміналі",
   "theme.system": "Системна",
   "theme.light": "Світла",
-  "theme.dark": "Темна"
+  "theme.dark": "Темна",
+  "hero.stars": "Stars",
+  "hero.downloads": "Завантаження",
+  "hero.version": "Остання",
+  "starHistory.title": "Star історія"
 }

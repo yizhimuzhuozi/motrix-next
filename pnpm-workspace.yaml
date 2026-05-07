@@ -1,2 +1,9 @@
 ignoredBuiltDependencies:
   - esbuild
+
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - x64
+    - arm64

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview Individual task row in the task list with progress and controls. */
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { TASK_STATUS } from '@shared/constants'
 import {
@@ -12,9 +12,11 @@ import {
   timeFormat,
   checkTaskIsBT,
 } from '@shared/utils'
-import { exists } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { logger } from '@shared/logger'
+import { resolveTaskFilePath, recheckTrigger } from '@/composables/useArchivedPaths'
 import { NProgress, NIcon } from 'naive-ui'
+import MTooltip from '@/components/common/MTooltip.vue'
 import {
   ArrowUpOutline,
   ArrowDownOutline,
@@ -55,6 +57,7 @@ const isActive = computed(() => props.task.status === TASK_STATUS.ACTIVE)
 const percent = computed(() => calcProgress(props.task.totalLength, props.task.completedLength))
 const completedSize = computed(() => bytesToSize(props.task.completedLength, 2))
 const totalSize = computed(() => bytesToSize(props.task.totalLength, 2))
+const hasSizeInfo = computed(() => Number(props.task.completedLength) > 0 || Number(props.task.totalLength) > 0)
 const downloadSpeed = computed(() => bytesToSize(props.task.downloadSpeed))
 const uploadSpeed = computed(() => bytesToSize(props.task.uploadSpeed))
 
@@ -86,8 +89,8 @@ function cssVar(name: string, fallback: string): string {
 }
 
 const statusColorMap = computed<Record<string, string>>(() => ({
-  active: cssVar('--m3-status-active', '#E0A422'),
-  waiting: cssVar('--m3-status-waiting', '#E6A23C'),
+  active: cssVar('--m3-status-active', ''),
+  waiting: cssVar('--m3-status-waiting', ''),
   paused: cssVar('--m3-status-paused', '#909399'),
   error: cssVar('--m3-status-error', '#F56C6C'),
   complete: cssVar('--m3-status-success', '#67C23A'),
@@ -95,7 +98,7 @@ const statusColorMap = computed<Record<string, string>>(() => ({
   seeding: cssVar('--m3-status-success', '#67C23A'),
 }))
 
-const progressColor = computed(() => statusColorMap.value[taskStatus.value] || cssVar('--m3-status-active', '#E0A422'))
+const progressColor = computed(() => statusColorMap.value[taskStatus.value] || cssVar('--m3-status-active', ''))
 
 const finishedTag = computed(() => {
   const s = props.task.status
@@ -121,6 +124,7 @@ const finishedTag = computed(() => {
 })
 
 function onDblClick() {
+  if (isSeeder.value) return
   const s = props.task.status
   if (s === TASK_STATUS.COMPLETE) {
     emit('open-file', props.task)
@@ -132,37 +136,57 @@ function onDblClick() {
 
 // File missing detection for completed/stopped tasks
 const fileMissing = ref(false)
+const FILE_CHECK_THROTTLE_MS = 120
+let fileCheckTimer: ReturnType<typeof setTimeout> | null = null
 
-async function checkFileExists() {
+const fileCheckTargetPath = computed(() => {
   const status = props.task.status
   if (status === TASK_STATUS.ACTIVE || status === TASK_STATUS.WAITING || status === TASK_STATUS.PAUSED) {
+    return null
+  }
+  return resolveTaskFilePath(props.task)
+})
+
+async function checkFileExists(targetPath: string | null) {
+  if (!targetPath) {
     fileMissing.value = false
     return
   }
-  const dir = props.task.dir
-  const files = props.task.files
-  if (!files || files.length === 0 || !dir) {
-    fileMissing.value = false
-    return
-  }
+
   try {
-    // Only check files the user actually selected for download.
-    // For BT tasks with partial file selection, unselected files
-    // (selected === 'false') won't exist on disk — that is expected,
-    // not "missing". Fall back to files[0] for non-BT single-file tasks.
-    const selected = files.filter((f) => f.selected === 'true')
-    const target = (selected.length > 0 ? selected[0] : files[0])?.path
-    if (target) {
-      fileMissing.value = !(await exists(target))
-    }
+    fileMissing.value = !(await invoke<boolean>('check_path_exists', { path: targetPath }))
   } catch (e) {
     logger.debug('TaskItem.fileCheck', e)
     fileMissing.value = false
   }
 }
 
-onMounted(checkFileExists)
-watch(() => props.task.status, checkFileExists)
+function scheduleFileExistsCheck(targetPath: string | null) {
+  if (fileCheckTimer) {
+    clearTimeout(fileCheckTimer)
+    fileCheckTimer = null
+  }
+
+  if (!targetPath) {
+    fileMissing.value = false
+    return
+  }
+
+  fileCheckTimer = setTimeout(() => {
+    fileCheckTimer = null
+    void checkFileExists(targetPath)
+  }, FILE_CHECK_THROTTLE_MS)
+}
+
+// Dual-source trigger: re-check when path changes (archive) OR on explicit
+// recheck request (action handler file-not-found, periodic background timer).
+watch([fileCheckTargetPath, recheckTrigger], ([path]) => scheduleFileExistsCheck(path), { immediate: true })
+onBeforeUnmount(() => {
+  if (fileCheckTimer) {
+    clearTimeout(fileCheckTimer)
+    fileCheckTimer = null
+  }
+})
 
 // ── M3 seeding state entrance animation ───────────────────────────
 // CSS transitions fail here because the store's polling cycle replaces
@@ -201,6 +225,13 @@ function onCardRelease() {
     cardPressTimer = null
   }, remaining)
 }
+
+onBeforeUnmount(() => {
+  if (cardPressTimer) {
+    clearTimeout(cardPressTimer)
+    cardPressTimer = null
+  }
+})
 </script>
 
 <template>
@@ -218,27 +249,37 @@ function onCardRelease() {
     @pointerleave="onCardRelease"
     @animationend="seedingEnter = false"
   >
-    <div class="task-name" :title="taskFullName">
-      <span>{{ taskFullName }}</span>
-      <div class="tags-wrapper" :class="{ 'has-tags': isSeeder || finishedTag || fileMissing }">
-        <div class="tags-inner">
-          <div v-if="isSeeder || finishedTag || fileMissing" class="task-tags">
-            <span v-if="isSeeder" class="seeding-tag">
-              <NIcon :size="13"><CloudUploadOutline /></NIcon>
-              {{ t('task.seeding') || 'Seeding' }}
-            </span>
-            <span v-else-if="finishedTag" class="status-tag" :style="{ color: finishedTag.color }">
-              <NIcon :size="13"><component :is="finishedTag.icon" /></NIcon>
-              {{ finishedTag.label }}
-            </span>
-            <span v-if="fileMissing" class="file-missing-tag">
-              <NIcon :size="13"><AlertCircleOutline /></NIcon>
-              {{ t('task.file-missing') || 'File missing' }}
-            </span>
+    <MTooltip placement="bottom-start">
+      <template #trigger>
+        <div class="task-name">
+          <!-- Crossfade: old name fades out, then new name fades in.
+               :key ensures transition only fires when the text actually changes.
+               Polling-safe: computed returns the same string each cycle → no key change. -->
+          <Transition name="name-crossfade" mode="out-in">
+            <span :key="taskFullName">{{ taskFullName }}</span>
+          </Transition>
+          <div class="tags-wrapper" :class="{ 'has-tags': isSeeder || finishedTag || fileMissing }">
+            <div class="tags-inner">
+              <div v-if="isSeeder || finishedTag || fileMissing" class="task-tags">
+                <span v-if="isSeeder" class="seeding-tag">
+                  <NIcon :size="13"><CloudUploadOutline /></NIcon>
+                  {{ t('task.seeding') || 'Seeding' }}
+                </span>
+                <span v-else-if="finishedTag" class="status-tag" :style="{ color: finishedTag.color }">
+                  <NIcon :size="13"><component :is="finishedTag.icon" /></NIcon>
+                  {{ finishedTag.label }}
+                </span>
+                <span v-if="fileMissing" class="file-missing-tag">
+                  <NIcon :size="13"><AlertCircleOutline /></NIcon>
+                  {{ t('task.file-missing') || 'File missing' }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+      {{ taskFullName }}
+    </MTooltip>
     <TaskItemActions
       :task="task"
       :status="taskStatus"
@@ -265,13 +306,16 @@ function onCardRelease() {
         :processing="isActive"
       />
       <div class="task-progress-info">
-        <div class="progress-left">
-          <span v-if="Number(task.completedLength) > 0 || Number(task.totalLength) > 0">
+        <div class="progress-left" :class="{ 'info-hidden': !hasSizeInfo }">
+          <span>
             {{ completedSize }}
             <span v-if="Number(task.totalLength) > 0"> / {{ totalSize }}</span>
           </span>
         </div>
-        <div v-if="isActive" class="progress-right">
+        <div class="progress-right" :class="{ 'info-hidden': !isActive }">
+          <span class="speed-text" :class="{ 'info-hidden': remaining <= 0 }">
+            <span>{{ remainingText }}</span>
+          </span>
           <span v-if="isBT" class="speed-text">
             <NIcon :size="10"><ArrowUpOutline /></NIcon>
             <span>{{ uploadSpeed }}/s</span>
@@ -279,9 +323,6 @@ function onCardRelease() {
           <span class="speed-text">
             <NIcon :size="10"><ArrowDownOutline /></NIcon>
             <span>{{ downloadSpeed }}/s</span>
-          </span>
-          <span v-if="remaining > 0" class="speed-text">
-            <span>{{ remainingText }}</span>
           </span>
           <span v-if="isBT" class="speed-text">
             <NIcon :size="10"><MagnetOutline /></NIcon>
@@ -292,7 +333,7 @@ function onCardRelease() {
             <span>{{ task.connections }}</span>
           </span>
         </div>
-        <div v-if="task.errorMessage" class="error-message">{{ task.errorMessage }}</div>
+        <div class="error-message" :class="{ 'info-hidden': !task.errorMessage }">{{ task.errorMessage }}</div>
       </div>
     </div>
   </div>
@@ -304,9 +345,9 @@ function onCardRelease() {
   min-height: 78px;
   padding: 16px 12px;
   background-color: var(--task-item-bg);
-  border: 1px solid var(--task-item-border);
+  border: 1px solid var(--m3-outline-variant);
   /* Reserve 3px left border at base color so seeding only animates color */
-  border-left: 3px solid var(--task-item-border);
+  border-left: 3px solid var(--m3-outline-variant);
   border-radius: 6px;
   transition: border-color 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
@@ -332,7 +373,7 @@ function onCardRelease() {
 /* unlike CSS transitions which break when the element is re-rendered.  */
 @keyframes seeding-border-enter {
   from {
-    border-left-color: var(--task-item-border);
+    border-left-color: var(--m3-outline-variant);
   }
   to {
     border-left-color: var(--m3-success);
@@ -360,7 +401,7 @@ function onCardRelease() {
 /* The release uses M3 emphasized-decelerate for organic overshoot.     */
 .task-item.pressed {
   transform: scale(0.98);
-  border-color: var(--primary-color, #e0a422);
+  border-color: var(--color-primary);
   transition:
     transform 0.15s cubic-bezier(0.2, 0, 0, 1),
     border-color 0.15s;
@@ -372,7 +413,7 @@ function onCardRelease() {
     border-color 0.3s;
 }
 .task-name {
-  color: var(--task-item-text);
+  color: var(--m3-on-surface-variant);
   margin-bottom: 1.5rem;
   margin-right: 250px;
   overflow: hidden;
@@ -387,6 +428,25 @@ function onCardRelease() {
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-all;
+}
+/* ── Filename resolution crossfade (Vue <Transition mode="out-in">) ── */
+/* Old text fades out → new text fades in. No flash because Vue applies  */
+/* enter-from (opacity:0) BEFORE inserting the new element.              */
+/* Polling-safe: :key is the string value — same string = no transition. */
+.name-crossfade-enter-active {
+  transition:
+    opacity 0.25s cubic-bezier(0.05, 0.7, 0.1, 1),
+    transform 0.25s cubic-bezier(0.05, 0.7, 0.1, 1);
+}
+.name-crossfade-leave-active {
+  transition: opacity 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+.name-crossfade-enter-from {
+  opacity: 0;
+  transform: translateY(3px);
+}
+.name-crossfade-leave-to {
+  opacity: 0;
 }
 .file-missing-tag {
   display: inline-flex;
@@ -425,15 +485,18 @@ function onCardRelease() {
   min-height: 14px;
   color: var(--m3-on-surface-variant);
   margin-top: 8px;
+  font-variant-numeric: tabular-nums;
 }
 .progress-left {
   white-space: nowrap;
+  transition: opacity 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
 .progress-right {
   display: flex;
   gap: 8px;
   text-align: right;
   align-items: center;
+  transition: opacity 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
 .speed-text {
   display: inline-flex;
@@ -442,6 +505,15 @@ function onCardRelease() {
   font-size: 12px;
   line-height: 14px;
   white-space: nowrap;
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Pure CSS show/hide (polling-safe) ────────────────────────────── */
+/* Bypasses Vue <Transition> to avoid leave-animation loss when       */
+/* reactive polling updates child content in the same render tick.    */
+.info-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 .task-tags {
   display: flex;

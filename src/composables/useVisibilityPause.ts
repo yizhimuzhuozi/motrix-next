@@ -1,11 +1,11 @@
 /**
  * @fileoverview Pause all CSS infinite animations when the page is hidden.
  *
- * On Windows with `transparent: true`, WebView2 continues rendering even
- * when the window is minimized — DWM alpha compositing doesn't respect the
- * Page Visibility API.  This composable toggles a CSS class on `<html>`
- * that applies `animation-play-state: paused` globally, eliminating
- * needless GPU re-composition of transparent layers each frame.
+ * WebView2 on Windows continues rendering even when the window is minimized
+ * or hidden — DWM compositing doesn't fully respect the Page Visibility API.
+ * This composable toggles a CSS class on `<html>` that applies
+ * `animation-play-state: paused` globally, eliminating needless GPU
+ * re-composition each frame.
  *
  * The corresponding CSS rule lives in `variables.css`:
  *

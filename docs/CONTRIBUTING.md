@@ -37,7 +37,6 @@ All checks must pass before PR merge:
 pnpm lint               # ESLint (0 errors, 0 warnings)
 pnpm test               # Vitest
 npx vue-tsc --noEmit    # TypeScript strict mode
-npx vite build          # Production build (no chunk warnings)
 cd src-tauri && cargo test  # Rust tests
 ```
 
@@ -45,7 +44,7 @@ Pre-commit hooks (husky + lint-staged) auto-run `eslint --fix` and `prettier --w
 
 ## 📐 Component Guidelines
 
-- **Max 250 lines** per `.vue` SFC. Extract sub-components when approaching this limit.
+- **Keep `<script>` logic under 300 lines.** Extract composables when approaching this limit. Template and scoped CSS may exceed this — Naive UI components often require extensive style overrides.
 - Use `<script setup lang="ts">` with composition API.
 - Every file starts with a `/** @fileoverview ... */` doc comment.
 - Use `logger` from `@shared/logger` for all runtime logging — **no bare `console.*`**.

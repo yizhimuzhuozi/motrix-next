@@ -5,15 +5,22 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockExists = vi.fn()
+const mockCheckPathExists = vi.fn()
 vi.mock('@tauri-apps/plugin-fs', () => ({
-  exists: (...args: unknown[]) => mockExists(...args),
   remove: vi.fn(),
 }))
 
 // Mock Tauri path — join uses OS-native separator, mock with /
 vi.mock('@tauri-apps/api/path', () => ({
   join: (...parts: string[]) => Promise.resolve(parts.join('/')),
+}))
+
+// Mock invoke — routes check_path_exists to dedicated handler
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (cmd: string, args?: Record<string, unknown>) => {
+    if (cmd === 'check_path_exists') return mockCheckPathExists(args)
+    return Promise.reject(new Error(`Unexpected invoke: ${cmd}`))
+  },
 }))
 
 const { runStaleRecordCleanup } = await import('../useStaleCleanup')
@@ -25,7 +32,7 @@ describe('runStaleRecordCleanup', () => {
 
   it('removes records whose files no longer exist', async () => {
     // 3 records: file1 exists, file2 gone, file3 gone
-    mockExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValueOnce(false)
+    mockCheckPathExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValueOnce(false)
 
     const records = [
       { gid: 'g1', name: 'exists.zip', dir: '/dl', status: 'complete' },
@@ -42,7 +49,7 @@ describe('runStaleRecordCleanup', () => {
   })
 
   it('does nothing when all files exist', async () => {
-    mockExists.mockResolvedValue(true)
+    mockCheckPathExists.mockResolvedValue(true)
 
     const records = [{ gid: 'g1', name: 'a.zip', dir: '/dl', status: 'complete' }]
 
@@ -64,7 +71,7 @@ describe('runStaleRecordCleanup', () => {
   })
 
   it('handles errors gracefully without throwing', async () => {
-    mockExists.mockRejectedValue(new Error('fs error'))
+    mockCheckPathExists.mockRejectedValue(new Error('fs error'))
 
     const records = [{ gid: 'g1', name: 'a.zip', dir: '/dl', status: 'complete' }]
 

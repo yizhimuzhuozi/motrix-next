@@ -20,22 +20,29 @@ import {
   ArrowDownCircleOutline,
 } from '@vicons/ionicons5'
 import { usePreferenceStore } from '@/stores/preference'
+import { logger } from '@shared/logger'
+import type { ResolvedUpdateChannel, UpdateChannel } from '@shared/types'
 import {
   isActionDisabled,
   getActionLabel,
   getActionType,
   getActionTarget,
+  resolvePhaseAfterDownload,
+  shouldAllowUpdateDialogClose,
   isUpdateRollback,
   calcProgressPercent,
   bytesToMB,
   getUpdateProxy as resolveProxy,
   formatUpdateError,
+  type DownloadUpdateResult,
 } from '@/composables/useUpdateFlow'
 
 interface UpdateMetadata {
   version: string
   body: string | null
   date: string | null
+  channel: ResolvedUpdateChannel
+  requestedChannel: UpdateChannel
 }
 
 interface UpdateProgressStarted {
@@ -74,8 +81,18 @@ const errorMsg = ref('')
 const downloadTotal = ref(0)
 const downloadReceived = ref(0)
 const downloadCancelled = ref(false)
-const activeChannel = ref('stable')
+const activeChannel = ref<ResolvedUpdateChannel>('stable')
+const requestedChannel = ref<UpdateChannel>('stable')
 let progressUnlisten: UnlistenFn | null = null
+const dialogClosable = computed(() => shouldAllowUpdateDialogClose(phase.value))
+const displayChannel = computed<UpdateChannel>(() =>
+  requestedChannel.value === 'latest' ? 'latest' : activeChannel.value,
+)
+const channelTagType = computed(() => {
+  if (displayChannel.value === 'beta') return 'warning'
+  if (displayChannel.value === 'latest') return 'info'
+  return 'success'
+})
 
 const progressPercent = computed(() => calcProgressPercent(downloadReceived.value, downloadTotal.value))
 
@@ -101,10 +118,12 @@ const downloadedMB = computed(() => bytesToMB(downloadReceived.value))
 const totalMB = computed(() => bytesToMB(downloadTotal.value))
 
 async function open(channel?: string) {
-  const ch = channel || preferenceStore.config.updateChannel || 'stable'
-  activeChannel.value = ch
+  const ch = (channel || preferenceStore.config.updateChannel || 'stable') as UpdateChannel
+  requestedChannel.value = ch
+  activeChannel.value = ch === 'beta' ? 'beta' : 'stable'
   show.value = true
   phase.value = 'checking'
+  logger.info('Updater', `checking channel=${ch}`)
   version.value = ''
   releaseNotes.value = ''
   errorMsg.value = ''
@@ -122,15 +141,22 @@ async function open(channel?: string) {
     if (update) {
       version.value = update.version
       releaseNotes.value = update.body || ''
+      activeChannel.value = update.channel
+      requestedChannel.value = update.requestedChannel
       phase.value = 'available'
+      logger.info(
+        'Updater',
+        `update available: v${currentVersion.value} → v${update.version} channel=${update.channel} requested=${update.requestedChannel}`,
+      )
     } else {
+      logger.info('Updater', `up-to-date v${currentVersion.value}`)
       phase.value = 'up-to-date'
     }
+    preferenceStore.updateAndSave({ lastCheckUpdateTime: Date.now() })
   } catch (e) {
+    logger.error('Updater', e)
     errorMsg.value = formatUpdateError(e)
     phase.value = 'error'
-  } finally {
-    preferenceStore.updateAndSave({ lastCheckUpdateTime: Date.now() })
   }
 }
 
@@ -140,6 +166,7 @@ async function startDownload() {
   downloadTotal.value = 0
   downloadCancelled.value = false
   const ch = activeChannel.value
+  logger.info('Updater', `downloading v${version.value} channel=${ch}`)
 
   // Listen for progress events from Rust
   progressUnlisten = await listen<UpdateProgressEvent>('update-progress', (event) => {
@@ -155,12 +182,14 @@ async function startDownload() {
   })
 
   try {
-    await invoke('download_update', { channel: ch, proxy: getUpdateProxy() })
+    const result = await invoke<DownloadUpdateResult>('download_update', { channel: ch, proxy: getUpdateProxy() })
     if (!downloadCancelled.value) {
-      phase.value = 'ready'
+      phase.value = resolvePhaseAfterDownload(result.status)
+      logger.info('Updater', `download complete: status=${result.status}`)
     }
   } catch (e) {
     if (!downloadCancelled.value) {
+      logger.error('Updater', e)
       errorMsg.value = formatUpdateError(e)
       phase.value = 'error'
     }
@@ -173,6 +202,7 @@ async function startDownload() {
 function cancelDownload() {
   downloadCancelled.value = true
   phase.value = 'available'
+  logger.info('Updater', 'download cancelled by user')
   invoke('cancel_update').catch(() => {
     /* best-effort: Rust side may have already finished */
   })
@@ -181,13 +211,23 @@ function cancelDownload() {
 async function handleInstallAndRelaunch() {
   phase.value = 'installing'
   const ch = activeChannel.value
-  await invoke('apply_update', { channel: ch, proxy: getUpdateProxy() })
-  relaunch()
+  logger.info('Updater', `applying update v${version.value} channel=${ch}`)
+  try {
+    await invoke('apply_update', { channel: ch, proxy: getUpdateProxy() })
+    relaunch()
+  } catch (e) {
+    // Engine recovery is handled entirely by Rust (on_engine_ready).
+    // engine-crashed → useAppEvents listener handles UI overlay state.
+    // This catch block only manages UpdateDialog UI state.
+    logger.error('Updater', e)
+    errorMsg.value = formatUpdateError(e)
+    phase.value = 'error'
+  }
 }
 
 function close() {
-  if (phase.value === 'downloading') {
-    cancelDownload()
+  if (!shouldAllowUpdateDialogClose(phase.value)) {
+    return
   }
   show.value = false
 }
@@ -202,10 +242,10 @@ defineExpose({ open })
 <template>
   <NModal
     v-model:show="show"
-    :mask-closable="phase !== 'downloading' && phase !== 'installing'"
-    :close-on-esc="phase !== 'downloading' && phase !== 'installing'"
+    :mask-closable="dialogClosable"
+    :close-on-esc="dialogClosable"
     transform-origin="center"
-    :closable="phase !== 'downloading' && phase !== 'installing'"
+    :closable="dialogClosable"
     @update:show="
       (v: boolean) => {
         if (!v) close()
@@ -216,11 +256,11 @@ defineExpose({ open })
       <div class="update-dialog-header">
         <div class="update-dialog-title-group">
           <span class="update-dialog-title">{{ t('preferences.auto-update') }}</span>
-          <NTag :type="activeChannel === 'beta' ? 'warning' : 'success'" size="small" round :bordered="false">
-            {{ t(`preferences.update-channel-${activeChannel}`) }}
+          <NTag :type="channelTagType" size="small" round :bordered="false">
+            {{ t(`preferences.update-channel-${displayChannel}`) }}
           </NTag>
         </div>
-        <button class="update-dialog-close" @click="close">×</button>
+        <button class="update-dialog-close" :disabled="!dialogClosable" @click="close">×</button>
       </div>
       <div class="update-dialog-body">
         <Transition name="phase-switch" mode="out-in">
@@ -305,7 +345,7 @@ defineExpose({ open })
       </div>
       <!-- Fixed action footer — always rendered with 2 buttons -->
       <div class="update-dialog-footer">
-        <NButton style="min-width: 120px" @click="close">
+        <NButton style="min-width: 120px" :disabled="!dialogClosable" @click="close">
           {{ t('app.close') }}
         </NButton>
         <NButton
@@ -326,7 +366,7 @@ defineExpose({ open })
 <style scoped>
 .update-dialog {
   width: 460px;
-  background: var(--n-color, #1e1e2e);
+  background: var(--n-color, var(--m3-surface-container-high));
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 12px 40px var(--m3-shadow);
@@ -341,12 +381,12 @@ defineExpose({ open })
 .update-dialog-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--n-text-color, #fff);
+  color: var(--n-text-color, var(--m3-on-surface));
 }
 .update-dialog-close {
   background: none;
   border: none;
-  color: var(--n-text-color, #aaa);
+  color: var(--n-text-color, var(--m3-outline));
   font-size: 20px;
   cursor: pointer;
   padding: 0 4px;
@@ -461,7 +501,7 @@ defineExpose({ open })
 }
 .version-old {
   background: color-mix(in srgb, var(--n-text-color, #666) 12%, transparent);
-  color: var(--n-text-color, #999);
+  color: var(--n-text-color, var(--m3-outline));
   opacity: 0.7;
 }
 .version-new {
@@ -491,7 +531,7 @@ defineExpose({ open })
   font-size: 12.5px;
   line-height: 1.6;
   opacity: 0.65;
-  color: var(--n-text-color, #ccc);
+  color: var(--n-text-color, var(--m3-on-surface-variant));
 }
 .update-notes-text :deep(h2) {
   font-size: 13px;
@@ -598,7 +638,7 @@ defineExpose({ open })
   color: var(--m3-error);
 }
 .update-notes-text :deep(.markdown-alert p:not(.markdown-alert-title)) {
-  color: var(--n-text-color, #ccc);
+  color: var(--n-text-color, var(--m3-on-surface-variant));
 }
 
 /* ── Horizontal rule ───────────────────────────────────────────────── */
@@ -641,7 +681,7 @@ defineExpose({ open })
 /* ── Emphasis ──────────────────────────────────────────────────────── */
 .update-notes-text :deep(strong) {
   font-weight: 600;
-  color: var(--n-text-color, #eee);
+  color: var(--n-text-color, var(--m3-on-surface));
 }
 
 .update-error-detail {

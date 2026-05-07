@@ -2,25 +2,29 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use tauri_plugin_shell::process::CommandChild;
 
+/// Converts a [`Path`] to a string safe for passing to external processes.
+///
+/// On Windows, Tauri's `path().resolve()` and `app_data_dir()` return
+/// extended-length paths prefixed with `\\?\` (see [tauri-apps/tauri#5850]).
+/// External processes like aria2c (MinGW-compiled) cannot parse this prefix —
+/// their `_wstat()` / file-open calls fail, causing immediate exit.
+///
+/// Uses [`dunce::simplified`] — the Rust ecosystem's standard solution
+/// (50M+ downloads) — to strip the `\\?\` prefix when the path can be
+/// safely expressed in legacy Win32 format.  On non-Windows platforms
+/// this is a zero-cost no-op.
+///
+/// [tauri-apps/tauri#5850]: https://github.com/tauri-apps/tauri/issues/5850
+/// [`dunce::simplified`]: https://docs.rs/dunce/latest/dunce/fn.simplified.html
+pub(crate) fn path_to_safe_string(path: &std::path::Path) -> String {
+    dunce::simplified(path).to_string_lossy().to_string()
+}
+
 /// Strips ANSI escape sequences (color codes) from a string.
 /// aria2c emits colored output (e.g., `\x1b[1;31mERROR\x1b[0m`) which
-/// produces garbage in log files. This removes all CSI sequences.
+/// produces garbage in log files.
 pub(crate) fn strip_ansi(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut in_escape = false;
-    for ch in input.chars() {
-        if in_escape {
-            // CSI sequences end with a letter (A-Z, a-z)
-            if ch.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if ch == '\x1b' {
-            in_escape = true;
-        } else {
-            out.push(ch);
-        }
-    }
-    out
+    strip_ansi_escapes::strip_str(input)
 }
 
 /// Logs aria2c stdout with semantic log levels based on aria2's own tags.
@@ -142,6 +146,14 @@ mod tests {
     }
 
     #[test]
+    fn strip_ansi_removes_osc_sequences() {
+        let input = "title\x1b]0;aria2c\x07 [NOTICE]";
+        let clean = strip_ansi(input);
+        assert_eq!(clean, "title [NOTICE]");
+        assert!(!clean.contains('\x1b'));
+    }
+
+    #[test]
     fn strip_ansi_partial_escape_at_eof() {
         // Unterminated escape sequence: ESC [ but no closing alpha char
         let input = "trailing\x1b[";
@@ -197,5 +209,100 @@ mod tests {
         let _gen = state.next_generation();
         // Incrementing generation must NOT touch intentional_stop
         assert!(state.intentional_stop.load(Ordering::SeqCst));
+    }
+
+    // ── path_to_safe_string tests ───────────────────────────────────────
+    //
+    // These tests verify that paths produced by Tauri's path() API are
+    // normalized to a format that external processes (aria2c) can consume.
+    // On Windows, Tauri returns \\?\ prefixed extended-length paths that
+    // MinGW-compiled aria2c cannot parse (tauri-apps/tauri#5850).
+
+    #[test]
+    fn safe_string_strips_extended_length_prefix() {
+        let p = std::path::Path::new(r"\\?\D:\Program Files\MotrixNext\binaries\aria2.conf");
+        let result = path_to_safe_string(p);
+        // On Windows: \\?\ prefix must be stripped for aria2c compatibility.
+        // On non-Windows: \\?\ has no special meaning — dunce is a no-op.
+        #[cfg(target_os = "windows")]
+        assert!(
+            !result.starts_with(r"\\?\"),
+            "expected no \\\\?\\ prefix, got: {result}"
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert!(!result.is_empty(), "must not crash on non-Windows");
+    }
+
+    #[test]
+    fn safe_string_produces_correct_windows_path_after_strip() {
+        let p = std::path::Path::new(r"\\?\C:\Users\test\AppData\Local\download.session");
+        let result = path_to_safe_string(p);
+        // After stripping, the result must be a valid legacy Windows path
+        #[cfg(target_os = "windows")]
+        assert_eq!(result, r"C:\Users\test\AppData\Local\download.session");
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On non-Windows, dunce::simplified is a no-op on the Path as
+            // constructed — it just returns the string representation.
+            // The key invariant is that it does NOT crash.
+            assert!(!result.is_empty());
+        }
+    }
+
+    #[test]
+    fn safe_string_preserves_normal_windows_path() {
+        let p = std::path::Path::new(r"D:\Program Files\MotrixNext\binaries\aria2.conf");
+        let result = path_to_safe_string(p);
+        assert_eq!(result, p.to_string_lossy().to_string());
+    }
+
+    #[test]
+    fn safe_string_preserves_unix_path() {
+        let p = std::path::Path::new("/usr/local/share/motrix-next/binaries/aria2.conf");
+        let result = path_to_safe_string(p);
+        assert_eq!(result, "/usr/local/share/motrix-next/binaries/aria2.conf");
+    }
+
+    #[test]
+    fn safe_string_handles_empty_path() {
+        let p = std::path::Path::new("");
+        let result = path_to_safe_string(p);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn safe_string_preserves_unc_network_path() {
+        // UNC network paths (\\server\share) must NOT be mangled
+        let p = std::path::Path::new(r"\\server\share\dir\file.conf");
+        let result = path_to_safe_string(p);
+        assert_eq!(result, p.to_string_lossy().to_string());
+    }
+
+    #[test]
+    fn safe_string_handles_path_with_spaces() {
+        let p = std::path::Path::new(r"\\?\C:\Program Files (x86)\My App\config.conf");
+        let result = path_to_safe_string(p);
+        #[cfg(target_os = "windows")]
+        assert!(
+            !result.starts_with(r"\\?\"),
+            "prefix should be stripped even with spaces: {result}"
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert!(!result.is_empty(), "must not crash on non-Windows");
+    }
+
+    #[test]
+    fn safe_string_handles_deeply_nested_path() {
+        let p = std::path::Path::new(
+            r"\\?\D:\a\very\deeply\nested\directory\structure\that\goes\on\aria2.conf",
+        );
+        let result = path_to_safe_string(p);
+        #[cfg(target_os = "windows")]
+        assert!(
+            !result.starts_with(r"\\?\"),
+            "deeply nested path should still strip prefix: {result}"
+        );
+        #[cfg(not(target_os = "windows"))]
+        assert!(!result.is_empty(), "must not crash on non-Windows");
     }
 }

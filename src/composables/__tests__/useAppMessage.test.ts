@@ -51,14 +51,14 @@ describe('useAppMessage', () => {
     expect(mockMessageApi.info).toHaveBeenCalledOnce()
   })
 
-  it('truncates long content to TOAST_MAX_LENGTH (48 chars)', () => {
+  it('truncates long content to TOAST_MAX_LENGTH (128 chars)', () => {
     const msg = useAppMessage()
-    const longContent = 'A'.repeat(100)
+    const longContent = 'A'.repeat(200)
 
     msg.info(longContent)
 
     const displayedContent = (mockMessageApi.info.mock.calls[0] as unknown as [string])[0]
-    expect(displayedContent.length).toBeLessThanOrEqual(51) // 48 chars + "..."
+    expect(displayedContent.length).toBeLessThanOrEqual(131) // 128 chars + "..."
     expect(displayedContent).toContain('...')
   })
 

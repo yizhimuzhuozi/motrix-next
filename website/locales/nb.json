@@ -89,6 +89,8 @@
   "footer.ack": "Takk til {link} for grunnlaget",
   "footer.contributing": "Bidra",
   "footer.coc": "Atferdskodeks",
+  "footer.privacy": "Personvernerklæring",
+  "footer.signing": "Signeringspolicy",
   "footer.license": "MIT — Copyright © 2025-nåværende AnInsomniacy",
   "dl.modal.title": "Last ned for {os}",
   "dl.modal.download": "Last ned",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Kjør <code>uname -m</code> i terminalen",
   "theme.system": "System",
   "theme.light": "Lys",
-  "theme.dark": "Mørk"
+  "theme.dark": "Mørk",
+  "hero.stars": "Stars",
+  "hero.downloads": "Nedlastinger",
+  "hero.version": "Siste",
+  "starHistory.title": "Star-historikk"
 }

@@ -89,6 +89,8 @@
   "footer.ack": "{link} が基礎を築いてくれたことに感謝",
   "footer.contributing": "貢献",
   "footer.coc": "行動規範",
+  "footer.privacy": "プライバシーポリシー",
+  "footer.signing": "署名ポリシー",
   "footer.license": "MIT — Copyright © 2025-現在 AnInsomniacy",
   "dl.modal.title": "{os} 版をダウンロード",
   "dl.modal.download": "ダウンロード",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "ターミナルで <code>uname -m</code> を実行",
   "theme.system": "システム",
   "theme.light": "ライト",
-  "theme.dark": "ダーク"
+  "theme.dark": "ダーク",
+  "hero.stars": "Stars",
+  "hero.downloads": "ダウンロード",
+  "hero.version": "最新",
+  "starHistory.title": "Star 推移"
 }

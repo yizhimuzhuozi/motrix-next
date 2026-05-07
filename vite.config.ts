@@ -19,11 +19,15 @@ export default defineConfig(async () => ({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@shared': resolve(__dirname, 'src/shared'),
+      path: 'path-browserify',
     },
   },
   clearScreen: false,
   build: {
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+      },
       output: {
         manualChunks: {
           'naive-ui': ['naive-ui'],

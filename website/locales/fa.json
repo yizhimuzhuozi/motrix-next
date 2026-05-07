@@ -89,6 +89,8 @@
   "footer.ack": "سپاس از {link} برای پی‌ریزی",
   "footer.contributing": "مشارکت",
   "footer.coc": "آیین‌نامه رفتار",
+  "footer.privacy": "سیاست حفظ حریم خصوصی",
+  "footer.signing": "سیاست امضای کد",
   "footer.license": "MIT — حق نشر © ۲۰۲۵-اکنون AnInsomniacy",
   "dl.modal.title": "دانلود برای {os}",
   "dl.modal.download": "دانلود",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "دستور <code>uname -m</code> را در ترمینال اجرا کنید",
   "theme.system": "سیستم",
   "theme.light": "روشن",
-  "theme.dark": "تاریک"
+  "theme.dark": "تاریک",
+  "hero.stars": "Stars",
+  "hero.downloads": "دانلودها",
+  "hero.version": "آخرین",
+  "starHistory.title": "Star تاریخچه"
 }

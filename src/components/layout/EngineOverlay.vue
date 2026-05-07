@@ -42,8 +42,10 @@ type Phase = 'recovering' | 'recovered' | 'failed'
 const phase = ref<Phase>('recovering')
 const attempt = ref(0)
 const statusKey = ref<'engine-recovering' | 'engine-verifying-stability'>('engine-recovering')
+const rpcPort = computed(() => Number(preferenceStore.config.rpcListenPort) || 16800)
 
-// ── Right action button state machine ─────────────────────────────────
+// ── Button label state machines ───────────────────────────────────────
+const dismissLabel = computed(() => (phase.value === 'recovering' ? 'app.cancel' : 'app.close'))
 const actionLabel = computed(() => {
   switch (phase.value) {
     case 'recovering':
@@ -158,8 +160,8 @@ watch(
 <template>
   <NModal
     :show="show"
-    :mask-closable="phase !== 'recovering'"
-    :close-on-esc="phase !== 'recovering'"
+    mask-closable
+    close-on-esc
     transform-origin="center"
     @update:show="
       (v: boolean) => {
@@ -204,8 +206,8 @@ watch(
             </div>
             <NText class="engine-main-text">{{ t('app.engine-unrecoverable') }}</NText>
             <div class="engine-warning-box">
-              <NText depth="3" class="engine-hint">
-                {{ t('app.engine-dismiss-warning') }}
+              <NText depth="3" class="engine-hint engine-port-hint">
+                {{ t('app.engine-port-conflict-hint', { port: rpcPort }) }}
               </NText>
             </div>
           </div>
@@ -213,7 +215,9 @@ watch(
       </div>
       <div class="engine-dialog-footer">
         <NButton style="min-width: 120px" @click="dismiss">
-          {{ t('app.close') }}
+          <Transition name="status-text" mode="out-in">
+            <span :key="dismissLabel">{{ t(dismissLabel) }}</span>
+          </Transition>
         </NButton>
         <NButton
           class="action-btn"
@@ -234,7 +238,7 @@ watch(
 <style scoped>
 .engine-dialog {
   width: 420px;
-  background: var(--n-color, #1e1e2e);
+  background: var(--n-color, var(--m3-surface-container-high));
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 12px 40px var(--m3-shadow);
@@ -249,12 +253,12 @@ watch(
 .engine-dialog-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--n-text-color, #fff);
+  color: var(--n-text-color, var(--m3-on-surface));
 }
 .engine-dialog-close {
   background: none;
   border: none;
-  color: var(--n-text-color, #aaa);
+  color: var(--n-text-color, var(--m3-outline));
   font-size: 20px;
   cursor: pointer;
   padding: 0 4px;
@@ -268,7 +272,7 @@ watch(
 .engine-dialog-body {
   position: relative;
   padding: 30px 30px 20px;
-  height: 200px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -313,10 +317,14 @@ watch(
 .engine-hint {
   font-size: 12px;
 }
+.engine-port-hint {
+  display: block;
+  white-space: pre-line;
+}
 .engine-attempt-counter {
   font-size: 14px;
   font-weight: 500;
-  color: var(--n-text-color-3, rgba(255, 255, 255, 0.38));
+  color: var(--n-text-color-3, var(--m3-on-surface-variant));
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -325,15 +333,18 @@ watch(
   display: inline-block;
   font-weight: 700;
   font-size: 16px;
-  color: var(--n-text-color-2, rgba(255, 255, 255, 0.6));
+  color: var(--n-text-color-2, var(--m3-on-surface));
   min-width: 1em;
   text-align: center;
 }
 .engine-warning-box {
   background: color-mix(in srgb, var(--m3-error) 6%, transparent);
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 14px 16px;
   max-width: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Phase switch transitions (same as UpdateDialog) */

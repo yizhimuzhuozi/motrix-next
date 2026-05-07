@@ -10,7 +10,7 @@
  *   5. Ignore tasks with errorCode '0' (not a real error).
  */
 import { describe, it, expect, vi } from 'vitest'
-import { createTaskNotifier } from '../taskNotifications'
+import { createTaskNotifier } from '../task/notifications'
 import type { Aria2Task, TaskStatus } from '@shared/types'
 
 const makeMockTask = (gid: string, status: TaskStatus = 'active', extra: Partial<Aria2Task> = {}): Aria2Task => ({

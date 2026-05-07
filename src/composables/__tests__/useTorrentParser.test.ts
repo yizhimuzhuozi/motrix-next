@@ -1,22 +1,27 @@
 /** @fileoverview Unit tests for useTorrentParser composable. */
 import { describe, it, expect } from 'vitest'
+import bencode from 'bencode'
 import { parseTorrentBuffer, uint8ToBase64 } from '../useTorrentParser'
 
-// Minimal bencode mock
-const mockBencode = {
-  decode: (_data: Uint8Array | ArrayBuffer | Buffer | string): Record<string, unknown> => ({
-    info: {
-      name: new TextEncoder().encode('test-file.txt'),
-      length: 12345,
-    },
-  }),
-  encode: (_data: Record<string, unknown>) => new Uint8Array([1, 2, 3, 4]),
+function encodeTorrent(info: Record<string, unknown>): Uint8Array {
+  return bencode.encode({
+    announce: new TextEncoder().encode('https://tracker.example.com/announce'),
+    info,
+  })
 }
 
 describe('useTorrentParser', () => {
   describe('parseTorrentBuffer', () => {
     it('parses single-file torrent', async () => {
-      const result = await parseTorrentBuffer(new Uint8Array([]), mockBencode)
+      const torrent = encodeTorrent({
+        name: new TextEncoder().encode('test-file.txt'),
+        length: 12345,
+        'piece length': 16_384,
+        pieces: new Uint8Array(20),
+      })
+
+      const result = await parseTorrentBuffer(torrent)
+
       expect(result).not.toBeNull()
       expect(result!.files).toHaveLength(1)
       expect(result!.files[0].path).toBe('test-file.txt')
@@ -25,19 +30,18 @@ describe('useTorrentParser', () => {
     })
 
     it('parses multi-file torrent', async () => {
-      const multiFileBencode = {
-        ...mockBencode,
-        decode: () => ({
-          info: {
-            name: new TextEncoder().encode('folder'),
-            files: [
-              { path: [new TextEncoder().encode('file1.txt')], length: 100 },
-              { path: [new TextEncoder().encode('file2.txt')], length: 200 },
-            ],
-          },
-        }),
-      }
-      const result = await parseTorrentBuffer(new Uint8Array([]), multiFileBencode)
+      const torrent = encodeTorrent({
+        name: new TextEncoder().encode('folder'),
+        files: [
+          { path: [new TextEncoder().encode('file1.txt')], length: 100 },
+          { path: [new TextEncoder().encode('file2.txt')], length: 200 },
+        ],
+        'piece length': 16_384,
+        pieces: new Uint8Array(20),
+      })
+
+      const result = await parseTorrentBuffer(torrent)
+
       expect(result).not.toBeNull()
       expect(result!.files).toHaveLength(2)
       expect(result!.files[0].path).toBe('file1.txt')
@@ -47,11 +51,7 @@ describe('useTorrentParser', () => {
     })
 
     it('returns null when info is missing', async () => {
-      const noInfoBencode = {
-        ...mockBencode,
-        decode: () => ({}),
-      }
-      const result = await parseTorrentBuffer(new Uint8Array([]), noInfoBencode)
+      const result = await parseTorrentBuffer(bencode.encode({ announce: new Uint8Array([]) }))
       expect(result).toBeNull()
     })
   })

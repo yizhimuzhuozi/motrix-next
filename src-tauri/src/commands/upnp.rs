@@ -9,6 +9,7 @@ pub async fn start_upnp_mapping(
     bt_port: u16,
     dht_port: u16,
 ) -> Result<serde_json::Value, AppError> {
+    log::info!("upnp:start bt_port={bt_port} dht_port={dht_port}");
     crate::upnp::start_mapping(state.inner(), bt_port, dht_port)
         .await
         .map_err(AppError::Upnp)
@@ -16,6 +17,7 @@ pub async fn start_upnp_mapping(
 
 #[tauri::command]
 pub async fn stop_upnp_mapping(state: tauri::State<'_, UpnpState>) -> Result<(), AppError> {
+    log::info!("upnp:stop");
     crate::upnp::stop_mapping(state.inner()).await;
     Ok(())
 }

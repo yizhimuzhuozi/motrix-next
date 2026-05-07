@@ -1,21 +1,13 @@
 /**
  * @fileoverview Tests for MTooltip — the project's tooltip wrapper component.
  *
- * MTooltip wraps Naive UI's NTooltip with an MD3-standard three-phase delay
- * model (warmup → cooldown → reshow), ensuring consistent tooltip behavior
- * across the entire application.
+ * MTooltip wraps Naive UI's NTooltip with a fixed delay (500 ms by default),
+ * ensuring consistent tooltip timing across the entire application.
  *
- * The three-phase model:
- *   1. **Warmup (500ms)** — first hover waits 500ms before showing tooltip
- *   2. **Cooldown (1500ms)** — after hiding, a 1500ms window stays "warm"
- *   3. **Reshow (0ms)** — during cooldown, moving to another tooltip shows
- *      it immediately without waiting for the full warmup delay
- *
- * HONESTY NOTE: These tests exercise the real delay computation logic via
- * vi.useFakeTimers.  NTooltip is mocked at the module level because JSDOM
- * can't render Naive UI's popover positioning layer.
+ * HONESTY NOTE: These tests exercise the real delay logic.  NTooltip is mocked
+ * at the module level because JSDOM can't render Naive UI's popover layer.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { h } from 'vue'
 
@@ -39,17 +31,11 @@ vi.mock('naive-ui', async () => {
   }
 })
 
-import { TOOLTIP_DEFAULTS, computeDelay, markTooltipHidden, resetTooltipState } from '@/components/common/MTooltip.vue'
+import { TOOLTIP_DEFAULTS } from '@/components/common/MTooltip.vue'
 import MTooltip from '@/components/common/MTooltip.vue'
-
-// ── Lifecycle ──────────────────────────────────────────────────────
-beforeEach(() => {
-  resetTooltipState()
-})
 
 afterEach(() => {
   vi.restoreAllMocks()
-  vi.useRealTimers()
 })
 
 describe('MTooltip', () => {
@@ -73,10 +59,6 @@ describe('MTooltip', () => {
   describe('TOOLTIP_DEFAULTS export', () => {
     it('exports default delay of 500ms', () => {
       expect(TOOLTIP_DEFAULTS.delay).toBe(500)
-    })
-
-    it('exports cooldown of 1500ms', () => {
-      expect(TOOLTIP_DEFAULTS.cooldown).toBe(1500)
     })
   })
 
@@ -158,62 +140,15 @@ describe('MTooltip', () => {
     })
   })
 
-  // ── Warmup / Cooldown / Reshow state machine ────────────────────
-  describe('warmup / cooldown / reshow state machine', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-      resetTooltipState()
-    })
+  // ── Fixed delay (no state machine) ──────────────────────────────
+  describe('fixed delay behavior', () => {
+    it('always uses props.delay regardless of mount/unmount cycles', () => {
+      const w1 = mountMTooltip()
+      expect(findInnerTooltip(w1).props('delay')).toBe(500)
+      w1.unmount()
 
-    it('computeDelay returns full warmup delay when cold (no recent tooltip)', () => {
-      expect(computeDelay(500)).toBe(500)
-    })
-
-    it('computeDelay returns 0 during cooldown window (reshow behavior)', () => {
-      markTooltipHidden()
-      expect(computeDelay(500)).toBe(0)
-    })
-
-    it('computeDelay returns full delay after cooldown expires', () => {
-      markTooltipHidden()
-      vi.advanceTimersByTime(TOOLTIP_DEFAULTS.cooldown + 1)
-      expect(computeDelay(500)).toBe(500)
-    })
-
-    it('computeDelay uses custom delay value when cold', () => {
-      expect(computeDelay(300)).toBe(300)
-    })
-
-    it('reshow still returns 0 even with custom delay during cooldown', () => {
-      markTooltipHidden()
-      expect(computeDelay(300)).toBe(0)
-    })
-
-    it('cooldown window resets on each markTooltipHidden call', () => {
-      markTooltipHidden()
-
-      vi.advanceTimersByTime(1000)
-      expect(computeDelay(500)).toBe(0) // Still warm
-
-      markTooltipHidden() // Reset
-
-      vi.advanceTimersByTime(1000)
-      expect(computeDelay(500)).toBe(0) // Still warm (1000ms < 1500ms from reset)
-
-      vi.advanceTimersByTime(501)
-      expect(computeDelay(500)).toBe(500) // Cold again
-    })
-
-    it('computeDelay returns full delay at exactly the cooldown boundary', () => {
-      markTooltipHidden()
-      vi.advanceTimersByTime(TOOLTIP_DEFAULTS.cooldown)
-      expect(computeDelay(500)).toBe(500)
-    })
-
-    it('computeDelay returns 0 at 1ms before cooldown boundary', () => {
-      markTooltipHidden()
-      vi.advanceTimersByTime(TOOLTIP_DEFAULTS.cooldown - 1)
-      expect(computeDelay(500)).toBe(0)
+      const w2 = mountMTooltip()
+      expect(findInnerTooltip(w2).props('delay')).toBe(500)
     })
   })
 })

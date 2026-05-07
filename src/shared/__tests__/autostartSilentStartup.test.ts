@@ -6,13 +6,17 @@
  *   - Manual user launch → show main window
  *
  * The Tauri autostart plugin passes `--autostart` as a CLI arg when the
- * OS triggers an auto-launch.  The setup() function in lib.rs must check
- * for this arg before hiding the window or the macOS Dock icon.
+ * OS triggers an auto-launch.  The setup() function in lib.rs checks
+ * for this arg and force-hides the window before the frontend mounts.
+ *
+ * Architecture: Two-layer defense-in-depth (Rust primary + frontend secondary).
+ * See lib.rs autostart-silent-mode-guard and MainLayout.vue onMounted.
  *
  * Verifies:
  * 1. autostart plugin is initialized with `--autostart` arg (not None)
- * 2. auto-hide window block checks `--autostart` via std::env::args
+ * 2. Rust setup() has an active autostart force-hide guard
  * 3. macOS Dock-hide block also checks `--autostart`
+ * 4. StateFlags::VISIBLE is excluded from window-state
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import * as fs from 'node:fs'
@@ -50,24 +54,26 @@ describe('lib.rs — autostart-only silent startup', () => {
     })
   })
 
-  // ─── Test 2: auto-hide now handled by Vue frontend ────────────────
+  // ─── Test 2: Rust-layer active autostart force-hide ────────────────
 
-  describe('auto-hide window logic (deferred to frontend)', () => {
-    it('does NOT have a Rust-side auto-hide block (moved to frontend)', () => {
-      // The auto-hide logic was moved to MainLayout.vue onMounted.
-      // The Rust setup() no longer hides the window — it never shows it.
-      const autoHideBlock = extractAutoHideBlock(libSource)
-      // The old "Auto-hide the main window" block should be gone
-      expect(autoHideBlock).toBeNull()
+  describe('autostart force-hide window guard (Rust layer)', () => {
+    it('has an active autostart silent-mode guard in setup()', () => {
+      // The Rust setup() must actively hide the window on autostart.
+      // This is the primary defense — it runs before the frontend mounts.
+      expect(libSource).toContain('autostart silent-mode guard')
+    })
+
+    it('calls w.hide() in the guard block', () => {
+      const guardBlock = extractSilentModeGuardBlock(libSource)
+      expect(guardBlock).toBeTruthy()
+      expect(guardBlock).toContain('w.hide()')
     })
 
     it('exposes is_autostart_launch command for frontend to check', () => {
-      // The frontend uses this command to determine if it should skip show().
       expect(libSource).toContain('is_autostart_launch')
     })
 
     it('frontend checks autoHideWindow AND is_autostart_launch before showing', () => {
-      // MainLayout.vue must check both conditions before calling show()
       const mainLayout = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'layouts', 'MainLayout.vue'), 'utf-8')
       expect(mainLayout).toContain('is_autostart_launch')
       expect(mainLayout).toContain('autoHideWindow')
@@ -94,23 +100,22 @@ describe('lib.rs — autostart-only silent startup', () => {
     })
   })
 
-  // ─── Test 4: window show deferred to frontend ────────────────────
+  // ─── Test 4: window visibility controlled by Rust + frontend ─────
 
-  describe('window show deferred to frontend', () => {
-    it('does NOT call show() or set_focus() in the startup block', () => {
-      // Window visibility is now handled by the Vue frontend
-      // (MainLayout.vue onMounted) to prevent transparent-frame flash
-      // on Windows.  The Rust setup must NOT show the window.
-      const showBlock = extractStartupShowBlock(libSource)
-      // The old show block should be gone or should not contain show/focus
-      if (showBlock) {
-        expect(showBlock).not.toContain('.show()')
-        expect(showBlock).not.toContain('.set_focus()')
-      }
+  describe('window visibility architecture', () => {
+    it('excludes StateFlags::VISIBLE from window-state plugin', () => {
+      // VISIBLE must be excluded so the plugin does not restore
+      // window visibility and race with the autostart guard.
+      expect(libSource).toContain('!StateFlags::VISIBLE')
+    })
+
+    it('Rust setup has the autostart guard in setup_app function', () => {
+      const setupBlock = extractSetupBlock(libSource)
+      expect(setupBlock).toBeTruthy()
+      expect(setupBlock).toContain('autostart silent-mode guard')
     })
 
     it('exposes is_autostart_launch in the invoke_handler', () => {
-      // The frontend needs this command to check autostart status
       expect(libSource).toContain('is_autostart_launch')
     })
   })
@@ -140,29 +145,6 @@ function extractAutoStartInitBlock(source: string): string | null {
 }
 
 /**
- * Extract the auto-hide window block (the one that calls window.hide()).
- * Identified by the comment "Auto-hide the main window".
- */
-function extractAutoHideBlock(source: string): string | null {
-  const marker = 'Auto-hide the main window'
-  const idx = source.indexOf(marker)
-  if (idx === -1) return null
-  const braceStart = source.indexOf('{', idx)
-  if (braceStart === -1) return null
-  let depth = 0
-  let end = braceStart
-  for (let i = braceStart; i < source.length; i++) {
-    if (source[i] === '{') depth++
-    if (source[i] === '}') depth--
-    if (depth === 0) {
-      end = i
-      break
-    }
-  }
-  return source.slice(idx, end + 1)
-}
-
-/**
  * Extract the macOS Dock-hide block.
  * Identified by the comment "Hide Dock icon on startup".
  */
@@ -172,7 +154,6 @@ function extractDockHideBlock(source: string): string | null {
   if (idx === -1) return null
   const braceStart = source.indexOf('{', idx)
   if (braceStart === -1) return null
-  // Need to go into the outer cfg block
   let depth = 0
   let end = braceStart
   for (let i = braceStart; i < source.length; i++) {
@@ -187,17 +168,14 @@ function extractDockHideBlock(source: string): string | null {
 }
 
 /**
- * Extract the startup window-show block.
- * Identified by the comment "Show the main window now that state restoration".
+ * Extract the autostart silent-mode guard block.
+ * Identified by the comment "Autostart silent-mode guard".
  */
-function extractStartupShowBlock(source: string): string | null {
-  const marker = 'Show the main window now that state restoration'
+function extractSilentModeGuardBlock(source: string): string | null {
+  const marker = 'Autostart silent-mode guard'
   const idx = source.indexOf(marker)
   if (idx === -1) return null
-  // Find the if-let block that follows
-  const ifIdx = source.indexOf('if let Some(w)', idx)
-  if (ifIdx === -1) return null
-  const braceStart = source.indexOf('{', ifIdx)
+  const braceStart = source.indexOf('{', idx)
   if (braceStart === -1) return null
   let depth = 0
   let end = braceStart
@@ -210,4 +188,19 @@ function extractStartupShowBlock(source: string): string | null {
     }
   }
   return source.slice(idx, end + 1)
+}
+
+function extractSetupBlock(source: string): string | null {
+  const marker = 'fn setup_app'
+  const idx = source.indexOf(marker)
+  if (idx === -1) return null
+  const braceStart = source.indexOf('{', idx)
+  if (braceStart === -1) return null
+  let depth = 0
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++
+    else if (source[i] === '}') depth--
+    if (depth === 0) return source.slice(braceStart, i + 1)
+  }
+  return null
 }

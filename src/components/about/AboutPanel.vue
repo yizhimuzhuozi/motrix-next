@@ -3,11 +3,13 @@
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NModal, NIcon } from 'naive-ui'
+import MTooltip from '@/components/common/MTooltip.vue'
 import { LogoGithub, HeartOutline, DocumentTextOutline, RocketOutline } from '@vicons/ionicons5'
 import { open } from '@tauri-apps/plugin-shell'
 import { getVersion } from '@tauri-apps/api/app'
 import { getVersion as getAria2Version } from '@/api/aria2'
 import { useAppMessage } from '@/composables/useAppMessage'
+import { logger } from '@shared/logger'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -42,7 +44,8 @@ watch(
       try {
         const info = await getAria2Version()
         aria2Version.value = info.version
-      } catch {
+      } catch (e) {
+        logger.warn('AboutPanel', `aria2 version fetch failed: ${e}`)
         aria2Error.value = true
       } finally {
         aria2Loading.value = false
@@ -54,13 +57,13 @@ watch(
 const techStack = [
   {
     name: 'Tauri 2',
-    color: '#FFC131',
+    color: '#D49700',
     /* Lucide app-window — desktop application framework */
     svg: '<rect x="2" y="4" width="20" height="16" rx="2"/><line x1="8" y1="4" x2="8" y2="20"/>',
   },
   {
     name: 'Vue 3',
-    color: '#42b883',
+    color: '#2E8B57',
     /* Lucide layers — layered composition framework */
     svg: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   },
@@ -72,7 +75,7 @@ const techStack = [
   },
   {
     name: 'Naive UI',
-    color: '#63e2b7',
+    color: '#2A9D6E',
     /* Lucide leaf — nature/green brand identity */
     svg: '<path d="M11 20A7 7 0 0 1 9.8 6.9C15.5 4.9 20 .5 20 .5s-4.5 4.5-2.5 10.2A7 7 0 0 1 11 20"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
   },
@@ -109,8 +112,8 @@ async function copyToClipboard(text: string, label: string) {
   try {
     await navigator.clipboard.writeText(text)
     message.success(t('about.version-copied', { label }))
-  } catch {
-    /* Clipboard API may fail in some contexts — silently ignore. */
+  } catch (e) {
+    logger.debug('AboutPanel.clipboard', `writeText failed: ${e}`)
   }
 }
 
@@ -147,18 +150,19 @@ function openUrl(url: string) {
 
       <!-- Version Badges (stacked, prominent) -->
       <div class="about-versions stagger stagger-2">
-        <button
-          class="version-badge"
-          :title="t('about.click-to-copy')"
-          @click="copyToClipboard(`Motrix Next v${appVersion}`, 'Motrix Next')"
-        >
-          <span class="version-label">{{ t('about.app-version') }}</span>
-          <span class="version-value">v{{ appVersion }}</span>
-          <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" />
-            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" />
-          </svg>
-        </button>
+        <MTooltip>
+          <template #trigger>
+            <button class="version-badge" @click="copyToClipboard(`Motrix Next v${appVersion}`, 'Motrix Next')">
+              <span class="version-label">{{ t('about.app-version') }}</span>
+              <span class="version-value">v{{ appVersion }}</span>
+              <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" />
+              </svg>
+            </button>
+          </template>
+          {{ t('about.click-to-copy') }}
+        </MTooltip>
         <Transition name="version-swap" mode="out-in">
           <!-- Loading -->
           <div v-if="aria2Loading" key="loading" class="version-badge version-badge--loading">
@@ -177,20 +181,19 @@ function openUrl(url: string) {
             <span class="version-error">{{ t('about.unavailable') }}</span>
           </div>
           <!-- Success -->
-          <button
-            v-else
-            key="loaded"
-            class="version-badge"
-            :title="t('about.click-to-copy')"
-            @click="copyToClipboard(`aria2 v${aria2Version}`, 'aria2')"
-          >
-            <span class="version-label">{{ t('about.aria2-version') }}</span>
-            <span class="version-value">v{{ aria2Version }}</span>
-            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" />
-            </svg>
-          </button>
+          <MTooltip v-else key="loaded">
+            <template #trigger>
+              <button class="version-badge" @click="copyToClipboard(`aria2 v${aria2Version}`, 'aria2')">
+                <span class="version-label">{{ t('about.aria2-version') }}</span>
+                <span class="version-value">v{{ aria2Version }}</span>
+                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" />
+                </svg>
+              </button>
+            </template>
+            {{ t('about.click-to-copy') }}
+          </MTooltip>
         </Transition>
       </div>
 
@@ -250,12 +253,12 @@ function openUrl(url: string) {
   text-align: center;
   border-radius: 16px;
   border: 1px solid var(--m3-outline-variant);
-  background: var(--about-glass-bg);
+  background: color-mix(in srgb, var(--m3-surface-container-high) 96%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow:
     0 8px 32px var(--m3-shadow),
-    0 0 0 1px var(--about-glass-ring);
+    0 0 0 1px color-mix(in srgb, var(--m3-on-surface) 8%, transparent);
 }
 
 /* ── Close Button ─────────────────────────────────────────────────── */
@@ -385,7 +388,8 @@ function openUrl(url: string) {
   padding: 3px 10px;
   border-radius: 12px;
   color: var(--tag-color);
-  background: color-mix(in srgb, var(--tag-color) 12%, transparent);
+  background: var(--about-card-bg);
+  border: 1px solid color-mix(in srgb, var(--tag-color) 40%, transparent);
   letter-spacing: 0.3px;
 }
 .about-tag svg {

@@ -5,11 +5,10 @@
  * Uses dependency injection for store access and i18n to enable testability.
  */
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { logger } from '@shared/logger'
 import { parseTorrentBuffer, uint8ToBase64 } from '@/composables/useTorrentParser'
 import { detectKind, createBatchItem } from '@shared/utils/batchHelpers'
-import bencode from 'bencode'
 import type { BatchItem } from '@shared/types'
 
 interface FileOpsDeps {
@@ -27,13 +26,13 @@ interface FileOpsDeps {
  */
 export async function resolveFileItem(item: BatchItem, t: (key: string) => string) {
   try {
-    const bytes = await readFile(item.source)
+    const bytes = await invoke<number[]>('read_local_file', { path: item.source })
     const uint8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
     item.payload = uint8ToBase64(uint8)
 
     if (item.kind === 'torrent') {
       try {
-        const meta = await parseTorrentBuffer(uint8, bencode)
+        const meta = await parseTorrentBuffer(uint8)
         if (meta) {
           item.torrentMeta = meta
           item.selectedFileIndices = meta.files.map((f) => f.idx)
@@ -50,12 +49,56 @@ export async function resolveFileItem(item: BatchItem, t: (key: string) => strin
 }
 
 /**
- * Resolves all unresolved (pending, non-URI) batch items by reading their files.
+ * Resolves a remote file-based batch item: fetches bytes via Rust IPC
+ * (bypasses CORS), converts to base64, and parses torrent metadata.
+ *
+ * Used when the browser extension sends a remote .torrent URL via deep link.
+ * The Rust `fetch_remote_bytes` command uses reqwest with TLS, redirects,
+ * and a 16 MiB size limit.
  */
-export async function resolveUnresolvedItems(batch: BatchItem[], t: (key: string) => string) {
+export async function resolveRemoteFileItem(item: BatchItem, t: (key: string) => string, downloadProxy?: string) {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const bytes: number[] = await invoke('fetch_remote_bytes', { url: item.source, proxy: downloadProxy ?? null })
+    const uint8 = new Uint8Array(bytes)
+    item.payload = uint8ToBase64(uint8)
+
+    if (item.kind === 'torrent') {
+      try {
+        const meta = await parseTorrentBuffer(uint8)
+        if (meta) {
+          item.torrentMeta = meta
+          item.selectedFileIndices = meta.files.map((f) => f.idx)
+        }
+      } catch (e) {
+        logger.debug('AddTask.parseRemoteTorrent', e)
+      }
+    }
+  } catch (e) {
+    logger.error('AddTask.resolveRemoteFileItem', e)
+    item.status = 'failed'
+    item.error = t('task.file-load-failed')
+  }
+}
+
+/** Detect whether a source is a remote HTTP/HTTPS URL. */
+function isRemoteSource(source: string): boolean {
+  return /^https?:\/\//i.test(source)
+}
+
+/**
+ * Resolves all unresolved (pending, non-URI) batch items by reading their files.
+ * Routes remote URLs (from deep links) through Rust IPC fetch, and local
+ * file paths through Tauri FS plugin.
+ */
+export async function resolveUnresolvedItems(batch: BatchItem[], t: (key: string) => string, downloadProxy?: string) {
   for (const item of batch) {
     if (item.kind !== 'uri' && item.status === 'pending' && item.payload === item.source) {
-      await resolveFileItem(item, t)
+      if (isRemoteSource(item.source)) {
+        await resolveRemoteFileItem(item, t, downloadProxy)
+      } else {
+        await resolveFileItem(item, t)
+      }
     }
   }
 }

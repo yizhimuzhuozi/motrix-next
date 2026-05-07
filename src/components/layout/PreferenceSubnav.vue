@@ -3,7 +3,7 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon } from 'naive-ui'
-import { SettingsOutline, ConstructOutline } from '@vicons/ionicons5'
+import { SettingsOutline, DownloadOutline, MagnetOutline, GlobeOutline, ConstructOutline } from '@vicons/ionicons5'
 import { type Component } from 'vue'
 
 const { t } = useI18n()
@@ -11,7 +11,10 @@ const router = useRouter()
 const route = useRoute()
 
 const items: { key: string; icon: Component; route: string }[] = [
-  { key: 'basic', icon: SettingsOutline, route: '/preference/basic' },
+  { key: 'general', icon: SettingsOutline, route: '/preference/general' },
+  { key: 'downloads', icon: DownloadOutline, route: '/preference/downloads' },
+  { key: 'bt', icon: MagnetOutline, route: '/preference/bt' },
+  { key: 'network', icon: GlobeOutline, route: '/preference/network' },
   { key: 'advanced', icon: ConstructOutline, route: '/preference/advanced' },
 ]
 
@@ -31,11 +34,19 @@ function isActive(key: string) {
     <nav class="subnav-inner" data-tauri-drag-region>
       <h3>{{ t('subnav.preferences') || 'Preferences' }}</h3>
       <ul>
-        <li v-for="item in items" :key="item.key" :class="{ active: isActive(item.key) }" @click="nav(item.route)">
-          <NIcon :size="16" class="subnav-icon">
-            <component :is="item.icon" />
-          </NIcon>
-          <span>{{ t('preferences.' + item.key) || item.key }}</span>
+        <li v-for="item in items" :key="item.key">
+          <button
+            type="button"
+            class="subnav-button"
+            :class="{ active: isActive(item.key) }"
+            :aria-current="isActive(item.key) ? 'page' : undefined"
+            @click="nav(item.route)"
+          >
+            <NIcon :size="16" class="subnav-icon">
+              <component :is="item.icon" />
+            </NIcon>
+            <span>{{ t('preferences.' + item.key) || item.key }}</span>
+          </button>
         </li>
       </ul>
     </nav>
@@ -52,7 +63,7 @@ function isActive(key: string) {
   overflow-y: auto;
 }
 .subnav-inner {
-  margin-top: 62px;
+  margin-top: var(--header-top-offset);
   padding: 0 16px;
   user-select: none;
 }
@@ -61,7 +72,7 @@ function isActive(key: string) {
   color: var(--subnav-title);
   font-weight: normal;
   line-height: 24px;
-  margin: 0 0 28px;
+  margin: 0 0 20px;
 }
 .subnav-inner ul {
   list-style: none;
@@ -71,6 +82,10 @@ function isActive(key: string) {
 }
 .subnav-inner li {
   margin-bottom: 8px;
+}
+.subnav-button {
+  width: 100%;
+  margin-bottom: 8px;
   padding: 8px 10px;
   font-size: 14px;
   line-height: 20px;
@@ -79,19 +94,27 @@ function isActive(key: string) {
   transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
   display: flex;
   align-items: center;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: none;
 }
-.subnav-inner li:hover,
-.subnav-inner li.active {
+.subnav-button:hover,
+.subnav-button.active,
+.subnav-button:focus-visible {
   background-color: var(--subnav-active-bg);
+  outline: none;
 }
-.subnav-inner li:hover span,
-.subnav-inner li:hover .subnav-icon,
-.subnav-inner li.active span,
-.subnav-inner li.active .subnav-icon {
+.subnav-button:hover span,
+.subnav-button:hover .subnav-icon,
+.subnav-button.active span,
+.subnav-button.active .subnav-icon,
+.subnav-button:focus-visible span,
+.subnav-button:focus-visible .subnav-icon {
   color: var(--subnav-active-text);
 }
-.subnav-inner li span,
-.subnav-inner li .subnav-icon {
+.subnav-button span,
+.subnav-button .subnav-icon {
   transition: color 0.2s ease;
 }
 .subnav-icon {

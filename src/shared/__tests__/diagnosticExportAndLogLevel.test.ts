@@ -2,7 +2,7 @@
  * @fileoverview Structural TDD tests for Gap 3 (diagnostic log export) and Gap 4 (log level config).
  *
  * Gap 3: Users must be able to export diagnostic logs via a single button
- *   - Rust: `export_diagnostic_logs` command in app.rs
+ *   - Rust: `export_diagnostic_logs` command in fs.rs
  *   - Rust: command registered in invoke_handler in lib.rs
  *   - Frontend: export button in Advanced.vue developer section
  *   - i18n: 'export-diagnostic-logs' key in all 26 locales
@@ -57,13 +57,13 @@ describe('Gap 3: Diagnostic log export', () => {
   let advancedVueSource: string
 
   beforeAll(() => {
-    appRsSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'commands', 'app.rs'), 'utf-8')
+    appRsSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'commands', 'fs.rs'), 'utf-8')
     libRsSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'lib.rs'), 'utf-8')
     advancedVueSource = fs.readFileSync(path.join(SRC_ROOT, 'src', 'components', 'preference', 'Advanced.vue'), 'utf-8')
   })
 
   describe('Rust command', () => {
-    it('app.rs defines an export_diagnostic_logs command', () => {
+    it('fs.rs defines an export_diagnostic_logs command', () => {
       expect(appRsSource).toContain('fn export_diagnostic_logs')
     })
 
@@ -100,6 +100,12 @@ describe('Gap 3: Diagnostic log export', () => {
     it('collects app version from package_info', () => {
       const fnBlock = appRsSource.slice(appRsSource.indexOf('fn export_diagnostic_logs'))
       expect(fnBlock).toContain('package_info')
+    })
+
+    it('sanitizes exported config instead of zipping the raw config content directly', () => {
+      const fnBlock = appRsSource.slice(appRsSource.indexOf('fn export_diagnostic_logs'))
+      expect(fnBlock).toContain('sanitize_config')
+      expect(fnBlock).not.toContain('write_all(&mut zip_writer, &config_content)')
     })
   })
 

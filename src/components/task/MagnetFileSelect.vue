@@ -8,6 +8,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NModal, NCard, NDataTable, NButton, NSpace, NEllipsis } from 'naive-ui'
 import { bytesToSize } from '@shared/utils'
+import { calcColumnWidth } from '@shared/utils/calcColumnWidth'
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui'
 import type { MagnetFileItem } from '@/composables/useMagnetFlow'
 
@@ -26,6 +27,15 @@ const { t } = useI18n()
 
 const checkedKeys = ref<DataTableRowKey[]>([])
 
+// ── Directional animation state ─────────────────────────────────────
+// Track previous values to determine slide direction:
+//   value increased → new value slides UP   (counter feels like it "grows")
+//   value decreased → new value slides DOWN (counter feels like it "shrinks")
+const prevCount = ref(0)
+const prevSize = ref(0)
+const countDirection = ref<'val-up' | 'val-down'>('val-up')
+const sizeDirection = ref<'val-up' | 'val-down'>('val-up')
+
 watch(
   () => props.files,
   (files) => {
@@ -34,31 +44,55 @@ watch(
   { immediate: true },
 )
 
-const columns = computed<DataTableColumns>(() => [
-  { type: 'selection' },
-  {
-    title: '#',
-    key: 'index',
-    width: 50,
+watch(
+  () => checkedKeys.value.length,
+  (cur, prev) => {
+    countDirection.value = cur >= prev ? 'val-up' : 'val-down'
+    prevCount.value = prev
   },
-  {
-    title: t('task.file-name') || 'File Name',
-    key: 'name',
-    ellipsis: { tooltip: true },
-  },
-  {
-    title: t('task.file-size') || 'Size',
-    key: 'length',
-    width: 110,
-    render(row: Record<string, unknown>) {
-      return bytesToSize(row.length as number)
+)
+
+const columns = computed<DataTableColumns>(() => {
+  const data = props.files
+  return [
+    { type: 'selection' },
+    {
+      title: t('task.file-index') || '#',
+      key: 'index',
+      width: calcColumnWidth({
+        title: t('task.file-index') || '#',
+        values: data.map((r) => String(r.index)),
+      }),
     },
-  },
-])
+    {
+      title: t('task.file-name') || 'File Name',
+      key: 'name',
+      ellipsis: { tooltip: true },
+    },
+    {
+      title: t('task.file-size') || 'Size',
+      key: 'length',
+      width: calcColumnWidth({
+        title: t('task.file-size') || 'Size',
+        values: data.map((r) => bytesToSize(r.length)),
+        sortable: true,
+      }),
+      sorter: (a: Record<string, unknown>, b: Record<string, unknown>) => (a.length as number) - (b.length as number),
+      render(row: Record<string, unknown>) {
+        return bytesToSize(row.length as number)
+      },
+    },
+  ]
+})
 
 const totalSize = computed(() => {
   const selected = new Set(checkedKeys.value)
   return props.files.filter((f) => selected.has(f.index)).reduce((sum, f) => sum + f.length, 0)
+})
+
+watch(totalSize, (cur, prev) => {
+  sizeDirection.value = cur >= prev ? 'val-up' : 'val-down'
+  prevSize.value = prev
 })
 
 const hasSelection = computed(() => checkedKeys.value.length > 0)
@@ -73,13 +107,31 @@ function handleCancel() {
 </script>
 
 <template>
-  <NModal :show="show" :mask-closable="false" @update:show="(v) => !v && handleCancel()">
+  <NModal
+    :show="show"
+    :mask-closable="false"
+    :close-on-esc="true"
+    :auto-focus="false"
+    transform-origin="center"
+    :transition="{ name: 'fade-scale' }"
+    @update:show="(v) => !v && handleCancel()"
+  >
     <NCard
       :title="t('task.select-files') || 'Select Files'"
       :bordered="false"
       closable
       role="dialog"
       class="magnet-file-select-card"
+      :style="{
+        maxWidth: '640px',
+        width: '85vw',
+        margin: 'auto',
+        height: '78vh',
+        display: 'flex',
+        flexDirection: 'column',
+      }"
+      :content-style="{ flex: '1', minHeight: '0', overflowY: 'auto', overflowX: 'hidden' }"
+      :segmented="{ footer: true }"
       @close="handleCancel"
     >
       <!-- Task name subtitle -->
@@ -100,13 +152,13 @@ function handleCancel() {
       <template #footer>
         <NSpace justify="space-between" align="center">
           <span class="file-summary">
-            <Transition name="val" mode="out-in">
+            <Transition :name="countDirection" mode="out-in">
               <span :key="checkedKeys.length" class="file-summary-count"
                 >{{ checkedKeys.length }}/{{ files.length }}</span
               >
             </Transition>
             <span class="file-summary-sep">—</span>
-            <Transition name="val" mode="out-in">
+            <Transition :name="sizeDirection" mode="out-in">
               <span :key="bytesToSize(totalSize)" class="file-summary-size">{{ bytesToSize(totalSize) }}</span>
             </Transition>
           </span>
@@ -125,15 +177,12 @@ function handleCancel() {
 </template>
 
 <style scoped>
-.magnet-file-select-card {
-  width: 640px;
-  max-width: 90vw;
-}
+/* Card dimensions are set via inline :style for consistency with AddTask. */
 
 .task-name-subtitle {
   margin-bottom: 12px;
   font-size: 13px;
-  color: var(--n-text-color-3, rgba(255, 255, 255, 0.38));
+  color: var(--n-text-color-3, var(--m3-on-surface-variant));
   line-height: 1.4;
 }
 
@@ -144,7 +193,7 @@ function handleCancel() {
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--n-text-color-2, rgba(255, 255, 255, 0.82));
+  color: var(--n-text-color-2, var(--m3-on-surface));
 }
 
 .file-summary-count,
@@ -156,19 +205,35 @@ function handleCancel() {
   opacity: 0.5;
 }
 
-/* Value change transition — fade + slight vertical slide */
-.val-enter-active,
-.val-leave-active {
+/* Value change transition — directional vertical slide.
+ * val-up:   new value rises from below  (used when count increases)
+ * val-down: new value drops from above  (used when count decreases) */
+.val-up-enter-active,
+.val-up-leave-active,
+.val-down-enter-active,
+.val-down-leave-active {
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.15s ease-out,
+    transform 0.15s ease-out;
 }
-.val-enter-from {
+
+/* ↑ increase: enter from below, leave upward */
+.val-up-enter-from {
   opacity: 0;
   transform: translateY(4px);
 }
-.val-leave-to {
+.val-up-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* ↓ decrease: enter from above, leave downward */
+.val-down-enter-from {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.val-down-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 </style>

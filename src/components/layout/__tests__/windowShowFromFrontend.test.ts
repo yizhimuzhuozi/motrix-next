@@ -19,7 +19,7 @@ import * as path from 'node:path'
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..')
 const TAURI_ROOT = path.resolve(PROJECT_ROOT, 'src-tauri')
 const MAIN_LAYOUT = path.join(PROJECT_ROOT, 'src', 'layouts', 'MainLayout.vue')
-const APP_RS = path.join(TAURI_ROOT, 'src', 'commands', 'app.rs')
+const APP_RS = path.join(TAURI_ROOT, 'src', 'commands', 'fs.rs')
 const LIB_RS = path.join(TAURI_ROOT, 'src', 'lib.rs')
 
 // ═══════════════════════════════════════════════════════════════════
@@ -75,7 +75,7 @@ describe('lib.rs — window show deferred to frontend', () => {
 // Group 2: Rust is_autostart_launch command
 // ═══════════════════════════════════════════════════════════════════
 
-describe('commands/app.rs — is_autostart_launch command', () => {
+describe('commands/fs.rs — is_autostart_launch command', () => {
   let source: string
 
   beforeAll(() => {
@@ -85,7 +85,7 @@ describe('commands/app.rs — is_autostart_launch command', () => {
   it('defines is_autostart_launch as a tauri command', () => {
     expect(source).toContain('is_autostart_launch')
     // Must return a bool
-    expect(source).toMatch(/fn is_autostart_launch.*bool/)
+    expect(source).toMatch(/fn is_autostart_launch.*bool/s)
   })
 
   it('checks for --autostart in command line args', () => {
@@ -147,22 +147,37 @@ describe('MainLayout.vue — show window from frontend on mount', () => {
     expect(mountedBody).toContain('is_autostart_launch')
   })
 
-  it('checks autoHideWindow preference before showing', () => {
+  it('reads autoHideWindow directly from Tauri Store IPC, not Pinia', () => {
+    // The Pinia store may not have finished hydrating when onMounted fires
+    // (loadPreference uses non-blocking .then()).  autoHideWindow must be
+    // read via Tauri Store IPC to match what the Rust guard sees.
     const mountedBody = extractOnMountedBody(source)
     expect(mountedBody).toBeTruthy()
     expect(mountedBody).toContain('autoHideWindow')
+    // Must load from Tauri store directly, not from preferenceStore
+    expect(mountedBody).toContain("load('config.json')")
+    expect(mountedBody).toContain("get<Record<string, unknown>>('preferences')")
   })
 
-  it('show + focus happens BEFORE appReady transition', () => {
-    // The window must be visible before the CSS opacity transition
-    // starts, otherwise the animation plays invisibly.
+  it('has defense-in-depth hide() when shouldHide is true', () => {
+    // When shouldHide is true, the frontend must force-hide the window
+    // as a safety net in case the Rust-layer guard missed.
     const mountedBody = extractOnMountedBody(source)
     expect(mountedBody).toBeTruthy()
-    const showIdx = mountedBody!.indexOf('.show()')
-    const readyIdx = mountedBody!.indexOf('appReady')
-    expect(showIdx).toBeGreaterThanOrEqual(0)
-    expect(readyIdx).toBeGreaterThanOrEqual(0)
-    expect(showIdx).toBeLessThan(readyIdx)
+    expect(mountedBody).toContain('.hide()')
+    expect(mountedBody).toContain('.isVisible()')
+  })
+
+  it('logs a warning when force-hiding an unexpectedly visible window', () => {
+    const mountedBody = extractOnMountedBody(source)
+    expect(mountedBody).toBeTruthy()
+    expect(mountedBody).toContain('unexpectedly visible')
+  })
+
+  it('documents two-layer defense-in-depth architecture', () => {
+    expect(source).toContain('defense-in-depth')
+    expect(source).toContain('PRIMARY')
+    expect(source).toContain('SECONDARY')
   })
 })
 

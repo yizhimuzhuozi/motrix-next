@@ -1,6 +1,15 @@
-/** @fileoverview Composable for probing BitTorrent tracker reachability via Rust backend. */
+/**
+ * @fileoverview Composable for probing BitTorrent tracker reachability via Rust backend.
+ *
+ * The Rust `probe_trackers` command probes each URL sequentially and emits
+ * a `tracker-probe-result` Tauri event per tracker as soon as it completes.
+ * This composable listens for those events to update the UI progressively,
+ * rather than blocking until all probes finish.
+ */
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { logger } from '@shared/logger'
 
 export type TrackerStatus = 'checking' | 'online' | 'offline' | 'unknown'
 
@@ -9,6 +18,12 @@ export interface TrackerRow {
   tier: number
   protocol: string
   status: TrackerStatus
+}
+
+/** Payload shape of the `tracker-probe-result` Tauri event. */
+interface TrackerProbeEvent {
+  url: string
+  status: string
 }
 
 /**
@@ -49,35 +64,52 @@ export function buildTrackerRows(announceList: string[][] | undefined): TrackerR
 
 /**
  * Reactive composable that manages tracker probe state.
- * Calls the Rust `probe_trackers` IPC command to bypass browser CORS.
+ *
+ * Calls the Rust `probe_trackers` IPC command which probes URLs sequentially
+ * and emits a `tracker-probe-result` event for each URL as it completes.
+ * The UI updates progressively — each row transitions from "checking" to
+ * its final status independently, rather than waiting for all probes to finish.
  */
 export function useTrackerProbe() {
   const statuses = ref<Record<string, TrackerStatus>>({})
   const probing = ref(false)
-  /** Generation counter to discard results from cancelled probes. */
+  /** Generation counter to discard results from cancelled or superseded probes. */
   let probeGeneration = 0
 
   async function probeAll(urls: string[]) {
     const gen = ++probeGeneration
     probing.value = true
+
+    // Mark all URLs as checking before starting
     for (const url of urls) {
       statuses.value[url] = 'checking'
     }
+
+    // Register the event listener BEFORE invoking the command to avoid
+    // a race where early results arrive before the listener is ready.
+    let unlisten: UnlistenFn | undefined
     try {
-      const result = await invoke<Record<string, string>>('probe_trackers', { urls })
-      // Discard if a newer probe or cancel has occurred
-      if (gen !== probeGeneration) return
-      for (const [url, status] of Object.entries(result)) {
+      unlisten = await listen<TrackerProbeEvent>('tracker-probe-result', (event) => {
+        // Discard if a newer probe or cancel has occurred
+        if (gen !== probeGeneration) return
+        const { url, status } = event.payload
         statuses.value[url] = status as TrackerStatus
-      }
-    } catch {
+      })
+
+      // invoke() blocks until the Rust command finishes all probes
+      await invoke<void>('probe_trackers', { urls })
+    } catch (e) {
+      logger.debug('TrackerProbe', e)
       if (gen !== probeGeneration) return
+      // Mark any remaining "checking" URLs as unknown on error
       for (const url of urls) {
         if (statuses.value[url] === 'checking') {
           statuses.value[url] = 'unknown'
         }
       }
     } finally {
+      // Always clean up the event listener to prevent memory leaks
+      unlisten?.()
       if (gen === probeGeneration) {
         probing.value = false
       }

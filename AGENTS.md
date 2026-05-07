@@ -22,26 +22,56 @@
 
 ```
 src/
-├── api/                        # Aria2 JSON-RPC client
+├── api/                        # Aria2 JSON-RPC client (frontend wrapper)
 ├── components/preference/      # Settings UI (Basic.vue, Advanced.vue, UpdateDialog.vue)
 ├── composables/                # Vue composables — business logic extracted from components
 ├── layouts/                    # Page-level layouts (MainLayout.vue)
 ├── shared/
 │   ├── types.ts                # All TypeScript interfaces (AppConfig, TauriUpdate, etc.)
-│   ├── constants.ts            # Timing constants, update channels
+│   ├── constants.ts            # DEFAULT_APP_CONFIG, proxy scopes, tracker URLs, timing constants
 │   ├── configKeys.ts           # Config key lists (userKeys, systemKeys, needRestartKeys)
+│   ├── logger.ts               # Structured logging (console + webview bridge)
+│   ├── timing.ts               # Timing constants (polling intervals, debounce delays)
+│   ├── guards.ts               # Type guard utilities
 │   ├── locales/                # 26 locale directories (see Section D)
-│   └── utils/                  # Pure utility functions
-├── stores/                     # Pinia stores (app.ts, preference.ts)
+│   └── utils/
+│       ├── configMigration.ts  # Config schema migration engine (see Section C′)
+│       ├── config.ts           # Config key-value transform utilities
+│       ├── tracker.ts          # BT tracker fetching with proxy support
+│       ├── geoip.ts            # GeoIP peer lookup (country code → flag)
+│       ├── fileCategory.ts     # File type classification by extension
+│       ├── autoArchive.ts      # Auto-archive completed tasks
+│       ├── format.ts           # Number/date/speed formatting (bytesToSize, localeDateTimeFormat)
+│       ├── task.ts             # Task status helpers (checkTaskIsBT, getTaskDisplayName)
+│       ├── peer.ts             # Peer ID parsing and client identification
+│       └── semver.ts           # Semantic version comparison for update channel
+├── stores/                     # Pinia stores (app.ts, preference.ts, history.ts, task/)
 ├── views/                      # Page-level route views
 └── main.ts                     # App entry, auto-update check
 
 src-tauri/
 ├── src/
 │   ├── lib.rs                  # Tauri builder, plugin registration, invoke_handler
+│   ├── main.rs                 # Tauri entry point
+│   ├── aria2/                  # Native Rust aria2 JSON-RPC client
+│   │   ├── mod.rs              # Module re-exports
+│   │   ├── client.rs           # WebSocket JSON-RPC client (connect, call, subscribe)
+│   │   └── types.rs            # Aria2 response types (Aria2Task, Aria2File, Aria2BtInfo, etc.)
 │   ├── commands/
-│   │   ├── app.rs              # Config, tray, menu, engine commands
-│   │   ├── updater.rs          # check_for_update, install_update commands
+│   │   ├── mod.rs              # Command module re-exports
+│   │   ├── aria2.rs            # aria2 JSON-RPC forwarding (tell_active, global_stat, etc.)
+│   │   ├── config.rs           # Config CRUD, session, factory reset commands
+│   │   ├── engine.rs           # Engine start/stop/restart commands
+│   │   ├── fs.rs               # File system ops, diagnostics, platform code
+│   │   ├── geoip.rs            # GeoIP database loading and peer IP lookup
+│   │   ├── history.rs          # History DB read/write commands
+│   │   ├── net.rs              # Network utility commands
+│   │   ├── protocol.rs         # Default protocol handler detection and registration
+│   │   ├── proxy.rs            # System proxy detection (PAC, WPAD, env)
+│   │   ├── runtime_config.rs   # RuntimeConfig refresh command
+│   │   ├── tracker.rs          # Tracker probing and protocol classification
+│   │   ├── ui.rs               # Tray, menu, dock, progress bar commands
+│   │   ├── updater.rs          # check_for_update, download_update, apply_update, cancel_update
 │   │   └── upnp.rs             # UPnP port mapping commands
 │   ├── engine/
 │   │   ├── mod.rs              # Module re-exports
@@ -49,10 +79,26 @@ src-tauri/
 │   │   ├── args.rs             # aria2 command-line argument builder
 │   │   ├── cleanup.rs          # Engine cleanup utilities
 │   │   └── state.rs            # Engine state management
+│   ├── services/
+│   │   ├── mod.rs              # Runtime services orchestration (on_engine_ready)
+│   │   ├── config.rs           # RuntimeConfig cache (refreshed per engine cycle)
+│   │   ├── stat.rs             # Global stat polling, Dock badge, Dock progress bar (custom NSProgressIndicator)
+│   │   ├── speed.rs            # Speed limit scheduler (time-of-day limits)
+│   │   └── monitor.rs          # Task lifecycle monitor, history DB persistence, event emission
+│   ├── db_guard.rs             # Database health check, corruption detection, and auto-rebuild
+│   ├── gpu_guard.rs            # GPU compatibility detection and WebView renderer fallback
+│   ├── history.rs              # HistoryDbState: Rust-side SQLite history record persistence
 │   ├── error.rs                # AppError enum (Store, Engine, Io, NotFound, Updater, Upnp)
 │   ├── menu.rs                 # Native menu builder (macOS only, cfg-gated)
-│   ├── tray.rs                 # System tray setup
+│   ├── tray.rs                 # System tray setup + native event handling (lightweight mode safe)
 │   └── upnp.rs                 # UPnP/IGD port mapping with renewal loop
+├── migrations/
+│   ├── 001_download_history.sql  # Initial history table schema
+│   └── 002_add_added_at.sql      # Added added_at column + task_birth table
+├── nsis/
+│   ├── hooks.nsh              # Windows installer hooks (compat shim + icon refresh)
+│   ├── header.bmp             # Installer header image (150×57, 24-bit BMP)
+│   └── sidebar.bmp            # Installer sidebar image (164×314, 24-bit BMP)
 ├── Cargo.toml                  # VERSION SOURCE OF TRUTH
 └── tauri.conf.json             # Tauri config (no version field — reads from Cargo.toml)
 
@@ -96,8 +142,97 @@ Follow this exact checklist:
 
 1. **`src/shared/types.ts`** — Add the field to the `AppConfig` interface with proper typing
 2. **`src/shared/configKeys.ts`** — Add the key name (kebab-case) to `userKeys` or `systemKeys` array. Without this, the value will NOT persist across restarts
-3. **`src/components/preference/Basic.vue`** or **`Advanced.vue`** — Add the UI control + add to `buildForm()` initializer + add to the `watchSyncEffect` save logic
+3. **UI binding** — For Basic settings: add to `buildForm()` initializer + `watchSyncEffect` save in `Basic.vue`. For Advanced settings: add to `buildAdvancedForm()` + `buildAdvancedSystemConfig()` in `useAdvancedPreference.ts`
 4. **All 26 locale files** — Add i18n label keys. **Must use batch Python script** (see Section D)
+5. **If modifying an existing field's format or default** — Add a migration in `configMigration.ts` (see Section C′)
+
+---
+
+## C′. Config Schema Migration
+
+`src/shared/utils/configMigration.ts` implements versioned schema migration (same pattern as `electron-store`). On each app launch, `loadPreference()` runs pending migrations before merging saved config into defaults.
+
+### How It Works
+
+- `configVersion` (integer) is stored in `config.json` alongside user preferences
+- `CONFIG_VERSION` constant defines the current schema version
+- `migrations[]` array holds ordered migration functions (index 0 = v0→v1, etc.)
+- Migrations run only when `stored version < CONFIG_VERSION`, then persist
+
+### Adding a New Migration
+
+1. Append a function to the `migrations` array in `configMigration.ts`
+2. Increment `CONFIG_VERSION` to match the new array length
+3. Update `DEFAULT_APP_CONFIG.configVersion` in `constants.ts` to match
+4. Add tests in `configMigration.test.ts`
+
+### Rules
+
+- Migrations **mutate** the config object in place
+- Migrations **must be idempotent** — safe to re-run on already-migrated data
+- Migrations **must not delete** user data without logging
+
+---
+
+## C″. Database Schema Migration
+
+`tauri_plugin_sql` manages versioned SQL migrations for `sqlite:history.db`. Migrations run automatically on app launch when the stored version is behind the latest.
+
+> **This is separate from Config Schema Migration (Section C′).** Config migrations handle `config.json` (JSON key-value preferences) in the frontend. DB migrations handle `history.db` (SQLite relational tables) in the backend. They manage different data stores in different runtimes — merging them is not practical.
+
+### How It Works
+
+- SQL migration files live in `src-tauri/migrations/` with `NNN_description.sql` naming
+- Each migration is registered as a `tauri_plugin_sql::Migration` struct in the `.add_migrations()` call in `lib.rs`
+- The plugin tracks executed versions in an internal `_sqlite_migrations` table
+- Old users receive new migrations transparently on upgrade — no manual action needed
+
+### Adding a New Migration
+
+1. Create `src-tauri/migrations/NNN_description.sql` with the SQL statements
+2. Append a `Migration` struct to the `vec![]` in `lib.rs`:
+   ```rust
+   tauri_plugin_sql::Migration {
+       version: N,
+       description: "short description",
+       sql: include_str!("../migrations/NNN_description.sql"),
+       kind: tauri_plugin_sql::MigrationKind::Up,
+   },
+   ```
+3. If the migration adds/renames columns used by the frontend, update `HistoryRecord` in `src/shared/types.ts`
+4. Update relevant SQL queries in `src/stores/history.ts`
+5. Run `cargo check` to verify the Rust compiles
+
+### Rules
+
+- Migrations **must be additive** — never DROP columns that old code may still reference
+- Use `ALTER TABLE ... ADD COLUMN` with defaults for backward compatibility
+- Use `COALESCE` in queries to handle NULL values from old rows gracefully
+- Test with both a fresh DB AND an existing DB to verify both paths work
+
+### Toast Differentiation
+
+Both migration systems show upgrade toasts on the UI, but with distinct messages:
+
+| System | i18n Key | Example (en-US) | Toast Type |
+| ------ | -------- | --------------- | ---------- |
+| Config (C′) | `app.migration-success` | "User settings schema upgraded to v2" | `success` (green) |
+| DB (C″) | `app.db-upgraded` | "Database schema upgraded to v2" | `info` (blue) |
+
+### Windows Installer Hooks (not a migration system)
+
+`src-tauri/nsis/hooks.nsh` contains one-off compatibility shims for the `currentUser` → `both` install mode transition (v3.6.1 → v3.6.2). These are NSIS-level registry fixups that run during installation, not at app launch. They are **not** a versioned migration system — once all users have upgraded past v3.6.2, the shims become safe no-ops.
+
+The hooks file defines three injection points:
+
+| Hook | Timing | Purpose |
+| ---- | ------ | ------- |
+| `MUI_CUSTOMFUNCTION_GUIINIT` | Before any installer pages | Bridges old `MANUPRODUCTKEY` registry path (`Software\motrix\…`) to new (`Software\AnInsomniacy\…`) so `PageLeaveReinstall` can locate the old uninstaller |
+| `!macro NSIS_HOOK_PREINSTALL` | Inside `Section Install`, before file copy | Redirects `$INSTDIR`/`$OUTDIR` to old install location, deletes stale HKCU uninstall entry, cleans orphaned registry keys and Program Files residuals |
+| `!macro NSIS_HOOK_POSTINSTALL` | After file copy | Refreshes Windows icon cache via `ie4uinit.exe` |
+
+> [!CAUTION]
+> **Do NOT change `bundle.publisher`, `bundle.identifier`, or `productName` after the first public release.** These values derive the NSIS `MANUFACTURER` variable and `MANUPRODUCTKEY` registry path (`Software\{MANUFACTURER}\{PRODUCTNAME}`). Changing them breaks the Windows upgrade path for all existing users and requires a new NSIS compatibility shim in `hooks.nsh`. The v3.6.2 transition required four separate fixups (issue #159) — avoid repeating this.
 
 ---
 
@@ -180,8 +315,10 @@ The CI creates this Release automatically if it doesn't exist, and uses `--clobb
 
 The Tauri JS `check()` API does **not** support runtime endpoint override. Channel switching is implemented via Rust commands:
 
-- `check_for_update(channel: String)` → dynamically builds updater with correct endpoint
-- `install_update(channel: String)` → downloads, installs, emits progress events
+- `check_for_update(channel, proxy)` → dynamically builds updater with correct endpoint
+- `download_update(channel, proxy)` → downloads update binary, emits progress events
+- `apply_update(channel)` → stops engine, installs downloaded update
+- `cancel_update()` → cancels in-progress download
 
 The user's channel preference is stored as `updateChannel` in the preference store.
 
@@ -211,7 +348,7 @@ All code changes must be finalized before starting. Execute these three steps in
 
 3. **Generate Release Title and Notes:**
 
-   Based on the commits included in this release, generate an English title and release notes following the Release Notes Conventions below. Output them in a markdown code block so the user can copy-paste directly into the GitHub Release page.
+   Based on the commits included in this release, generate an English title and release notes following the Release Notes Conventions below. Output them in **two separate markdown code blocks** — one for the title, one for the body — so the user can copy-paste each directly into the GitHub Release page.
 
 4. **User publishes on GitHub** — CI automatically builds for all 6 platforms and uploads the updater JSON.
 
@@ -252,8 +389,6 @@ Examples: `v2.0.0 — Stability & Quality Release`, `v2.0.1 — Bug Fixes`, `v2.
 ```markdown
 > [!CAUTION]
 > **Breaking change notice** (only if applicable)
-
----
 
 ## What's Changed
 
@@ -362,14 +497,6 @@ All fast checks must pass with zero errors before any PR or release.
 
 ---
 
-## I. Superpowers Skill Framework
-
-This project uses the **Superpowers** skill framework (`~/.claude/skills/using-superpowers/SKILL.md`). It enforces a discipline where AI agents **must invoke relevant skills before any action** — planning, debugging, implementing, or reviewing.
-
-**Read the skill file before starting any work.** It contains the full workflow, skill priority rules, and the complete list of available skills.
-
----
-
-## J. Testing Constraints
+## I. Testing Constraints
 
 > **DO NOT use browser tools (Playwright, browser subagent, etc.) to test this app.** Tauri renders in a native webview — `localhost:1420` in a browser lacks IPC, tray, and sidecar access. Use CLI checks (`vue-tsc`, `pnpm test`, `cargo test`) or ask the user to verify UI via `pnpm tauri dev`.

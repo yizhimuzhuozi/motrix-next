@@ -2,7 +2,7 @@
  * @fileoverview Tests for the RAF-throttled resize handler in MainLayout.
  *
  * The MainLayout component listens to `appWindow.onResized()` to track the
- * maximize state (used to remove CSS border-radius when maximized).
+ * maximize state (used by WindowControls to toggle the maximize/restore icon).
  * On macOS, the native layer fires resize events at display refresh rate
  * (60-240+ per second), and each event previously triggered an IPC call to
  * `isMaximized()` — causing an IPC storm that froze the main thread.

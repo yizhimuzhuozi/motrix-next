@@ -89,6 +89,8 @@
   "footer.ack": "Köszönet a {link}-nek az alapokért",
   "footer.contributing": "Közreműködés",
   "footer.coc": "Magatartási kódex",
+  "footer.privacy": "Adatvédelmi irányelvek",
+  "footer.signing": "Aláírási szabályzat",
   "footer.license": "MIT — Copyright © 2025-jelen AnInsomniacy",
   "dl.modal.title": "Letöltés {os} rendszerre",
   "dl.modal.download": "Letöltés",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Futtassa a <code>uname -m</code> parancsot a terminálban",
   "theme.system": "Rendszer",
   "theme.light": "Világos",
-  "theme.dark": "Sötét"
+  "theme.dark": "Sötét",
+  "hero.stars": "Stars",
+  "hero.downloads": "Letöltések",
+  "hero.version": "Legújabb",
+  "starHistory.title": "Star előzmények"
 }

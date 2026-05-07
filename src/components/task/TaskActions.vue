@@ -8,12 +8,24 @@ import { useTaskStore } from '@/stores/task'
 import { isEngineReady } from '@/api/aria2'
 import { TASK_STATUS } from '@shared/constants'
 import { checkTaskIsSeeder } from '@shared/utils/task'
+import type { Aria2Task } from '@shared/types'
 import { deleteTaskFiles } from '@/composables/useFileDelete'
-import { deleteLocalFiles, buildFilePaths } from '@/composables/useBatchDelete'
+
 import { logger } from '@shared/logger'
-import { NButton, NIcon, NCheckbox, useDialog } from 'naive-ui'
+import { NButton, NIcon, NCheckbox, NPopover, useDialog } from 'naive-ui'
 import MTooltip from '@/components/common/MTooltip.vue'
 import { useAppMessage } from '@/composables/useAppMessage'
+import { usePreferenceStore } from '@/stores/preference'
+import {
+  ACTIVE_SORT_FIELDS,
+  STOPPED_SORT_FIELDS,
+  ALL_SORT_FIELDS,
+  DEFAULT_TASK_SORT,
+  type SortDirection,
+  type ActiveSortField,
+  type StoppedSortField,
+  type AllSortField,
+} from '@/composables/useTaskSort'
 import {
   AddOutline,
   PlayOutline,
@@ -23,11 +35,67 @@ import {
   CloseOutline,
   StopCircleOutline,
   SyncOutline,
+  SwapVerticalOutline,
+  ArrowUpOutline,
+  ArrowDownOutline,
 } from '@vicons/ionicons5'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const taskStore = useTaskStore()
+const preferenceStore = usePreferenceStore()
+
+// ── Sort dropdown ─────────────────────────────────────────────────
+const currentTab = computed(() => taskStore.currentList)
+
+/** Map sort field key to its i18n label. */
+const SORT_LABELS: Record<string, string> = {
+  'added-at': 'task.sort-added-at',
+  'completed-at': 'task.sort-completed-at',
+  name: 'task.sort-name',
+  size: 'task.sort-size',
+  progress: 'task.sort-progress',
+  speed: 'task.sort-speed',
+}
+
+/** Active sort config for the current tab. */
+const currentSort = computed(() => {
+  const cfg = preferenceStore.config?.taskSort ?? DEFAULT_TASK_SORT
+  switch (currentTab.value) {
+    case 'stopped':
+      return cfg.stopped
+    case 'all':
+      return cfg.all
+    default:
+      return cfg.active
+  }
+})
+
+/** Sort field list for the current tab. */
+const currentSortFields = computed(() => {
+  switch (currentTab.value) {
+    case 'stopped':
+      return STOPPED_SORT_FIELDS
+    case 'all':
+      return ALL_SORT_FIELDS
+    default:
+      return ACTIVE_SORT_FIELDS
+  }
+})
+
+const sortPopoverVisible = ref(false)
+
+function onSortSelect(key: string) {
+  const cfg = preferenceStore.config?.taskSort ?? { ...DEFAULT_TASK_SORT }
+  const tab = currentTab.value === 'stopped' ? 'stopped' : currentTab.value === 'all' ? 'all' : 'active'
+  const current = cfg[tab]
+  // Toggle direction if same field, otherwise switch to DESC
+  const direction: SortDirection = current.field === key ? (current.direction === 'desc' ? 'asc' : 'desc') : 'desc'
+  const updated = { ...cfg, [tab]: { field: key as ActiveSortField | StoppedSortField | AllSortField, direction } }
+  preferenceStore.updateAndSave({ taskSort: updated })
+  sortPopoverVisible.value = false
+  taskStore.fetchList()
+}
 const message = useAppMessage()
 const dialog = useDialog()
 
@@ -43,11 +111,28 @@ const allGids = computed(() => taskStore.taskList.map((t: { gid: string }) => t.
 const hasSeeders = computed(() => taskStore.taskList.some(checkTaskIsSeeder))
 const hasActiveTasks = computed(() =>
   taskStore.taskList.some(
-    (t: { status: string }) => t.status === TASK_STATUS.ACTIVE || t.status === TASK_STATUS.WAITING,
+    (t: Aria2Task) => (t.status === TASK_STATUS.ACTIVE && !checkTaskIsSeeder(t)) || t.status === TASK_STATUS.WAITING,
   ),
 )
 const hasPausedTasks = computed(() =>
   taskStore.taskList.some((t: { status: string }) => t.status === TASK_STATUS.PAUSED),
+)
+
+/** active and all views show Resume/Pause/StopSeed/Delete buttons */
+const showActiveActions = computed(() => currentList.value === 'active' || currentList.value === 'all')
+
+/** stopped and all views show Purge Records button */
+const showStoppedActions = computed(() => currentList.value === 'stopped' || currentList.value === 'all')
+
+/** GIDs of live (aria2-managed) tasks only — used by Delete All in 'all' view */
+const LIVE_STATUSES = new Set([TASK_STATUS.ACTIVE, TASK_STATUS.WAITING, TASK_STATUS.PAUSED])
+const liveGids = computed(() =>
+  taskStore.taskList.filter((t: { status: string }) => LIVE_STATUSES.has(t.status)).map((t: { gid: string }) => t.gid),
+)
+
+/** Queue clear disabled state: in 'all' view, check live tasks; otherwise check all tasks */
+const deleteAllDisabled = computed(() =>
+  currentList.value === 'all' ? liveGids.value.length === 0 : allGids.value.length === 0,
 )
 
 function showAddTask() {
@@ -67,11 +152,13 @@ function onRefresh() {
 }
 
 function onDeleteAll() {
-  if (allGids.value.length === 0) return
-  const gids = [...allGids.value]
+  // In 'all' view, clear only live aria2 tasks, not DB-only history items.
+  const targetGids = currentList.value === 'all' ? [...liveGids.value] : [...allGids.value]
+  if (targetGids.length === 0) return
+  const gids = targetGids
   const deleteFiles = ref(false)
   const d = dialog.warning({
-    title: t('task.delete-task'),
+    title: t('task.delete-task-queue'),
     content: () =>
       h('div', {}, [
         h('p', { style: 'margin: 0 0 12px;' }, t('task.batch-delete-task-confirm', { count: gids.length })),
@@ -83,7 +170,7 @@ function onDeleteAll() {
               deleteFiles.value = v
             },
           },
-          { default: () => t('task.delete-task-label') },
+          { default: () => t('task.delete-queue-files-label') },
         ),
       ]),
     positiveText: t('app.yes'),
@@ -125,7 +212,10 @@ function resumeAll() {
       taskStore
         .resumeAllTask()
         .then(() => message.success(t('task.resume-all-task-success')))
-        .catch(() => message.error(t('task.resume-all-task-fail')))
+        .catch((e) => {
+          logger.warn('TaskActions.resumeAll', e)
+          message.error(t('task.resume-all-task-fail'))
+        })
     },
   })
 }
@@ -155,7 +245,8 @@ function pauseAll() {
           message.success(t('task.pause-all-task-success'))
           d.destroy()
         })
-        .catch(() => {
+        .catch((e) => {
+          logger.warn('TaskActions.pauseAll', e)
           message.error(t('task.pause-all-task-fail'))
           d.destroy()
         })
@@ -194,7 +285,10 @@ function stopAllSeeding() {
       taskStore
         .stopAllSeeding()
         .then(() => message.success(t('task.stop-all-seeding-success')))
-        .catch(() => message.error(t('task.stop-all-seeding-fail')))
+        .catch((e) => {
+          logger.warn('TaskActions.stopAllSeeding', e)
+          message.error(t('task.stop-all-seeding-fail'))
+        })
 
       // 5. Watch taskList — spin stops when ALL target gids exit seeding
       cleanupStopSeedingWatcher()
@@ -233,10 +327,6 @@ function cleanupStopSeedingWatcher() {
 onBeforeUnmount(() => cleanupStopSeedingWatcher())
 
 function purgeRecord() {
-  if (!isEngineReady()) {
-    message.warning(t('app.engine-not-ready'))
-    return
-  }
   const deleteFiles = ref(false)
   const d = dialog.warning({
     title: t('task.purge-record'),
@@ -251,7 +341,7 @@ function purgeRecord() {
               deleteFiles.value = v
             },
           },
-          { default: () => t('task.delete-task-label') },
+          { default: () => t('task.purge-record-files-label') },
         ),
       ]),
     positiveText: t('app.yes'),
@@ -263,27 +353,21 @@ function purgeRecord() {
       d.maskClosable = false
       await new Promise((r) => setTimeout(r, 50))
 
-      // Capture task info BEFORE purge (list mutates after)
-      const tasksToClean = deleteFiles.value
-        ? taskStore.taskList.map((t) => ({
-            dir: t.dir || '',
-            name: t.files?.[0]?.path?.split(/[/\\]/).pop() || '',
-          }))
-        : []
+      // Capture task refs BEFORE purge — the store list mutates after purgeTaskRecord
+      const tasksToClean = deleteFiles.value ? [...taskStore.taskList] : []
 
       await taskStore
         .purgeTaskRecord()
         .then(async () => {
-          if (deleteFiles.value && tasksToClean.length > 0) {
-            const paths = await buildFilePaths(tasksToClean)
-            const { deleted, errors } = await deleteLocalFiles(paths)
-            if (errors > 0) {
-              logger.warn('purgeRecord', `Deleted ${deleted} files, ${errors} errors`)
-            }
+          for (const task of tasksToClean) {
+            await deleteTaskFiles(task)
           }
           message.success(t('task.purge-record-success'))
         })
-        .catch(() => message.error(t('task.purge-record-fail')))
+        .catch((e) => {
+          logger.warn('TaskActions.purgeRecord', e)
+          message.error(t('task.purge-record-fail'))
+        })
     },
   })
 }
@@ -336,6 +420,47 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.new-task') || 'New Task' }}
     </MTooltip>
+    <NPopover
+      v-model:show="sortPopoverVisible"
+      trigger="click"
+      placement="bottom-start"
+      :show-arrow="false"
+      raw
+      style="padding: 0"
+    >
+      <template #trigger>
+        <NButton
+          quaternary
+          circle
+          size="small"
+          @pointerdown="onBtnPress"
+          @pointerup="onBtnRelease"
+          @pointerleave="onBtnRelease"
+        >
+          <template #icon>
+            <NIcon><SwapVerticalOutline /></NIcon>
+          </template>
+        </NButton>
+      </template>
+      <div class="sort-panel">
+        <div class="sort-panel-header">{{ t('task.sort-by') }}</div>
+        <button
+          v-for="field in currentSortFields"
+          :key="field"
+          class="sort-item"
+          :class="{ active: field === currentSort.field }"
+          @click="onSortSelect(field)"
+        >
+          <span class="sort-item-label">{{ t(SORT_LABELS[field]) }}</span>
+          <span v-if="field === currentSort.field" class="sort-item-dir">
+            <NIcon :size="14">
+              <ArrowUpOutline v-if="currentSort.direction === 'asc'" />
+              <ArrowDownOutline v-else />
+            </NIcon>
+          </span>
+        </button>
+      </div>
+    </NPopover>
     <MTooltip>
       <template #trigger>
         <NButton
@@ -354,7 +479,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.refresh-list') || 'Refresh' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -373,7 +498,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.resume-all-task') || 'Resume All' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -392,7 +517,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.pause-all-task') || 'Pause All' }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
@@ -414,13 +539,13 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.stop-all-seeding') }}
     </MTooltip>
-    <MTooltip v-if="currentList !== 'stopped'">
+    <MTooltip v-if="showActiveActions">
       <template #trigger>
         <NButton
           quaternary
           circle
           size="small"
-          :disabled="allGids.length === 0"
+          :disabled="deleteAllDisabled"
           @pointerdown="onBtnPress"
           @pointerup="onBtnRelease"
           @pointerleave="onBtnRelease"
@@ -433,7 +558,7 @@ function onBtnRelease(ev: PointerEvent) {
       </template>
       {{ t('task.delete-all-task') }}
     </MTooltip>
-    <MTooltip v-if="currentList === 'stopped'">
+    <MTooltip v-if="showStoppedActions">
       <template #trigger>
         <NButton
           quaternary
@@ -489,5 +614,73 @@ function onBtnRelease(ev: PointerEvent) {
   transform-origin: center;
   will-change: transform;
   contain: layout style paint;
+}
+</style>
+
+<!-- Sort panel renders in teleported popover — must be unscoped -->
+<style>
+.sort-panel {
+  min-width: 160px;
+  padding: 6px;
+  background: var(--m3-surface-container-high);
+  border: 1px solid var(--m3-outline-variant);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px var(--m3-shadow);
+}
+
+.sort-panel-header {
+  padding: 6px 10px 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--m3-outline);
+  letter-spacing: 0.02em;
+}
+
+.sort-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m3-on-surface);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.15s cubic-bezier(0.2, 0, 0, 1),
+    color 0.15s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sort-item:hover {
+  background: var(--m3-surface-container-highest);
+}
+
+.sort-item:active {
+  background: var(--m3-outline-variant);
+  transition: background-color 0.05s ease;
+}
+
+.sort-item.active {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.sort-item.active:hover {
+  background: var(--m3-primary-container-bg);
+}
+
+.sort-item-label {
+  flex: 1;
+}
+
+.sort-item-dir {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  color: var(--color-primary);
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 </style>

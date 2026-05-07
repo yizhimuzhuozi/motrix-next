@@ -13,6 +13,7 @@ use igd_next::aio::tokio::Tokio;
 use igd_next::aio::Gateway;
 use igd_next::PortMappingProtocol;
 use igd_next::SearchOptions;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::JoinHandle;
 
 /// Lease duration requested from the gateway (seconds).
@@ -30,6 +31,7 @@ const MAPPING_DESC: &str = "Motrix Next";
 /// Managed Tauri state that tracks active UPnP mappings and the renewal task.
 pub struct UpnpState {
     inner: Mutex<Inner>,
+    op_lock: AsyncMutex<()>,
 }
 
 struct Inner {
@@ -50,6 +52,7 @@ impl UpnpState {
                 mapped_ports: Vec::new(),
                 renewal_handle: None,
             }),
+            op_lock: AsyncMutex::new(()),
         }
     }
 }
@@ -114,8 +117,9 @@ pub async fn start_mapping(
     bt_port: u16,
     dht_port: u16,
 ) -> Result<serde_json::Value, String> {
+    let _guard = state.op_lock.lock().await;
     // Stop any existing mapping first (idempotent).
-    stop_mapping(state).await;
+    stop_mapping_inner(state).await;
 
     let gw = discover_gateway().await?;
     let local_ip = detect_local_ip(&gw.addr);
@@ -133,7 +137,10 @@ pub async fn start_mapping(
             internal: bt_port,
             protocol: PortMappingProtocol::TCP,
         }),
-        Err(e) => errors.push(e),
+        Err(e) => {
+            log::warn!("upnp:map-failed port={bt_port} proto=TCP err={e}");
+            errors.push(e);
+        }
     }
 
     match dht_result {
@@ -141,12 +148,20 @@ pub async fn start_mapping(
             internal: dht_port,
             protocol: PortMappingProtocol::UDP,
         }),
-        Err(e) => errors.push(e),
+        Err(e) => {
+            log::warn!("upnp:map-failed port={dht_port} proto=UDP err={e}");
+            errors.push(e);
+        }
     }
 
     if mapped.is_empty() {
         return Err(errors.join("; "));
     }
+
+    log::info!(
+        "upnp:mapped ports={:?}",
+        mapped.iter().map(|p| p.internal).collect::<Vec<_>>()
+    );
 
     // Spawn the renewal background task.
     let renewal_ports = mapped.clone();
@@ -182,6 +197,11 @@ pub async fn start_mapping(
 
 /// Stop all active mappings and cancel the renewal task.
 pub async fn stop_mapping(state: &UpnpState) {
+    let _guard = state.op_lock.lock().await;
+    stop_mapping_inner(state).await;
+}
+
+async fn stop_mapping_inner(state: &UpnpState) {
     let (ports, handle) = {
         let mut inner = match state.inner.lock() {
             Ok(g) => g,
@@ -206,6 +226,10 @@ pub async fn stop_mapping(state: &UpnpState) {
         for port in &ports {
             let _ = unmap_port(&gw, port.internal, port.protocol).await;
         }
+        log::info!(
+            "upnp:unmapped ports={:?}",
+            ports.iter().map(|p| p.internal).collect::<Vec<_>>()
+        );
     }
 }
 

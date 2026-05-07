@@ -78,6 +78,7 @@ export const parseHeader = (header = ''): Record<string, string> => {
   const headers = splitTextRows(header)
   headers.forEach((line) => {
     const index = line.indexOf(':')
+    if (index <= 0) return
     const name = line.substring(0, index)
     const value = line.substring(index + 1).trim()
     result[name] = value
@@ -92,7 +93,7 @@ export const formatOptionsForEngine = (
   const result: Record<string, string> = {}
   Object.keys(options).forEach((key) => {
     const val = options[key]
-    if (val === undefined || val === null || val === '') return
+    if (val === undefined || val === null) return
     const kebabCaseKey = kebabCase(key)
     if (Array.isArray(val)) {
       result[kebabCaseKey] = (val as string[]).join('\n')

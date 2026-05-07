@@ -12,4 +12,5 @@ mod lifecycle;
 mod state;
 
 pub use lifecycle::{restart_engine, start_engine, stop_engine};
+pub(crate) use state::path_to_safe_string;
 pub use state::EngineState;

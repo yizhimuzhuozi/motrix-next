@@ -5,7 +5,37 @@ use tauri_plugin_shell::ShellExt;
 
 use super::args::build_start_args;
 use super::cleanup::cleanup_port;
-use super::state::{log_engine_stdout, EngineState};
+use super::state::{log_engine_stdout, path_to_safe_string, EngineState};
+
+fn kill_process_by_pid(pid: u32) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let status = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|e| format!("Failed to execute taskkill for PID {pid}: {e}"))?;
+        if status.success() {
+            return Ok(());
+        }
+        return Err(format!("taskkill failed for PID {pid}: {status}"));
+    }
+
+    #[cfg(not(windows))]
+    {
+        let status = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .map_err(|e| format!("Failed to execute kill for PID {pid}: {e}"))?;
+        if status.success() {
+            return Ok(());
+        }
+        Err(format!("kill failed for PID {pid}: {status}"))
+    }
+}
 
 /// Spawns the aria2c engine process with the given configuration.
 /// Creates the download directory, cleans up stale port listeners, and passes
@@ -31,11 +61,14 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
         .unwrap_or("16800");
     cleanup_port(port);
 
-    // aria2.conf sits next to the aria2c binary in binaries/
-    let exe_dir = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
-    let exe_dir = exe_dir.parent().ok_or("Failed to get exe dir")?;
-    let conf_path = exe_dir.join("binaries").join("aria2.conf");
-    let conf_str = conf_path.to_string_lossy().to_string();
+    // Resolve aria2.conf via Tauri's resource directory — correct for all
+    // platforms, including macOS .app bundles where resources live in
+    // Contents/Resources/ rather than next to the executable.
+    let conf_path = app
+        .path()
+        .resolve("binaries/aria2.conf", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve conf path: {}", e))?;
+    let conf_str = path_to_safe_string(&conf_path);
 
     // Session file for persisting active/paused downloads across restarts
     let session_path = app
@@ -43,7 +76,7 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?
         .join("download.session");
-    let session_str = session_path.to_string_lossy().to_string();
+    let session_str = path_to_safe_string(&session_path);
 
     // Ensure the app data directory exists
     if let Some(parent) = session_path.parent() {
@@ -53,8 +86,13 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
     let args = build_start_args(
         config,
         if conf_path.exists() {
+            log::info!("loading engine config: {}", conf_str);
             Some(&conf_str)
         } else {
+            log::warn!(
+                "engine config not found: {}, starting with defaults",
+                conf_str
+            );
             None
         },
         &session_str,
@@ -75,6 +113,7 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
 
     let spawned_pid = child.pid();
     *child_lock = Some(child);
+    state.intentional_stop.store(false, Ordering::SeqCst);
     let my_gen = state.next_generation();
 
     let app_handle = app.clone();
@@ -150,23 +189,49 @@ pub fn start_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Resul
     Ok(())
 }
 
-/// Kills the running aria2c child process and releases the lock.
-/// Waits briefly after kill to let the OS reclaim the process.
-pub fn stop_engine(app: &tauri::AppHandle) -> Result<(), String> {
+/// Stops the running engine process.
+///
+/// Two modes are available, selected by `for_exit`:
+///
+/// - **`for_exit = true`** (app shutdown): uses `CommandChild::kill()`
+///   (`TerminateProcess` on Windows, `SIGKILL` on Unix).  Returns in < 1 ms
+///   because the OS reclaims all child resources when the main process exits
+///   moments later.  No sleep is needed — we will never reuse the port.
+///
+/// - **`for_exit = false`** (restart / command): uses `kill_process_by_pid()`
+///   (`taskkill /T /F` on Windows, `kill -TERM` on Unix) to ensure the entire
+///   process tree is dead, then sleeps 100 ms for the OS to release the RPC
+///   port before a new engine instance binds to it.
+///
+/// aria2c is a single-process, multi-threaded binary — it never spawns child
+/// processes — so `CommandChild::kill()` and `taskkill /T` are functionally
+/// equivalent for termination.  The distinction matters only for timing: the
+/// fast path avoids the ~800 ms overhead of spawning `taskkill.exe` and the
+/// subsequent 100 ms sleep, which is unnecessary during app exit.
+pub fn stop_engine(app: &tauri::AppHandle, for_exit: bool) -> Result<(), String> {
     let state = app.state::<EngineState>();
     // Signal intentional stop BEFORE kill so the Terminated handler
     // knows this is deliberate and suppresses engine-error.
     state.intentional_stop.store(true, Ordering::SeqCst);
     let mut child_lock = state.child.lock().map_err(|e| e.to_string())?;
 
-    if let Some(child) = child_lock.take() {
-        let pid = child.pid();
-        child
-            .kill()
-            .map_err(|e| format!("Failed to kill aria2c: {}", e))?;
-        log::info!("stopped engine process: PID {}", pid);
-        // Brief wait for the OS to fully terminate the process and release the port.
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    if for_exit {
+        // Fast path: app is exiting — OS will reclaim all child resources.
+        if let Some(child) = child_lock.take() {
+            let pid = child.pid();
+            let _ = child.kill(); // best-effort; ignore errors
+            log::info!("stopped engine process: PID {} (fast exit)", pid);
+        }
+    } else {
+        // Thorough path: must guarantee process tree is dead and port is free.
+        if let Some(child) = child_lock.as_ref() {
+            let pid = child.pid();
+            kill_process_by_pid(pid)?;
+            *child_lock = None;
+            log::info!("stopped engine process: PID {}", pid);
+            // Brief wait for the OS to fully terminate the process and release the port.
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
     }
 
     Ok(())
@@ -190,11 +255,10 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
     let mut child_lock = state.child.lock().map_err(|e| e.to_string())?;
 
     // Step 1: Kill existing child if present
-    if let Some(child) = child_lock.take() {
+    if let Some(child) = child_lock.as_ref() {
         let pid = child.pid();
-        child
-            .kill()
-            .map_err(|e| format!("Failed to kill aria2c: {}", e))?;
+        kill_process_by_pid(pid)?;
+        *child_lock = None;
         log::info!("restart: killed old engine process: PID {}", pid);
         // Wait for the OS to reclaim the process and release the port
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -213,17 +277,18 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
             .map_err(|e| format!("Failed to create download directory '{}': {}", dir, e))?;
     }
 
-    let exe_dir = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
-    let exe_dir = exe_dir.parent().ok_or("Failed to get exe dir")?;
-    let conf_path = exe_dir.join("binaries").join("aria2.conf");
-    let conf_str = conf_path.to_string_lossy().to_string();
+    let conf_path = app
+        .path()
+        .resolve("binaries/aria2.conf", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve conf path: {}", e))?;
+    let conf_str = path_to_safe_string(&conf_path);
 
     let session_path = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?
         .join("download.session");
-    let session_str = session_path.to_string_lossy().to_string();
+    let session_str = path_to_safe_string(&session_path);
 
     if let Some(parent) = session_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -232,8 +297,13 @@ pub fn restart_engine(app: &tauri::AppHandle, config: &serde_json::Value) -> Res
     let args = build_start_args(
         config,
         if conf_path.exists() {
+            log::info!("restart: loading engine config: {}", conf_str);
             Some(&conf_str)
         } else {
+            log::warn!(
+                "restart: engine config not found: {}, starting with defaults",
+                conf_str
+            );
             None
         },
         &session_str,

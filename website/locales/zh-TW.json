@@ -89,6 +89,8 @@
   "footer.ack": "感謝 {link} 奠定基礎",
   "footer.contributing": "參與貢獻",
   "footer.coc": "行為準則",
+  "footer.privacy": "隱私權政策",
+  "footer.signing": "簽章政策",
   "footer.license": "MIT — 版權所有 © 2025-至今 AnInsomniacy",
   "dl.modal.title": "下載 {os} 版",
   "dl.modal.download": "下載",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "在終端機執行 <code>uname -m</code>",
   "theme.system": "跟隨系統",
   "theme.light": "淺色",
-  "theme.dark": "深色"
+  "theme.dark": "深色",
+  "hero.stars": "Stars",
+  "hero.downloads": "下載量",
+  "hero.version": "最新版本",
+  "starHistory.title": "Star 歷史"
 }

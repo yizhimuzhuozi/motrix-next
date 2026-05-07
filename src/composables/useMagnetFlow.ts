@@ -33,7 +33,7 @@ export interface MagnetFileItem {
 /** Convert raw Aria2File array into UI-friendly selection items. */
 export function parseFilesForSelection(files: Aria2File[]): MagnetFileItem[] {
   return files.map((f) => {
-    const parts = f.path.split('/')
+    const parts = f.path.split(/[/\\]/)
     return {
       index: Number(f.index),
       name: parts[parts.length - 1],

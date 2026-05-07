@@ -89,6 +89,8 @@
   "footer.ack": "Ευχαριστούμε το {link} για τα θεμέλια",
   "footer.contributing": "Συνεισφορά",
   "footer.coc": "Κώδικας συμπεριφοράς",
+  "footer.privacy": "Πολιτική απορρήτου",
+  "footer.signing": "Πολιτική υπογραφής",
   "footer.license": "MIT — Πνευματικά δικαιώματα © 2025-σήμερα AnInsomniacy",
   "dl.modal.title": "Λήψη για {os}",
   "dl.modal.download": "Λήψη",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Εκτελέστε <code>uname -m</code> στο τερματικό",
   "theme.system": "Σύστημα",
   "theme.light": "Φωτεινό",
-  "theme.dark": "Σκοτεινό"
+  "theme.dark": "Σκοτεινό",
+  "hero.stars": "Stars",
+  "hero.downloads": "Λήψεις",
+  "hero.version": "Τελευταία",
+  "starHistory.title": "Star ιστορικό"
 }

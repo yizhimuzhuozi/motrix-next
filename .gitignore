@@ -50,3 +50,17 @@ package-lock.json
 motrix-legacy/
 motrix-very-legacy/
 
+# Tauri generated files
+src-tauri/gen/
+
+# AI coding tool directories
+.claude/
+.gemini/
+.agent*/
+.aider*
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+.omx/

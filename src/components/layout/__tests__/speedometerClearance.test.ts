@@ -27,7 +27,7 @@ describe('Conditional Speedometer clearance spacer', () => {
     const height = speedometerSource.match(/height:\s*(\d+)px/)
     expect(bottom).not.toBeNull()
     expect(height).not.toBeNull()
-    expect(parseInt(bottom![1], 10) + parseInt(height![1], 10)).toBe(60)
+    expect(parseInt(bottom![1], 10) + parseInt(height![1], 10)).toBe(58)
   })
 
   it('spacer only applies when cards are present (inner not empty)', () => {

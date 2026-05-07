@@ -13,6 +13,7 @@ import { usePreferenceStore } from '@/stores/preference'
 import { useAppMessage } from '@/composables/useAppMessage'
 import { filterHotReloadableKeys } from '@shared/utils/config'
 import { changeGlobalOption, isEngineReady } from '@/api/aria2'
+import { logger } from '@shared/logger'
 import type { AppConfig } from '@shared/types'
 
 export interface UsePreferenceFormOptions<T extends Record<string, unknown>> {
@@ -103,8 +104,8 @@ export function usePreferenceForm<T extends Record<string, unknown>>(options: Us
         if (Object.keys(hotKeys).length > 0) {
           try {
             await changeGlobalOption(hotKeys as Partial<AppConfig>)
-          } catch {
-            // Engine may be mid-restart — settings will apply on next start.
+          } catch (e) {
+            logger.debug('PreferenceForm.hotReload', `changeGlobalOption failed (engine may be mid-restart): ${e}`)
           }
         }
       }

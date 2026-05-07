@@ -1,7 +1,6 @@
 /** @fileoverview Composable providing typed Tauri IPC command wrappers. */
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { AppConfig } from '@shared/types'
 
 export function useIpc() {
   async function call<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -28,14 +27,6 @@ export function useIpc() {
     return call('factory_reset')
   }
 
-  async function getAppConfig(): Promise<Partial<AppConfig>> {
-    return call('get_app_config')
-  }
-
-  async function savePreference(config: Partial<AppConfig>): Promise<void> {
-    return call('save_preference', { config })
-  }
-
   async function getSystemConfig(): Promise<Record<string, unknown>> {
     return call('get_system_config')
   }
@@ -51,8 +42,6 @@ export function useIpc() {
     stopEngine,
     restartEngine,
     factoryReset,
-    getAppConfig,
-    savePreference,
     getSystemConfig,
     saveSystemConfig,
   }

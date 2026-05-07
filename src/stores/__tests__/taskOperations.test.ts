@@ -12,26 +12,44 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { ref } from 'vue'
 import { TASK_STATUS } from '@shared/constants'
 import type { Aria2Task, TaskApi, TaskStatus } from '@shared/types'
-import { createTaskOperations } from '../taskOperations'
+import { createTaskOperations } from '../task/operations'
 
 // ── Mock history store ─────────────────────────────────────────────
 const mockAddRecord = vi.fn().mockResolvedValue(undefined)
 const mockRemoveRecord = vi.fn().mockResolvedValue(undefined)
 const mockClearRecords = vi.fn().mockResolvedValue(undefined)
+const mockRemoveByInfoHash = vi.fn().mockResolvedValue(undefined)
+const mockRemoveBirthRecords = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@/stores/history', () => ({
   useHistoryStore: () => ({
     addRecord: mockAddRecord,
     removeRecord: mockRemoveRecord,
     clearRecords: mockClearRecords,
+    removeByInfoHash: mockRemoveByInfoHash,
+    removeBirthRecords: mockRemoveBirthRecords,
   }),
 }))
 
-// ── Mock buildHistoryRecord ────────────────────────────────────────
+// ── Mock cleanupAria2ControlFile + cleanupAria2MetadataFiles ────────
+const mockCleanupAria2ControlFile = vi.fn().mockResolvedValue(undefined)
+const mockDeleteTaskFiles = vi.fn().mockResolvedValue(undefined)
+const mockCleanupAria2MetadataFiles = vi.fn().mockResolvedValue(false)
+
+vi.mock('@/composables/useFileDelete', () => ({
+  cleanupAria2ControlFile: (...args: unknown[]) => mockCleanupAria2ControlFile(...args),
+  deleteTaskFiles: (...args: unknown[]) => mockDeleteTaskFiles(...args),
+}))
+
+vi.mock('@/composables/useDownloadCleanup', () => ({
+  cleanupAria2MetadataFiles: (...args: unknown[]) => mockCleanupAria2MetadataFiles(...args),
+}))
+
+// ── Mock buildBtCompletionRecord ───────────────────────────────────
 vi.mock('@/composables/useTaskLifecycle', () => ({
-  buildHistoryRecord: (task: Aria2Task) => ({
+  buildBtCompletionRecord: (task: Aria2Task) => ({
     gid: task.gid,
-    status: task.status,
+    status: 'complete',
     dir: '',
     totalLength: '0',
     completedLength: '0',
@@ -147,6 +165,75 @@ describe('removeTask', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
+// cancelMagnetSelectionDownload
+// ═══════════════════════════════════════════════════════════════════
+
+describe('cancelMagnetSelectionDownload', () => {
+  let api: TaskApi
+  let deps: ReturnType<typeof createDeps> & { removeResultRetryDelayMs: number }
+  let ops: ReturnType<typeof createTaskOperations>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api = createMockApi()
+    deps = { ...createDeps(api), removeResultRetryDelayMs: 0 }
+    ops = createTaskOperations(deps)
+  })
+
+  it('removes the generated BT task, retries result purge, purges metadata parent, and cleans artifacts', async () => {
+    const childTask = makeTask({
+      gid: 'child-gid',
+      status: TASK_STATUS.PAUSED,
+      following: 'metadata-gid',
+      dir: '/downloads',
+      infoHash: 'abcdef1234567890abcdef1234567890abcdef12',
+      bittorrent: { info: { name: 'Movie' } },
+      files: [
+        { index: '1', path: '/downloads/Movie/video.mkv', length: '1024', completedLength: '0', selected: 'true' },
+      ],
+    })
+    ;(api.fetchTaskItem as Mock).mockResolvedValueOnce(childTask)
+    ;(api.removeTaskRecord as Mock)
+      .mockRejectedValueOnce(new Error('download result not ready'))
+      .mockResolvedValueOnce('OK')
+      .mockResolvedValueOnce('OK')
+
+    await ops.cancelMagnetSelectionDownload({ metadataGid: 'metadata-gid', downloadGid: 'child-gid' })
+
+    expect(api.fetchTaskItem).toHaveBeenCalledWith({ gid: 'child-gid' })
+    expect(api.removeTask).toHaveBeenCalledWith({ gid: 'child-gid' })
+    expect(api.removeTaskRecord).toHaveBeenNthCalledWith(1, { gid: 'child-gid' })
+    expect(api.removeTaskRecord).toHaveBeenNthCalledWith(2, { gid: 'child-gid' })
+    expect(api.removeTaskRecord).toHaveBeenNthCalledWith(3, { gid: 'metadata-gid' })
+    expect(mockCleanupAria2ControlFile).toHaveBeenCalledWith(childTask)
+    expect(mockDeleteTaskFiles).toHaveBeenCalledWith(childTask)
+    expect(mockCleanupAria2MetadataFiles).toHaveBeenCalledWith('/downloads', 'abcdef1234567890abcdef1234567890abcdef12')
+    expect(mockRemoveRecord).toHaveBeenCalledWith('child-gid')
+    expect(mockRemoveRecord).toHaveBeenCalledWith('metadata-gid')
+    expect(mockRemoveBirthRecords).toHaveBeenCalledWith(['child-gid', 'metadata-gid'])
+    expect(deps.fetchList).toHaveBeenCalledOnce()
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('still purges known gids and saves the session when the child task can no longer be fetched', async () => {
+    ;(api.fetchTaskItem as Mock).mockRejectedValueOnce(new Error('GID not found'))
+
+    await ops.cancelMagnetSelectionDownload({ metadataGid: 'metadata-gid', downloadGid: 'child-gid' })
+
+    expect(api.removeTask).toHaveBeenCalledWith({ gid: 'child-gid' })
+    expect(api.removeTaskRecord).toHaveBeenCalledWith({ gid: 'child-gid' })
+    expect(api.removeTaskRecord).toHaveBeenCalledWith({ gid: 'metadata-gid' })
+    expect(mockRemoveRecord).toHaveBeenCalledWith('child-gid')
+    expect(mockRemoveRecord).toHaveBeenCalledWith('metadata-gid')
+    expect(mockRemoveBirthRecords).toHaveBeenCalledWith(['child-gid', 'metadata-gid'])
+    expect(mockCleanupAria2ControlFile).not.toHaveBeenCalled()
+    expect(mockDeleteTaskFiles).not.toHaveBeenCalled()
+    expect(deps.fetchList).toHaveBeenCalledOnce()
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════
 // pauseTask
 // ═══════════════════════════════════════════════════════════════════
 
@@ -223,14 +310,64 @@ describe('resumeTask', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('pauseAllTask', () => {
-  it('calls forcePauseAllTask, then refreshes and saves', async () => {
+  it('pauses non-seeding active tasks individually via forcePauseTask', async () => {
     const api = createMockApi()
     const deps = createDeps(api)
+    deps.taskList.value = [
+      makeTask({ gid: 'dl-1', status: TASK_STATUS.ACTIVE }),
+      makeTask({ gid: 'dl-2', status: TASK_STATUS.WAITING }),
+    ] as Aria2Task[]
     const ops = createTaskOperations(deps)
     await ops.pauseAllTask()
-    expect(api.forcePauseAllTask).toHaveBeenCalledOnce()
+    expect(api.forcePauseTask).toHaveBeenCalledWith({ gid: 'dl-1' })
+    expect(api.forcePauseTask).toHaveBeenCalledWith({ gid: 'dl-2' })
     expect(deps.fetchList).toHaveBeenCalledOnce()
     expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('does NOT pause seeding tasks', async () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    deps.taskList.value = [
+      makeTask({ gid: 'dl-1', status: TASK_STATUS.ACTIVE }),
+      makeTask({
+        gid: 'seed-1',
+        status: TASK_STATUS.ACTIVE,
+        bittorrent: { info: { name: 'movie.mkv' } },
+        seeder: 'true',
+      }),
+    ] as Aria2Task[]
+    const ops = createTaskOperations(deps)
+    await ops.pauseAllTask()
+    expect(api.forcePauseTask).toHaveBeenCalledWith({ gid: 'dl-1' })
+    expect(api.forcePauseTask).not.toHaveBeenCalledWith({ gid: 'seed-1' })
+    expect(api.forcePauseTask).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing when only seeding tasks exist', async () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    deps.taskList.value = [
+      makeTask({
+        gid: 'seed-only',
+        status: TASK_STATUS.ACTIVE,
+        bittorrent: { info: { name: 'iso.torrent' } },
+        seeder: 'true',
+      }),
+    ] as Aria2Task[]
+    const ops = createTaskOperations(deps)
+    await ops.pauseAllTask()
+    expect(api.forcePauseTask).not.toHaveBeenCalled()
+    expect(api.forcePauseAllTask).not.toHaveBeenCalled()
+  })
+
+  it('does not call forcePauseAllTask (replaced by per-task calls)', async () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    deps.taskList.value = [makeTask({ gid: 'dl-1', status: TASK_STATUS.ACTIVE })] as Aria2Task[]
+    const ops = createTaskOperations(deps)
+    await ops.pauseAllTask()
+    expect(api.forcePauseAllTask).not.toHaveBeenCalled()
   })
 })
 
@@ -294,6 +431,19 @@ describe('toggleTask', () => {
     expect(api.pauseTask).not.toHaveBeenCalled()
     expect(api.resumeTask).not.toHaveBeenCalled()
   })
+
+  it('does nothing for a seeding task (active + seeder=true)', async () => {
+    const task = makeTask({
+      status: TASK_STATUS.ACTIVE,
+      bittorrent: { info: { name: 'movie.mkv' } },
+      seeder: 'true',
+    })
+    const result = ops.toggleTask(task)
+    expect(result).toBeUndefined()
+    expect(api.pauseTask).not.toHaveBeenCalled()
+    expect(api.forcePauseTask).not.toHaveBeenCalled()
+    expect(api.resumeTask).not.toHaveBeenCalled()
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════
@@ -312,11 +462,22 @@ describe('stopSeeding', () => {
     ops = createTaskOperations(deps)
   })
 
-  it('force-pauses then removes the task', async () => {
+  it('force-pauses then removes the task then purges from stopped list', async () => {
     const task = makeTask({ gid: 'seed-1' })
     await ops.stopSeeding(task)
     expect(api.forcePauseTask).toHaveBeenCalledWith({ gid: 'seed-1' })
     expect(api.removeTask).toHaveBeenCalledWith({ gid: 'seed-1' })
+    // Must also call removeTaskRecord (aria2.removeDownloadResult) to purge
+    // from the stopped list — otherwise force-save=true persists stopped tasks
+    // in the session file and they restart as seeding on next launch.
+    expect(api.removeTaskRecord).toHaveBeenCalledWith({ gid: 'seed-1' })
+  })
+
+  it('does not throw if removeTaskRecord fails (best-effort purge)', async () => {
+    const task = makeTask({ gid: 'seed-1b' })
+    ;(api.removeTaskRecord as Mock).mockRejectedValueOnce(new Error('not found'))
+    // Should NOT throw — removeTaskRecord is best-effort
+    await expect(ops.stopSeeding(task)).resolves.not.toThrow()
   })
 
   it('adds a history record with status "complete"', async () => {
@@ -326,6 +487,142 @@ describe('stopSeeding', () => {
     const record = mockAddRecord.mock.calls[0][0]
     expect(record.status).toBe('complete')
     expect(record.gid).toBe('seed-2')
+  })
+
+  it('saves session after stopping seeding to persist removal to disk', async () => {
+    const task = makeTask({ gid: 'seed-3' })
+    await ops.stopSeeding(task)
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('awaits saveSession before returning (not fire-and-forget)', async () => {
+    let sessionSaved = false
+    ;(api.saveSession as Mock).mockImplementation(
+      () =>
+        new Promise<string>((resolve) =>
+          setTimeout(() => {
+            sessionSaved = true
+            resolve('OK')
+          }, 10),
+        ),
+    )
+    const task = makeTask({ gid: 'seed-4' })
+    await ops.stopSeeding(task)
+    expect(sessionSaved).toBe(true)
+  })
+
+  it('cleans up stale DB records by infoHash before writing (cross-session dedup)', async () => {
+    const task = makeTask({
+      gid: 'new-gid',
+      status: TASK_STATUS.ACTIVE,
+      infoHash: 'abcdef1234567890',
+      bittorrent: { info: { name: 'torrent' } },
+    } as Partial<Aria2Task>)
+    await ops.stopSeeding(task)
+    // removeByInfoHash should be called WITH excludeGid to avoid deleting the record about to be written
+    expect(mockRemoveByInfoHash).toHaveBeenCalledWith('abcdef1234567890', 'new-gid')
+    expect(mockAddRecord).toHaveBeenCalledOnce()
+  })
+
+  it('skips infoHash cleanup for tasks without infoHash', async () => {
+    const task = makeTask({ gid: 'no-hash', status: TASK_STATUS.ACTIVE })
+    await ops.stopSeeding(task)
+    expect(mockRemoveByInfoHash).not.toHaveBeenCalled()
+    expect(mockAddRecord).toHaveBeenCalledOnce()
+  })
+
+  // ── try/finally regression: fetchList + saveSession must run on failure ──
+
+  it('still calls fetchList and saveSession when forcePauseTask throws', async () => {
+    ;(api.forcePauseTask as Mock).mockRejectedValueOnce(new Error('pause failed'))
+    const task = makeTask({ gid: 'fail-pause' })
+
+    await expect(ops.stopSeeding(task)).rejects.toThrow('pause failed')
+
+    // Critical: UI refresh and session persistence must happen even on failure
+    expect(deps.fetchList).toHaveBeenCalledOnce()
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('still calls fetchList and saveSession when removeTask throws', async () => {
+    ;(api.removeTask as Mock).mockRejectedValueOnce(new Error('remove failed'))
+    const task = makeTask({ gid: 'fail-remove' })
+
+    await expect(ops.stopSeeding(task)).rejects.toThrow('remove failed')
+
+    // Critical: UI refresh and session persistence must happen even on failure
+    expect(deps.fetchList).toHaveBeenCalledOnce()
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('calls cleanupAria2ControlFile with the task after stopping seeding', async () => {
+    const task = makeTask({
+      gid: 'seed-cleanup',
+      bittorrent: { info: { name: 'movie.mkv' } },
+      infoHash: 'deadbeef'.repeat(5),
+      files: [
+        {
+          index: '1',
+          path: '/downloads/movie.mkv',
+          length: '1000',
+          completedLength: '1000',
+          selected: 'true',
+          uris: [],
+        },
+      ],
+    } as Partial<Aria2Task>)
+
+    await ops.stopSeeding(task)
+
+    expect(mockCleanupAria2ControlFile).toHaveBeenCalledWith(task)
+  })
+
+  it('does not throw if cleanupAria2ControlFile fails (best-effort cleanup)', async () => {
+    mockCleanupAria2ControlFile.mockRejectedValueOnce(new Error('cleanup failed'))
+    const task = makeTask({
+      gid: 'seed-cleanup-fail',
+      bittorrent: { info: { name: 'movie.mkv' } },
+    } as Partial<Aria2Task>)
+
+    await expect(ops.stopSeeding(task)).resolves.not.toThrow()
+    expect(mockCleanupAria2ControlFile).toHaveBeenCalledWith(task)
+  })
+
+  it('calls cleanupAria2MetadataFiles with task.dir and task.infoHash', async () => {
+    const task = makeTask({
+      gid: 'seed-meta',
+      dir: '/downloads',
+      bittorrent: { info: { name: 'movie.mkv' } },
+      infoHash: 'deadbeef'.repeat(5),
+    } as Partial<Aria2Task>)
+
+    await ops.stopSeeding(task)
+
+    expect(mockCleanupAria2MetadataFiles).toHaveBeenCalledWith('/downloads', 'deadbeef'.repeat(5))
+  })
+
+  it('skips cleanupAria2MetadataFiles when dir or infoHash missing', async () => {
+    const task = makeTask({
+      gid: 'seed-no-hash',
+      bittorrent: { info: { name: 'movie.mkv' } },
+      // no infoHash, no dir
+    } as Partial<Aria2Task>)
+
+    await ops.stopSeeding(task)
+
+    expect(mockCleanupAria2MetadataFiles).not.toHaveBeenCalled()
+  })
+
+  it('does not throw if cleanupAria2MetadataFiles fails', async () => {
+    mockCleanupAria2MetadataFiles.mockRejectedValueOnce(new Error('metadata cleanup failed'))
+    const task = makeTask({
+      gid: 'seed-meta-fail',
+      dir: '/downloads',
+      bittorrent: { info: { name: 'movie.mkv' } },
+      infoHash: 'abcdef12'.repeat(5),
+    } as Partial<Aria2Task>)
+
+    await expect(ops.stopSeeding(task)).resolves.not.toThrow()
   })
 })
 
@@ -435,6 +732,12 @@ describe('removeTaskRecord', () => {
     // Should NOT throw — error is caught and logged
     expect(deps.fetchList).toHaveBeenCalledOnce()
   })
+
+  it('saves session after removing a record', async () => {
+    const task = makeTask({ gid: 'rec-save', status: TASK_STATUS.COMPLETE })
+    await ops.removeTaskRecord(task)
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════
@@ -450,6 +753,14 @@ describe('purgeTaskRecord', () => {
     expect(mockClearRecords).toHaveBeenCalledOnce()
     expect(api.purgeTaskRecord).toHaveBeenCalledOnce()
     expect(deps.fetchList).toHaveBeenCalledOnce()
+  })
+
+  it('saves session after purging all records', async () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    const ops = createTaskOperations(deps)
+    await ops.purgeTaskRecord()
+    expect(api.saveSession).toHaveBeenCalledOnce()
   })
 
   it('still refreshes list even if aria2 purge fails', async () => {
@@ -478,6 +789,26 @@ describe('batchRemoveTask', () => {
     expect(api.saveSession).toHaveBeenCalledOnce()
   })
 
+  it('purges each gid from stopped-result list via removeTaskRecord', async () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    const ops = createTaskOperations(deps)
+    await ops.batchRemoveTask(['a', 'b'])
+    expect(api.removeTaskRecord).toHaveBeenCalledWith({ gid: 'a' })
+    expect(api.removeTaskRecord).toHaveBeenCalledWith({ gid: 'b' })
+  })
+
+  it('tolerates removeTaskRecord failure for individual gids', async () => {
+    const api = createMockApi()
+    ;(api.removeTaskRecord as Mock).mockRejectedValue(new Error('not found'))
+    const deps = createDeps(api)
+    const ops = createTaskOperations(deps)
+    // Should NOT throw — removeTaskRecord errors are swallowed per-gid
+    await ops.batchRemoveTask(['a', 'b'])
+    expect(api.batchRemoveTask).toHaveBeenCalledWith({ gids: ['a', 'b'] })
+    expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
   it('handles empty gid array gracefully', async () => {
     const api = createMockApi()
     const deps = createDeps(api)
@@ -502,7 +833,7 @@ describe('batchRemoveTask', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('hasActiveTasks', () => {
-  it('returns true when active tasks exist', async () => {
+  it('returns true when active non-seeding tasks exist', async () => {
     const api = createMockApi()
     ;(api.fetchTaskList as Mock).mockResolvedValueOnce([makeTask({ status: TASK_STATUS.ACTIVE })])
     const deps = createDeps(api)
@@ -516,6 +847,20 @@ describe('hasActiveTasks', () => {
     const deps = createDeps(api)
     const ops = createTaskOperations(deps)
     expect(await ops.hasActiveTasks()).toBe(true)
+  })
+
+  it('returns false when only seeding tasks exist', async () => {
+    const api = createMockApi()
+    ;(api.fetchTaskList as Mock).mockResolvedValueOnce([
+      makeTask({
+        status: TASK_STATUS.ACTIVE,
+        bittorrent: { info: { name: 'seed' } },
+        seeder: 'true',
+      }),
+    ])
+    const deps = createDeps(api)
+    const ops = createTaskOperations(deps)
+    expect(await ops.hasActiveTasks()).toBe(false)
   })
 
   it('returns false when only completed tasks exist', async () => {
@@ -574,11 +919,19 @@ describe('hasPausedTasks', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('saveSession', () => {
-  it('delegates to api.saveSession', () => {
+  it('delegates to api.saveSession', async () => {
     const api = createMockApi()
     const deps = createDeps(api)
     const ops = createTaskOperations(deps)
-    ops.saveSession()
+    await ops.saveSession()
     expect(api.saveSession).toHaveBeenCalledOnce()
+  })
+
+  it('returns a Promise (is async, not fire-and-forget)', () => {
+    const api = createMockApi()
+    const deps = createDeps(api)
+    const ops = createTaskOperations(deps)
+    const result = ops.saveSession()
+    expect(result).toBeInstanceOf(Promise)
   })
 })

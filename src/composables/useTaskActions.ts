@@ -7,9 +7,9 @@
  */
 import { ref, type Ref, h } from 'vue'
 import { getTaskUri, getTaskDisplayName, resolveOpenTarget, canRestart } from '@shared/utils'
-import { revealItemInDir, openPath } from '@tauri-apps/plugin-opener'
-import { exists, stat } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { deleteTaskFiles } from '@/composables/useFileDelete'
+import { resolveTaskFilePath, requestFileRecheck } from '@/composables/useArchivedPaths'
 import { TASK_STATUS } from '@shared/constants'
 import { logger } from '@shared/logger'
 import { NCheckbox, useDialog } from 'naive-ui'
@@ -46,7 +46,10 @@ export function useTaskActions(deps: TaskActionsDeps) {
     taskStore
       .pauseTask(task)
       .then(() => message.success(t('task.pause-task-success', { taskName })))
-      .catch(() => message.error(t('task.pause-task-fail', { taskName })))
+      .catch((e) => {
+        logger.warn('TaskView.pauseTask', e)
+        message.error(t('task.pause-task-fail', { taskName }))
+      })
   }
 
   function handleResumeTask(task: Aria2Task) {
@@ -60,19 +63,31 @@ export function useTaskActions(deps: TaskActionsDeps) {
       taskStore
         .restartTask(task)
         .then(() => message.success(t('task.restart-task-success', { taskName })))
-        .catch(() => message.error(t('task.restart-task-fail', { taskName })))
+        .catch((e) => {
+          logger.warn('TaskView.restartTask', e)
+          message.error(t('task.restart-task-fail', { taskName }))
+        })
     } else {
       taskStore
         .resumeTask(task)
         .then(() => message.success(t('task.resume-task-success', { taskName })))
-        .catch(() => message.error(t('task.resume-task-fail', { taskName })))
+        .catch((e) => {
+          logger.warn('TaskView.resumeTask', e)
+          message.error(t('task.resume-task-fail', { taskName }))
+        })
     }
   }
 
   function handleDeleteTask(task: Aria2Task) {
     const noConfirm = preferenceConfig()?.noConfirmBeforeDeleteTask
     if (noConfirm) {
-      taskStore.removeTask(task).catch((e: unknown) => logger.error('TaskView', e))
+      const alsoDeleteFiles = preferenceConfig()?.deleteFilesWhenSkipConfirm
+      taskStore
+        .removeTask(task)
+        .then(async () => {
+          if (alsoDeleteFiles) await deleteTaskFiles(task)
+        })
+        .catch((e: unknown) => logger.error('TaskView', e))
       return
     }
     const deleteFiles = ref(false)
@@ -118,13 +133,16 @@ export function useTaskActions(deps: TaskActionsDeps) {
   function handleDeleteRecord(task: Aria2Task) {
     const noConfirm = preferenceConfig()?.noConfirmBeforeDeleteTask
     if (noConfirm) {
+      const alsoDeleteFiles = preferenceConfig()?.deleteFilesWhenSkipConfirm
+      const taskRef = task
       taskStore
         .removeTaskRecord(task)
-        .then(() =>
+        .then(async () => {
+          if (alsoDeleteFiles) await deleteTaskFiles(taskRef)
           message.success(
-            t('task.remove-record-success', { taskName: getTaskDisplayName(task, { defaultName: 'Unknown' }) }),
-          ),
-        )
+            t('task.remove-record-success', { taskName: getTaskDisplayName(taskRef, { defaultName: 'Unknown' }) }),
+          )
+        })
         .catch((e: unknown) => logger.error('TaskView.deleteRecord', e))
       return
     }
@@ -179,37 +197,55 @@ export function useTaskActions(deps: TaskActionsDeps) {
 
   async function handleShowInFolder(task: Aria2Task) {
     const files = task.files || []
-    const filePath = files[0]?.path
+    if (files.length === 0) return
+
+    // Resolve correct path — archived location takes priority over aria2 original
+    const filePath = resolveTaskFilePath(task)
+
     if (!filePath) return
     try {
-      const fileExists = await exists(filePath)
-      if (!fileExists) {
-        message.warning(t('task.file-not-exist'))
+      const fileExists = await invoke<boolean>('check_path_exists', { path: filePath })
+      if (fileExists) {
+        await invoke('show_item_in_dir', { path: filePath })
+        message.success(t('task.open-folder-success'))
         return
       }
-      await revealItemInDir(filePath)
-      message.success(t('task.open-folder-success'))
-    } catch (e) {
-      logger.warn('TaskView.showInFolder', String(e))
+      // Fallback: file missing but BT folder or download dir may still exist
+      const fallback = await resolveOpenTarget(task)
+      if (fallback) {
+        const fallbackExists = await invoke<boolean>('check_path_exists', { path: fallback })
+        if (fallbackExists) {
+          await invoke('show_item_in_dir', { path: fallback })
+          message.success(t('task.open-folder-success'))
+          return
+        }
+      }
       message.warning(t('task.file-not-exist'))
+      requestFileRecheck()
+    } catch (e) {
+      logger.warn('TaskView.showInFolder', e instanceof Error ? e.message : JSON.stringify(e))
+      message.warning(t('task.file-not-exist'))
+      requestFileRecheck()
     }
   }
 
   async function handleOpenFile(task: Aria2Task) {
-    const target = resolveOpenTarget(task)
+    const target = await resolveOpenTarget(task)
     if (!target) return
     try {
-      const fileExists = await exists(target)
+      const fileExists = await invoke<boolean>('check_path_exists', { path: target })
       if (!fileExists) {
         message.warning(t('task.file-not-exist'))
+        requestFileRecheck()
         return
       }
-      const info = await stat(target)
-      await openPath(target)
-      message.success(t(info.isDirectory ? 'task.open-folder-success' : 'task.open-file-success'))
+      const isDir = await invoke<boolean>('check_path_is_dir', { path: target })
+      await invoke('open_path_normalized', { path: target })
+      message.success(t(isDir ? 'task.open-file-is-folder' : 'task.open-file-success'))
     } catch (e) {
-      logger.warn('TaskView.openFile error', String(e))
+      logger.warn('TaskView.openFile error', e instanceof Error ? e.message : JSON.stringify(e))
       message.warning(t('task.file-not-exist'))
+      requestFileRecheck()
     }
   }
 

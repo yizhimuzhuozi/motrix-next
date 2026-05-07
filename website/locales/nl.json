@@ -89,6 +89,8 @@
   "footer.ack": "Dank aan {link} voor de basis",
   "footer.contributing": "Bijdragen",
   "footer.coc": "Gedragscode",
+  "footer.privacy": "Privacybeleid",
+  "footer.signing": "Ondertekeningsbeleid",
   "footer.license": "MIT — Copyright © 2025-heden AnInsomniacy",
   "dl.modal.title": "Downloaden voor {os}",
   "dl.modal.download": "Downloaden",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Voer <code>uname -m</code> uit in de terminal",
   "theme.system": "Systeem",
   "theme.light": "Licht",
-  "theme.dark": "Donker"
+  "theme.dark": "Donker",
+  "hero.stars": "Stars",
+  "hero.downloads": "Downloads",
+  "hero.version": "Laatste",
+  "starHistory.title": "Star-geschiedenis"
 }

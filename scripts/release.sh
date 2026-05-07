@@ -34,9 +34,26 @@ fi
 
 echo "Releasing $TAG..."
 
-# Format code
+# Format code (best-effort auto-fix, then verify below)
 cd "$PROJECT_ROOT"
 pnpm format --log-level warn 2>/dev/null || true
+(cd src-tauri && cargo fmt)
+
+# ── Pre-release verification gate ────────────────────────────────
+# Every check must pass before we commit, tag, or push.
+# This mirrors the CI pipeline defined in .github/workflows/ci.yml.
+echo "Running pre-release checks..."
+
+pnpm lint || { echo "❌ ESLint check failed."; exit 1; }
+pnpm format:check || { echo "❌ Format check failed. Run 'pnpm format' first."; exit 1; }
+npx vue-tsc --noEmit || { echo "❌ TypeScript type check failed."; exit 1; }
+pnpm test || { echo "❌ Frontend tests failed."; exit 1; }
+
+(cd src-tauri && cargo fmt -- --check) || { echo "❌ Rust format check failed. Run 'cargo fmt'."; exit 1; }
+(cd src-tauri && cargo clippy --all-targets -- -D warnings) || { echo "❌ Clippy lint failed."; exit 1; }
+(cd src-tauri && cargo test --all-targets) || { echo "❌ Rust tests failed."; exit 1; }
+
+echo "✓ All pre-release checks passed"
 
 # Stage everything, commit, tag
 git add -A

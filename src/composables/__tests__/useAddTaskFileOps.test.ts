@@ -11,10 +11,13 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import type { BatchItem } from '@shared/types'
 
-// ── Mock Tauri readFile ────────────────────────────────────────────
+// ── Mock Rust IPC local file read ───────────────────────────────────
 const mockReadFile = vi.fn()
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  readFile: (...args: unknown[]) => mockReadFile(...args),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (cmd: string, args?: { path?: string }) => {
+    if (cmd === 'read_local_file') return mockReadFile(args?.path)
+    return Promise.reject(new Error(`Unexpected invoke: ${cmd}`))
+  },
 }))
 
 // ── Mock Tauri openDialog ──────────────────────────────────────────
@@ -29,11 +32,6 @@ const mockUint8ToBase64 = vi.fn()
 vi.mock('@/composables/useTorrentParser', () => ({
   parseTorrentBuffer: (...args: unknown[]) => mockParseTorrentBuffer(...args),
   uint8ToBase64: (...args: unknown[]) => mockUint8ToBase64(...args),
-}))
-
-// ── Mock bencode ───────────────────────────────────────────────────
-vi.mock('bencode', () => ({
-  default: { decode: vi.fn(), encode: vi.fn() },
 }))
 
 // ── Mock logger ────────────────────────────────────────────────────

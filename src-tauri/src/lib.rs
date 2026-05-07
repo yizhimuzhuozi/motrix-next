@@ -1,11 +1,24 @@
+mod aria2;
 mod commands;
+mod db_guard;
 mod engine;
 mod error;
+mod gpu_guard;
+mod history;
 #[cfg(target_os = "macos")]
 mod menu;
+mod services;
 mod tray;
 mod upnp;
 
+// Re-export the Windows elevation entry point at the crate root so that
+// main.rs can call it before Tauri initialises.  The `commands` module
+// is intentionally private — only this single function needs to be
+// accessible from the binary crate.
+#[cfg(windows)]
+pub use commands::protocol::try_run_elevated;
+
+use crate::commands::power::ShutdownCancelState;
 use crate::commands::updater::{DownloadedUpdate, UpdateCancelState};
 use engine::EngineState;
 use tauri::{Emitter, Manager};
@@ -18,7 +31,7 @@ use upnp::UpnpState;
 /// `tauri-plugin-store` isn't available until after `Builder.build()`, so we
 /// read the raw JSON file directly.  Falls back to `Debug` if absent so that
 /// first-run users get full diagnostic output for bug reports.
-fn read_log_level() -> log::LevelFilter {
+pub(crate) fn read_log_level() -> log::LevelFilter {
     (|| -> Option<log::LevelFilter> {
         let data_dir = dirs::data_dir()?.join("com.motrix.next");
         let store_path = data_dir.join("config.json");
@@ -36,6 +49,157 @@ fn read_log_level() -> log::LevelFilter {
     .unwrap_or(log::LevelFilter::Debug)
 }
 
+/// Tracks the application lifecycle phase for window visibility decisions.
+///
+/// During the cold-start phase (`is_cold_start = true`), the autostart
+/// silent-mode guard may hide the window.  Once the user first dismisses
+/// the window (via close button, Cmd+W, or any minimize-to-tray path),
+/// the phase transitions to runtime (`is_cold_start = false`).
+/// This transition is **irreversible** within the process lifetime.
+///
+/// After the transition, `is_autostart_launch()` always returns `false`
+/// so that window recreations in lightweight mode correctly show the
+/// window instead of re-applying autostart-hide logic.
+///
+/// Fixes issue #206: without this, `is_autostart_launch()` reads process
+/// argv (which never changes), causing recreated windows to incorrectly
+/// call `window.hide()` via the frontend's MainLayout.windowVisibility
+/// defence-in-depth check.
+pub struct AppLifecycleState {
+    is_cold_start: std::sync::atomic::AtomicBool,
+}
+
+impl Default for AppLifecycleState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AppLifecycleState {
+    pub fn new() -> Self {
+        Self {
+            is_cold_start: std::sync::atomic::AtomicBool::new(true),
+        }
+    }
+
+    /// Returns `true` during the initial cold-start phase (before the
+    /// user first dismisses the window).
+    pub fn is_cold_start(&self) -> bool {
+        self.is_cold_start.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Ends the cold-start phase.  Called once by `handle_minimize_to_tray()`
+    /// when the user first dismisses the window.  Irreversible.
+    pub fn end_cold_start(&self) {
+        self.is_cold_start
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+fn window_state_flags() -> tauri_plugin_window_state::StateFlags {
+    use tauri_plugin_window_state::StateFlags;
+
+    #[cfg(target_os = "macos")]
+    {
+        StateFlags::all() & !StateFlags::MAXIMIZED & !StateFlags::VISIBLE
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        StateFlags::all() & !StateFlags::VISIBLE
+    }
+}
+
+fn keep_window_state_enabled(app: &tauri::AppHandle) -> bool {
+    app.store("config.json")
+        .ok()
+        .and_then(|s| s.get("preferences"))
+        .and_then(|p| p.get("keepWindowState")?.as_bool())
+        .unwrap_or(false)
+}
+
+/// Restores window geometry when the user has opted into window-state restore.
+///
+/// Visibility is intentionally excluded. The app owns visibility through the
+/// autostart silent-mode guard and the frontend show-on-ready flow, so restoring
+/// visibility here would reintroduce startup flashes.
+pub(crate) fn restore_window_state_if_enabled(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) {
+    use tauri_plugin_window_state::WindowExt;
+
+    if !keep_window_state_enabled(app) {
+        return;
+    }
+
+    if let Err(e) = window.restore_state(window_state_flags()) {
+        log::warn!(
+            "window-state:restore-failed label={} error={}",
+            window.label(),
+            e
+        );
+    }
+}
+
+fn save_window_state_before_lightweight_destroy(app: &tauri::AppHandle) {
+    use tauri_plugin_window_state::AppHandleExt;
+
+    if let Err(e) = app.save_window_state(window_state_flags()) {
+        log::warn!("window-state:save-before-lightweight-destroy-failed error={e}");
+    }
+}
+
+/// Minimizes the main window to tray, either by destroying the WebView
+/// (lightweight mode — reduces memory usage) or by
+/// hiding it (standard mode — instant show on tray click).
+///
+/// Shared by `on_window_event(CloseRequested)` and `on_menu_event("close-window")`
+/// to keep the two close paths consistent.
+pub(crate) fn handle_minimize_to_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    // End the cold-start phase on the first window dismissal.
+    // After this point, is_autostart_launch() returns false so that
+    // window recreations in lightweight mode show the window instead
+    // of re-applying autostart-hide logic.  Issue #206.
+    if let Some(lifecycle) = app.try_state::<AppLifecycleState>() {
+        if lifecycle.is_cold_start() {
+            lifecycle.end_cold_start();
+            log::info!("lifecycle: cold-start phase ended");
+        }
+    }
+    let store_prefs = app
+        .store("config.json")
+        .ok()
+        .and_then(|s| s.get("preferences"));
+
+    let lightweight = store_prefs
+        .as_ref()
+        .and_then(|p| p.get("lightweightMode")?.as_bool())
+        .unwrap_or(false);
+
+    if lightweight {
+        log::info!("tray:lightweight-destroy label={}", window.label());
+        save_window_state_before_lightweight_destroy(app);
+        services::deep_link::mark_frontend_unready(app);
+        services::frontend_action::mark_frontend_actions_unready(app);
+        let _ = window.destroy();
+    } else {
+        log::info!("tray:hide label={}", window.label());
+        let _ = window.hide();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let hide_dock = store_prefs
+            .as_ref()
+            .and_then(|p| p.get("hideDockOnMinimize")?.as_bool())
+            .unwrap_or(false);
+        if hide_dock {
+            use tauri::ActivationPolicy;
+            let _ = app.set_activation_policy(ActivationPolicy::Accessory);
+        }
+    }
+}
+
 /// Initialises menus, tray, deep links, window state, and platform-specific
 /// workarounds.  Called once by `Builder.setup()`.
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -48,82 +212,176 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let tray_state = tray::setup_tray(handle)?;
     app.manage(tray_state);
 
+    // Aria2 JSON-RPC client — starts with default credentials, updated
+    // after engine start via Aria2Client::update_credentials().
+    let aria2_state = aria2::client::Aria2State(std::sync::Arc::new(
+        aria2::client::Aria2Client::new(16800, String::new()),
+    ));
+    app.manage(aria2_state);
+
+    // Runtime config cache — refreshed by frontend after each config save.
+    app.manage(services::config::RuntimeConfigState::new());
+
+    // Background services — handles stored here so on_engine_ready can
+    // stop old tasks before spawning new ones on restart.
+    app.manage(services::stat::StatServiceState::new());
+    app.manage(services::speed::SpeedSchedulerState::new());
+    app.manage(services::monitor::TaskMonitorState::new());
+    app.manage(services::http_api::HttpApiState::new());
+    app.manage(services::deep_link::PendingDeepLinkState::new());
+    app.manage(services::frontend_action::PendingFrontendActionState::new());
+
+    // App lifecycle — tracks cold-start vs runtime phase for autostart
+    // visibility decisions.  See AppLifecycleState doc and issue #206.
+    app.manage(AppLifecycleState::new());
+
+    // History database — opens the same DB as tauri-plugin-sql migrations.
+    {
+        use tauri::Manager;
+        let app_data = app.path().app_data_dir()?;
+        let db_path = app_data.join("history.db");
+        let history_db = history::HistoryDb::open(&db_path)
+            .map_err(|e| format!("Failed to open history.db: {e}"))?;
+        app.manage(history::HistoryDbState(std::sync::Arc::new(history_db)));
+    }
+
     #[cfg(target_os = "macos")]
     app.on_menu_event(|app, event| match event.id().as_ref() {
-        "new-task" => {
-            let _ = app.emit("menu-event", "new-task");
-        }
-        "open-torrent" => {
-            let _ = app.emit("menu-event", "open-torrent");
-        }
-        "preferences" => {
-            let _ = app.emit("menu-event", "preferences");
-        }
-        "release-notes" => {
-            let _ = app.emit("menu-event", "release-notes");
-        }
-        "report-issue" => {
-            let _ = app.emit("menu-event", "report-issue");
-        }
-        _ => {}
-    });
-
-    let app_handle = app.handle().clone();
-    app.deep_link().on_open_url(move |event| {
-        let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
-        let _ = app_handle.emit("deep-link-open", &urls);
-    });
-
-    // Conditionally restore window state based on user preference.
-    // The window-state plugin is registered with skip_initial_state("main")
-    // so it does NOT auto-restore.  We read the preference here and
-    // call restore_state() manually only when the user has opted in.
-    // The plugin still saves state on exit regardless, so toggling the
-    // preference on later will pick up the last saved geometry.
-    {
-        use tauri_plugin_window_state::{StateFlags, WindowExt};
-
-        let keep_state = app
-            .store("config.json")
-            .ok()
-            .and_then(|s| s.get("preferences"))
-            .and_then(|p| p.get("keepWindowState")?.as_bool())
-            .unwrap_or(false);
-
-        if keep_state {
-            if let Some(w) = app.get_webview_window("main") {
-                // Exclude MAXIMIZED on macOS — same tao bug as above.
-                let flags = {
-                    #[cfg(target_os = "macos")]
-                    {
-                        StateFlags::all() & !StateFlags::MAXIMIZED
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        StateFlags::all()
-                    }
-                };
-                let _ = w.restore_state(flags);
+        // ── Window menu: custom handlers for frameless window ────────
+        //
+        // PredefinedMenuItem variants call native macOS selectors
+        // (miniaturize:, zoom:, performClose:) which are no-ops on
+        // frameless (decorations: false) windows.  Custom items route
+        // through Tauri's window API, which works correctly.
+        "minimize-window" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.minimize();
             }
+        }
+        "zoom-window" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let is_max = window.is_maximized().unwrap_or(false);
+                if is_max {
+                    let _ = window.unmaximize();
+                } else {
+                    let _ = window.maximize();
+                }
+            }
+        }
+        // ── Cmd+W: replicate CloseRequested hide-or-dialog logic ──
+        "close-window" => {
+            log::info!("menu:close-window — handling Cmd+W");
+
+            let should_hide = app
+                .store("config.json")
+                .ok()
+                .and_then(|s| s.get("preferences"))
+                .as_ref()
+                .and_then(|p| p.get("minimizeToTrayOnClose")?.as_bool())
+                .unwrap_or(false);
+
+            if should_hide {
+                if let Some(window) = app.get_webview_window("main") {
+                    handle_minimize_to_tray(app, &window);
+                }
+            } else {
+                log::info!("menu:close-window — showing exit dialog");
+                let _ = app.emit("show-exit-dialog", ());
+            }
+        }
+        id => {
+            if let Some(action) = services::frontend_action::menu_action_from_id(id) {
+                services::frontend_action::dispatch_frontend_action(
+                    app,
+                    services::frontend_action::FrontendActionChannel::MenuEvent,
+                    action,
+                    "native-menu-action",
+                );
+            }
+        }
+    });
+
+    // On macOS, runtime deep links arrive via RunEvent::Opened → the
+    // plugin emits "deep-link://new-url".  We listen for that event and
+    // route it through the shared external-input service. If lightweight
+    // mode destroyed the WebView, the service queues the URLs and schedules
+    // window wake-up outside this native callback.
+    //
+    // On Windows/Linux this listener is compile-time excluded because
+    // runtime deep links there arrive via the single-instance plugin,
+    // which invokes the single-instance callback below. That callback uses
+    // the same shared external-input service and emits "deep-link-open"
+    // only when an existing frontend listener is already alive.
+    // Registering on_open_url on those platforms would cause
+    // handleDeepLinkUrls() to fire twice per URL (once from (a) hitting
+    // this listener, once from (b) hitting useAppEvents).
+    #[cfg(target_os = "macos")]
+    {
+        let app_handle = app.handle().clone();
+        app.deep_link().on_open_url(move |event| {
+            let urls: Vec<String> = event.urls().iter().map(ToString::to_string).collect();
+            services::deep_link::route_external_inputs(&app_handle, urls, "macos-open-url");
+        });
+    }
+
+    // Register all configured deep-link schemes at startup on Linux.
+    //
+    // The .deb bundler installs `motrix-next.desktop` in /usr/share/applications/,
+    // but the deep-link plugin's `is_registered()` expects a runtime-created
+    // `motrix-next-handler.desktop` in ~/.local/share/applications/.  Without
+    // this call, `is_registered()` always returns false on .deb installs,
+    // causing protocol toggles to appear disabled (see issue #180).
+    //
+    // `register_all()` is idempotent — it skips schemes whose handler file
+    // already exists and is up-to-date.  The generated file uses NoDisplay=true
+    // to avoid duplicate entries in the application menu.
+    //
+    // On macOS and Windows this is compile-time excluded: those platforms use
+    // native registration APIs in commands/protocol.rs instead.
+    #[cfg(target_os = "linux")]
+    {
+        if let Err(e) = app.deep_link().register_all() {
+            log::warn!("deep-link: register_all failed (non-fatal): {e}");
         }
     }
 
-    // Window visibility is deferred to the Vue frontend.
-    // The window starts hidden (tauri.conf.json visible: false) and
-    // only becomes visible when MainLayout.vue mounts and calls
-    // show() + setFocus().  This prevents the transparent-frame
-    // flash on Windows where DWM renders a shadow before WebView2
-    // finishes initializing.  The frontend checks autoHideWindow +
-    // is_autostart_launch to decide whether to show.
+    // The window-state plugin is registered with skip_initial_state("main"),
+    // so initial and lightweight-recreated windows both restore through the
+    // same explicit helper.
+    if let Some(w) = app.get_webview_window("main") {
+        restore_window_state_if_enabled(handle, &w);
+    }
 
-    // Disable Windows 11 DWM rounded corners on the main window.
-    // With `transparent: true` + `decorations: false`, Windows 11
-    // applies its own ~8px corner rounding to the HWND, which
-    // conflicts with the CSS `border-radius: 12px` on #container.
-    // The mismatch creates visible desktop-color leaks at the
-    // corners.  Setting DWMWCP_DONOTROUND (value 1) tells DWM to
-    // keep the window rectangular, letting CSS handle all rounding
-    // on the transparent canvas.
+    // Window visibility follows a two-layer defense-in-depth pattern:
+    //
+    //   1. PRIMARY (Rust): The autostart silent-mode guard below detects
+    //      --autostart + autoHideWindow and force-hides the window before
+    //      the frontend mounts.  Window-state plugin is permanently
+    //      configured to exclude StateFlags::VISIBLE (#109).
+    //
+    //   2. SECONDARY (Frontend): MainLayout.vue onMounted calls
+    //      show() + setFocus() ONLY when NOT in autostart-silent mode.
+    //      If the window is somehow visible despite the Rust guard, the
+    //      frontend force-hides it as a safety net.
+    //
+    // The window starts hidden (tauri.conf.json visible: false) and
+    // transitions through this pipeline before becoming visible.
+
+    // Force Windows 11 DWM native rounded corners on the main window.
+    //
+    // With `transparent: true` + `decorations: false`, the HWND is a
+    // layered window — DWM does NOT auto-round layered windows.  We
+    // explicitly request DWMWCP_ROUND (value 2) so DWM applies its
+    // native ~8px corner rounding, matching the original Motrix look.
+    //
+    // Previously this block used DWMWCP_DONOTROUND (value 1) to
+    // *disable* DWM corners because CSS `border-radius: 12px` was
+    // drawing its own competing rounded corners on the transparent
+    // canvas.  Now that CSS border-radius is removed, DWM handles
+    // all corner rounding natively — no CSS workarounds needed.
+    //
+    // Safe no-op on Windows 10 (DWM ignores the preference).
+    // DWM auto-disables rounding when the window is maximized.
     #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::Graphics::Dwm::{
@@ -132,7 +390,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(w) = app.get_webview_window("main") {
             if let Ok(hwnd_handle) = w.hwnd() {
                 let hwnd = hwnd_handle.0 as *mut std::ffi::c_void;
-                let preference: u32 = 1; // DWMWCP_DONOTROUND
+                // DWMWCP_ROUND = 2: force DWM native rounded corners
+                let preference: u32 = 2;
                 unsafe {
                     DwmSetWindowAttribute(
                         hwnd,
@@ -144,7 +403,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
     // Hide Dock icon on startup when both autoHideWindow and
     // hideDockOnMinimize are enabled, AND the app was launched by
     // the OS autostart mechanism (--autostart flag).  Manual launches
@@ -177,6 +435,66 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             app.set_activation_policy(ActivationPolicy::Accessory);
         }
     }
+
+    // Autostart silent-mode guard: detect + log + force-hide.
+    //
+    // When the app is launched by OS autostart (--autostart flag) AND the
+    // user has opted into "minimize to tray on autostart" (autoHideWindow),
+    // we force-hide the window HERE in Rust setup(), BEFORE the frontend
+    // mounts.  This is the primary defense — it runs synchronously in the
+    // setup() callback, guaranteeing the window never becomes visible.
+    //
+    // The frontend (MainLayout.vue) has its own defense-in-depth check:
+    // if shouldHide is true, it calls hide() again as a safety net.
+    //
+    // This two-layer approach mirrors the Electron industry standard where
+    // the main process checks process.argv for --hidden before calling
+    // BrowserWindow.show().
+    //
+    // Logging at INFO level ensures user-submitted logs always contain the
+    // data needed to diagnose autostart bugs (e.g. --autostart flag missing
+    // from the Windows registry entry — auto-launch crate #771).
+    {
+        let is_autostart =
+            std::env::args().any(|a| a == "--autostart" || a.starts_with("--autostart="));
+        let auto_hide = app
+            .store("config.json")
+            .ok()
+            .and_then(|s| s.get("preferences"))
+            .and_then(|p| p.get("autoHideWindow")?.as_bool())
+            .unwrap_or(false);
+
+        let should_hide = is_autostart && auto_hide;
+
+        log::info!(
+            "setup: is_autostart={} auto_hide_window={} → should_hide={} (window will {})",
+            is_autostart,
+            auto_hide,
+            should_hide,
+            if should_hide {
+                "stay hidden"
+            } else {
+                "be shown by frontend when ready"
+            }
+        );
+
+        if should_hide {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.hide();
+                log::info!("setup: window force-hidden for autostart silent mode");
+            }
+        }
+    }
+
+    // ── GPU guard: mark successful startup ───────────────────────────
+    // If the user opted into hardware rendering, the sentinel file was
+    // written by gpu_guard::pre_flight(). Reaching this point proves
+    // that WebKitGTK's EGL init succeeded — safe to delete the sentinel.
+    gpu_guard::mark_healthy();
+
+    // ── GeoIP: load bundled DB-IP Country Lite for peer country flags ─
+    let geoip_state = commands::geoip::init_geoip(&app.handle().clone());
+    app.manage(geoip_state);
 
     Ok(())
 }
@@ -227,23 +545,78 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
             }
         }
         tauri::RunEvent::Exit => {
-            log::info!("app:exit — stopping engine and UPnP");
-            let _ = engine::stop_engine(app);
+            log::info!("app:exit — saving session, stopping engine and UPnP");
+
+            // ── Clear completed download records on exit ────────────
+            // When the user exits via tray-quit (app.exit(0)), the frontend's
+            // handleExitConfirm() is bypassed. Read the preference from the
+            // persistent store and clear records directly via HistoryDb.
+            // Best-effort with 2s timeout — never blocks app exit.
+            {
+                use tauri_plugin_store::StoreExt;
+                let clear_on_exit = app
+                    .store("config.json")
+                    .ok()
+                    .and_then(|s| s.get("preferences"))
+                    .and_then(|p| p.get("clearCompletedOnExit")?.as_bool())
+                    .unwrap_or(false);
+                if clear_on_exit {
+                    if let Some(db_state) = app.try_state::<history::HistoryDbState>() {
+                        let db = db_state.0.clone();
+                        let _ = tauri::async_runtime::block_on(async {
+                            tokio::time::timeout(
+                                std::time::Duration::from_secs(2),
+                                db.clear_records(Some("complete")),
+                            )
+                            .await
+                        });
+                        log::info!("app:exit — cleared completed history records");
+                    }
+                }
+            }
+
+            // Save aria2 session before killing the engine so in-progress
+            // downloads survive across restarts.  Best-effort with 500ms
+            // timeout — never blocks app exit.
+            if let Some(aria2) = app.try_state::<aria2::client::Aria2State>() {
+                let client = aria2.0.clone();
+                let _ = tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(500),
+                        client.save_session(),
+                    )
+                    .await
+                });
+                log::info!("aria2 session save attempted via managed client");
+            }
+            let _ = engine::stop_engine(app, true);
+            // Stop the extension HTTP API server gracefully.
+            if let Some(api_state) = app.try_state::<services::http_api::HttpApiState>() {
+                let _ = tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(std::time::Duration::from_millis(500), async {
+                        if let Some(handle) = api_state.0.lock().await.take() {
+                            handle.stop().await;
+                        }
+                    })
+                    .await
+                });
+                log::info!("http_api: stopped");
+            }
             // Clean up UPnP port mappings on exit.
             if let Some(state) = app.try_state::<UpnpState>() {
-                tauri::async_runtime::block_on(upnp::stop_mapping(state.inner()));
+                tauri::async_runtime::block_on(async {
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        upnp::stop_mapping(state.inner()),
+                    )
+                    .await;
+                });
             }
         }
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => {
             log::info!("app:reopen — restoring main window");
-            // Restore Dock icon before showing the window.
-            use tauri::ActivationPolicy;
-            let _ = app.set_activation_policy(ActivationPolicy::Regular);
-            if let Some(window) = tray::get_or_create_main_window(app) {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::activate_main_window(app, "macos-reopen");
         }
         _ => {}
     }
@@ -251,6 +624,32 @@ fn handle_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ── Linux: GPU rendering guard ──────────────────────────────────
+    //
+    // WORKAROUND for WebKitGTK Bug #262607 (RESOLVED WONTFIX).
+    // <https://bugs.webkit.org/show_bug.cgi?id=262607>
+    //
+    // WebKitGTK's DMA-BUF renderer crashes on various GPU/driver/compositor
+    // combinations (NVIDIA, Intel UHD + Wayland, Broadcom on RPi, VM guests).
+    // The DMA-BUF renderer has no graceful fallback — a failed EGL init
+    // calls `abort()`, killing the entire process.
+    //
+    // Strategy:
+    // - Default: hardware rendering OFF (software compositing).
+    //   Safe for all GPUs, negligible perf difference for a download manager UI.
+    // - Users can opt in via Advanced → "Hardware Rendering" toggle.
+    // - If opting in crashes the app, gpu_guard detects a leftover sentinel
+    //   file on the next launch and auto-reverts the preference to OFF.
+    //
+    // The `is_dmabuf_renderer_disabled()` command in fs.rs reads the same
+    // env var at runtime, so the frontend's border-radius workaround
+    // (MainLayout.vue) activates automatically.
+    //
+    // SAFETY: `set_var` (called inside pre_flight) is unsafe since Rust 1.83.
+    // Safe here because it executes at the very start of `main()`, before
+    // Tauri's thread pool, the async runtime, or any plugin initialisation.
+    gpu_guard::pre_flight();
+
     // ── Panic hook: route panics through log crate for file persistence ──
     // Must be set BEFORE Tauri Builder so even plugin init panics are caught.
     // Without this, panics only reach stderr and are lost on process exit.
@@ -259,6 +658,14 @@ pub fn run() {
     }));
 
     let log_level = read_log_level();
+
+    // ── Pre-flight DB migration guard ────────────────────────────
+    // Must run BEFORE tauri_plugin_sql to prevent panic on downgrade.
+    // Uses the platform-specific app data directory (same path that
+    // tauri_plugin_sql's "sqlite:history.db" resolves to).
+    if let Some(dir) = dirs::data_dir().map(|d| d.join("com.motrix.next")) {
+        db_guard::check(&dir);
+    }
 
     let mut builder = tauri::Builder::default()
         .plugin(
@@ -270,10 +677,33 @@ pub fn run() {
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
                 ])
-                .max_file_size(5_000_000)
-                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .format(|out, message, record| {
+                    let now = chrono::Local::now();
+                    let source = if record
+                        .target()
+                        .starts_with(tauri_plugin_log::WEBVIEW_TARGET)
+                    {
+                        "webview"
+                    } else {
+                        "rust"
+                    };
+                    out.finish(format_args!(
+                        "{} [{:<5}] [{}] {}",
+                        now.format("%Y-%m-%dT%H:%M:%S%.3f%:z"),
+                        record.level(),
+                        source,
+                        message
+                    ))
+                })
+                .max_file_size(10_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .level(log_level)
+                .level_for("maxminddb", log::LevelFilter::Warn)
+                .level_for("sqlx", log::LevelFilter::Warn)
+                .level_for("zbus", log::LevelFilter::Warn)
+                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("reqwest", log::LevelFilter::Warn)
                 .filter(|metadata| {
                     !metadata.target().starts_with("tao")
                         && !metadata.target().starts_with("tracing")
@@ -286,12 +716,20 @@ pub fn run() {
             tauri_plugin_sql::Builder::default()
                 .add_migrations(
                     "sqlite:history.db",
-                    vec![tauri_plugin_sql::Migration {
-                        version: 1,
-                        description: "create download_history table",
-                        sql: include_str!("../migrations/001_download_history.sql"),
-                        kind: tauri_plugin_sql::MigrationKind::Up,
-                    }],
+                    vec![
+                        tauri_plugin_sql::Migration {
+                            version: 1,
+                            description: "create download_history table",
+                            sql: include_str!("../migrations/001_download_history.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 2,
+                            description: "add added_at column and task_birth table for position-stable ordering",
+                            sql: include_str!("../migrations/002_add_added_at.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                    ],
                 )
                 .build(),
         )
@@ -312,10 +750,22 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let _ = app.emit("single-instance-triggered", &argv);
-            if let Some(w) = app.get_webview_window("main") {
-                let _: Result<(), _> = w.show();
-                let _: Result<(), _> = w.set_focus();
+            let urls = services::deep_link::filter_external_input_args(&argv);
+            if !urls.is_empty() {
+                services::deep_link::route_external_inputs(app, urls, "single-instance");
+                return;
+            }
+
+            if services::deep_link::is_autostart_arg_launch(&argv) {
+                log::info!("single-instance:autostart-skip argc={}", argv.len());
+                return;
+            }
+
+            let app_handle = app.clone();
+            if let Err(e) = app.run_on_main_thread(move || {
+                tray::activate_main_window(&app_handle, "single-instance-launch");
+            }) {
+                log::warn!("single-instance:activate-schedule-failed error={e}");
             }
         }));
     }
@@ -323,8 +773,14 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_deep_link::init());
     // Window-state plugin: saves/restores window position and size.
     //
-    // macOS: Exclude StateFlags::MAXIMIZED to avoid a known bug in tao
-    // where isMaximized() triggers a new resize event, creating an
+    // VISIBLE is permanently excluded from the plugin's state flags.
+    // Window visibility is managed entirely by the autostart-silent-mode
+    // guard in setup_app() and the frontend's MainLayout.vue.  Allowing
+    // the plugin to save/restore VISIBLE would cause the window to flash
+    // on autostart before the silent-mode check can hide it (#109).
+    //
+    // macOS: Also exclude StateFlags::MAXIMIZED to avoid a known bug in
+    // tao where isMaximized() triggers a new resize event, creating an
     // infinite loop (tauri-apps/tauri#5812).  The frontend also skips
     // isMaximized() tracking on macOS (see MainLayout.vue).
     builder = builder.plugin({
@@ -333,11 +789,11 @@ pub fn run() {
         let flags = {
             #[cfg(target_os = "macos")]
             {
-                StateFlags::all() & !StateFlags::MAXIMIZED
+                StateFlags::all() & !StateFlags::MAXIMIZED & !StateFlags::VISIBLE
             }
             #[cfg(not(target_os = "macos"))]
             {
-                StateFlags::all()
+                StateFlags::all() & !StateFlags::VISIBLE
             }
         };
 
@@ -352,9 +808,8 @@ pub fn run() {
         .manage(UpnpState::new())
         .manage(std::sync::Arc::new(UpdateCancelState::new()))
         .manage(std::sync::Arc::new(DownloadedUpdate::new()))
+        .manage(std::sync::Arc::new(ShutdownCancelState::new()))
         .invoke_handler(tauri::generate_handler![
-            commands::get_app_config,
-            commands::save_preference,
             commands::get_system_config,
             commands::save_system_config,
             commands::start_engine_command,
@@ -375,13 +830,74 @@ pub fn run() {
             commands::stop_upnp_mapping,
             commands::get_upnp_status,
             commands::set_dock_visible,
+            commands::minimize_to_tray,
             commands::probe_trackers,
+            commands::fetch_tracker_sources,
             commands::is_autostart_launch,
             commands::clear_log_file,
             commands::export_diagnostic_logs,
+            commands::check_path_exists,
+            commands::check_path_is_dir,
+            commands::read_local_file,
+            commands::list_dir_files,
+            commands::show_item_in_dir,
+            commands::open_path_normalized,
+            commands::remove_file,
+            commands::move_file,
             commands::trash_file,
             commands::get_engine_conf_path,
             commands::is_dmabuf_renderer_disabled,
+            commands::set_window_alpha,
+            commands::is_default_protocol_client,
+            commands::set_default_protocol_client,
+            commands::remove_as_default_protocol_client,
+            commands::fetch_remote_bytes,
+            commands::resolve_filename,
+            commands::get_system_proxy,
+            commands::lookup_peer_ips,
+            commands::refresh_runtime_config,
+            commands::restart_http_api,
+            commands::take_pending_deep_links,
+            commands::take_pending_frontend_actions,
+            commands::history_add_record,
+            commands::history_get_records,
+            commands::history_remove_record,
+            commands::history_clear_records,
+            commands::history_remove_stale,
+            commands::history_remove_by_info_hash,
+            commands::history_record_birth,
+            commands::history_load_births,
+            commands::history_check_integrity,
+            commands::aria2_fetch_task_list,
+            commands::aria2_fetch_active_task_list,
+            commands::aria2_fetch_task_item,
+            commands::aria2_fetch_task_item_with_peers,
+            commands::aria2_get_version,
+            commands::aria2_get_global_option,
+            commands::aria2_get_global_stat,
+            commands::aria2_change_global_option,
+            commands::aria2_get_option,
+            commands::aria2_change_option,
+            commands::aria2_get_files,
+            commands::aria2_add_uri,
+            commands::aria2_add_torrent,
+            commands::aria2_add_metalink,
+            commands::aria2_force_remove,
+            commands::aria2_force_pause,
+            commands::aria2_pause,
+            commands::aria2_unpause,
+            commands::aria2_pause_all,
+            commands::aria2_force_pause_all,
+            commands::aria2_unpause_all,
+            commands::aria2_save_session,
+            commands::aria2_remove_download_result,
+            commands::aria2_purge_download_result,
+            commands::aria2_batch_unpause,
+            commands::aria2_batch_force_pause,
+            commands::aria2_batch_force_remove,
+            commands::wait_for_engine,
+            commands::system_shutdown,
+            commands::cancel_shutdown,
         ])
         // ── Window event interception ─────────────────────────────────
         //
@@ -418,12 +934,10 @@ pub fn run() {
 
                 // Read minimize-to-tray preference directly from the
                 // persistent store (Rust-side, no IPC round-trip).
-                let store_prefs = app
+                let should_hide = app
                     .store("config.json")
                     .ok()
-                    .and_then(|s| s.get("preferences"));
-
-                let should_hide = store_prefs
+                    .and_then(|s| s.get("preferences"))
                     .as_ref()
                     .and_then(|p| p.get("minimizeToTrayOnClose")?.as_bool())
                     .unwrap_or(false);
@@ -431,20 +945,12 @@ pub fn run() {
                 log::debug!("window:prefs minimizeToTrayOnClose={}", should_hide);
 
                 if should_hide {
-                    log::info!("window:hide-to-tray label=main");
-                    let _ = window.hide();
-
-                    #[cfg(target_os = "macos")]
-                    {
-                        let hide_dock = store_prefs
-                            .as_ref()
-                            .and_then(|p| p.get("hideDockOnMinimize")?.as_bool())
-                            .unwrap_or(false);
-                        log::debug!("window:prefs hideDockOnMinimize={}", hide_dock);
-                        if hide_dock {
-                            use tauri::ActivationPolicy;
-                            let _ = app.set_activation_policy(ActivationPolicy::Accessory);
-                        }
+                    // Lightweight mode destroys the WebView to reduce memory usage;
+                    // standard mode hides it for instant show on tray click.
+                    // Window is fully recreated on tray-click via get_or_create_main_window.
+                    // Downloads, monitoring, and tray continue — they run in Rust.
+                    if let Some(wv) = app.get_webview_window(window.label()) {
+                        handle_minimize_to_tray(app, &wv);
                     }
                 } else {
                     log::info!("window:show-exit-dialog label=main");

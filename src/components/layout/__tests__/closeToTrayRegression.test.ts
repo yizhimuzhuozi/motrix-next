@@ -70,8 +70,18 @@ describe('lib.rs — CloseRequested show-exit-dialog emit', () => {
     expect(preventIdx, 'prevent_close must appear before should_hide check').toBeLessThan(shouldHideIdx)
   })
 
-  it('hides the main window in the should_hide branch', () => {
-    expect(crBlock).toContain('window.hide()')
+  it('delegates to handle_minimize_to_tray in the should_hide branch', () => {
+    expect(crBlock).toContain('handle_minimize_to_tray')
+    // The shared helper contains the actual hide/destroy logic
+    const helperBody = extractBody(source, 'fn handle_minimize_to_tray')
+    expect(helperBody).toContain('window.hide()')
+    expect(helperBody).toContain('window.destroy()')
+  })
+
+  it('marks deep-link frontend readiness stale before lightweight destroy', () => {
+    const helperBody = extractBody(source, 'fn handle_minimize_to_tray')
+    expect(helperBody).toContain('mark_frontend_unready')
+    expect(helperBody.indexOf('mark_frontend_unready')).toBeLessThan(helperBody.indexOf('window.destroy()'))
   })
 
   it('emits "show-exit-dialog" when should_hide is false', () => {

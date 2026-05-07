@@ -21,13 +21,12 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ],
       "@shared/*": [
-        "src/shared/*"
+        "./src/shared/*"
       ]
     }
   },

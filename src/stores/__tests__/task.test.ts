@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useTaskStore } from '../task'
 import type { Aria2Task, Aria2Peer, TaskStatus, HistoryRecord } from '@shared/types'
+import { _resetForTesting, registerAddedAt } from '@/composables/useTaskOrder'
 
 // ── Mock history store (DB-primary architecture) ─────────────────────
 const mockHistoryFns = {
@@ -14,6 +15,10 @@ const mockHistoryFns = {
   removeStaleRecords: vi.fn().mockResolvedValue(undefined),
   checkIntegrity: vi.fn().mockResolvedValue('ok'),
   closeConnection: vi.fn().mockResolvedValue(undefined),
+  recordTaskBirth: vi.fn().mockResolvedValue(undefined),
+  loadBirthRecords: vi.fn().mockResolvedValue([]),
+  getSchemaVersion: vi.fn().mockResolvedValue(2),
+  removeByInfoHash: vi.fn().mockResolvedValue(undefined),
 }
 vi.mock('@/stores/history', () => ({
   useHistoryStore: () => mockHistoryFns,
@@ -85,6 +90,9 @@ describe('TaskStore', () => {
     // Reset history mock between tests
     Object.values(mockHistoryFns).forEach((fn) => fn.mockClear())
     mockHistoryFns.getRecords.mockResolvedValue([])
+    mockHistoryFns.recordTaskBirth.mockResolvedValue(undefined)
+    // Reset in-memory task order state
+    _resetForTesting()
   })
 
   // ─── fetchList ──────────────────────────────────────────
@@ -92,8 +100,264 @@ describe('TaskStore', () => {
   it('fetchList populates taskList from API', async () => {
     await store.fetchList()
     expect(store.taskList).toHaveLength(2)
-    expect(store.taskList[0].gid).toBe('gid1')
+    // Active tab sorts by added-at DESC; trackFirstSeen assigns sequential
+    // timestamps so gid2 (later) comes before gid1 (earlier).
+    expect(store.taskList[0].gid).toBe('gid2')
     expect(mockApi.fetchTaskList).toHaveBeenCalledWith({ type: 'active' })
+  })
+
+  it('fetchList prunes selectedGidList to valid gids only', async () => {
+    store.selectTasks(['gid1', 'gid_invalid'])
+    await store.fetchList()
+    expect(store.selectedGidList).toEqual(['gid1'])
+  })
+
+  // ─── fetchList: 'all' branch — 3-source merge ──────────────────
+
+  describe('fetchList all branch', () => {
+    beforeEach(() => {
+      // Reset mock to avoid interference from the default setup
+      mockApi.fetchTaskList.mockReset()
+    })
+
+    it('merges active + stopped + history records', async () => {
+      await store.changeCurrentList('all')
+
+      // Setup: active returns 1 task, stopped returns 1 task, history returns 1 record
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('aaa', 'active')]) // active
+        .mockResolvedValueOnce([makeMockTask('bbb', 'complete')]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        { gid: 'ccc', name: 'old.zip', status: 'complete' } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      // All 3 tasks should be present
+      expect(store.taskList).toHaveLength(3)
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      expect(gids).toContain('aaa')
+      expect(gids).toContain('bbb')
+      expect(gids).toContain('ccc')
+    })
+
+    it('deduplicates GIDs: aria2 data takes priority over history', async () => {
+      await store.changeCurrentList('all')
+
+      // Same GID 'dup1' exists in both aria2 stopped and history DB
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([makeMockTask('dup1', 'complete')]) // stopped (aria2)
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        { gid: 'dup1', name: 'history-version.zip', status: 'complete' } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      // Only one entry for 'dup1' — aria2 version wins
+      expect(store.taskList).toHaveLength(1)
+      expect(store.taskList[0].gid).toBe('dup1')
+    })
+
+    it('sorts all tasks by added_at DESC regardless of status', async () => {
+      // Pre-register birth timestamps to control sort order
+      registerAddedAt('active-1', '2024-01-01T10:00:00Z') // oldest
+      registerAddedAt('stopped-1', '2024-01-01T10:01:00Z') // middle
+
+      await store.changeCurrentList('all')
+
+      // Live active task + completed stopped task
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('active-1', 'active')]) // active
+        .mockResolvedValueOnce([makeMockTask('stopped-1', 'complete')]) // stopped
+      // History record with added_at — newest
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        {
+          gid: 'hist-1',
+          name: 'old.zip',
+          status: 'complete',
+          added_at: '2024-01-01T10:02:00Z',
+        } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // Sorted by added_at DESC: hist-1 (newest), stopped-1, active-1 (oldest)
+      expect(gids).toEqual(['hist-1', 'stopped-1', 'active-1'])
+    })
+
+    it('calls fetchTaskList for active and stopped concurrently', async () => {
+      // changeCurrentList('all') internally calls fetchList, so we set up returns for that first
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active (consumed by changeCurrentList)
+        .mockResolvedValueOnce([]) // stopped (consumed by changeCurrentList)
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.changeCurrentList('all')
+
+      // Reset to count only the explicit fetchList call
+      mockApi.fetchTaskList.mockReset()
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // Should call fetchTaskList twice: once for active, once for stopped
+      expect(mockApi.fetchTaskList).toHaveBeenCalledTimes(2)
+      expect(mockApi.fetchTaskList).toHaveBeenCalledWith({ type: 'active' })
+      expect(mockApi.fetchTaskList).toHaveBeenCalledWith(expect.objectContaining({ type: 'stopped' }))
+    })
+
+    it('passes limit for stopped and history queries', async () => {
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // The stopped call should have a limit
+      const stoppedCall = mockApi.fetchTaskList.mock.calls.find(
+        (c: unknown[]) => (c[0] as { type: string }).type === 'stopped',
+      )
+      expect(stoppedCall).toBeDefined()
+      expect((stoppedCall![0] as { limit?: number }).limit).toBeDefined()
+      expect(typeof (stoppedCall![0] as { limit?: number }).limit).toBe('number')
+
+      // History should also be called with a limit
+      expect(mockHistoryFns.getRecords).toHaveBeenCalledWith(undefined, expect.any(Number))
+    })
+
+    it('handles empty data from all sources gracefully', async () => {
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      expect(store.taskList).toEqual([])
+    })
+
+    it('preserves position when task transitions from active to stopped', async () => {
+      // Simulate: task 'bbb' completes between polls.
+      // Both tasks pre-registered with birth timestamps
+      registerAddedAt('bbb', '2024-01-01T10:01:00Z') // added second (newer)
+      registerAddedAt('aaa', '2024-01-01T10:00:00Z') // added first (older)
+
+      await store.changeCurrentList('all')
+
+      // Poll 1: both active
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('bbb', 'active'), makeMockTask('aaa', 'active')])
+        .mockResolvedValueOnce([])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+      const poll1Gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // Sorted by added_at DESC: bbb (newer) then aaa (older)
+      expect(poll1Gids).toEqual(['bbb', 'aaa'])
+
+      // Poll 2: 'bbb' moved to stopped, 'aaa' still active
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([makeMockTask('aaa', 'active')])
+        .mockResolvedValueOnce([makeMockTask('bbb', 'complete')])
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+      const poll2Gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // Position unchanged: bbb still before aaa (sorted by added_at)
+      expect(poll2Gids).toEqual(['bbb', 'aaa'])
+    })
+
+    it('newly tracked tasks (no pre-registered added_at) sort above old DB records', async () => {
+      // Edge case: a task appears in aria2 tellStopped before addedAtMap is populated.
+      // trackFirstSeen assigns a current timestamp → sorts above old DB records.
+      await store.changeCurrentList('all')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([]) // active
+        .mockResolvedValueOnce([makeMockTask('fresh', 'complete')]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([
+        {
+          gid: 'old',
+          name: 'old.zip',
+          status: 'complete',
+          added_at: '2024-01-01T00:00:00Z',
+        } as HistoryRecord,
+      ])
+
+      await store.fetchList()
+
+      const gids = store.taskList.map((t: { gid: string }) => t.gid)
+      // 'fresh' gets current time from trackFirstSeen → sorts first
+      expect(gids).toEqual(['fresh', 'old'])
+    })
+
+    it('filters out completed metadata tasks from the stopped source', async () => {
+      await store.changeCurrentList('all')
+
+      // Completed metadata task — should be hidden
+      const completedMeta = makeMockTask('meta1', 'complete', {
+        followedBy: ['real-gid'],
+        files: [
+          {
+            index: '1',
+            path: '[METADATA]KNOPPIX_V9.1',
+            length: '26000',
+            completedLength: '26000',
+            selected: 'true',
+            uris: [],
+          },
+        ],
+      })
+      const realTask = makeMockTask('real-gid', 'active')
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([realTask]) // active — the real download
+        .mockResolvedValueOnce([completedMeta]) // stopped — stale metadata
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // Completed metadata task should be excluded
+      expect(store.taskList).toHaveLength(1)
+      expect(store.taskList[0].gid).toBe('real-gid')
+    })
+
+    it('keeps actively-downloading metadata tasks visible', async () => {
+      await store.changeCurrentList('all')
+
+      // Active metadata task — still resolving, must remain visible
+      const activeMeta = makeMockTask('meta-active', 'active', {
+        files: [
+          {
+            index: '1',
+            path: '[METADATA]KNOPPIX_V9.1CD',
+            length: '26000',
+            completedLength: '5000',
+            selected: 'true',
+            uris: [],
+          },
+        ],
+      })
+
+      mockApi.fetchTaskList
+        .mockResolvedValueOnce([activeMeta]) // active — metadata still downloading
+        .mockResolvedValueOnce([]) // stopped
+      mockHistoryFns.getRecords.mockResolvedValueOnce([])
+
+      await store.fetchList()
+
+      // Active metadata must NOT be filtered — user needs to see the download progress
+      expect(store.taskList).toHaveLength(1)
+      expect(store.taskList[0].gid).toBe('meta-active')
+    })
   })
 
   it('fetchList prunes selectedGidList to valid gids only', async () => {
@@ -107,7 +371,8 @@ describe('TaskStore', () => {
   it('selectAllTask selects all gids in current list', async () => {
     await store.fetchList()
     store.selectAllTask()
-    expect(store.selectedGidList).toEqual(['gid1', 'gid2'])
+    // Order matches added-at DESC sort (gid2 first)
+    expect(store.selectedGidList).toEqual(['gid2', 'gid1'])
   })
 
   it('selectTasks sets arbitrary gid list', () => {
@@ -138,18 +403,29 @@ describe('TaskStore', () => {
 
   // ─── pauseAllTask / resumeAllTask ───────────────────────
 
-  it('pauseAllTask calls forcePauseAllTask directly (no graceful fallback)', async () => {
+  it('pauseAllTask pauses non-seeding tasks individually via forcePauseTask', async () => {
+    // Default mock taskList has 2 active tasks: gid1, gid2
+    await store.fetchList()
     await store.pauseAllTask()
-    expect(mockApi.forcePauseAllTask).toHaveBeenCalled()
-    expect(mockApi.pauseAllTask).not.toHaveBeenCalled()
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 'gid1' })
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 'gid2' })
+    expect(mockApi.forcePauseAllTask).not.toHaveBeenCalled()
     expect(mockApi.saveSession).toHaveBeenCalled()
   })
 
-  it('pauseAllTask refreshes list and saves session', async () => {
+  it('pauseAllTask skips seeding tasks', async () => {
+    mockApi.fetchTaskList.mockResolvedValueOnce([
+      makeMockTask('dl-1', 'active'),
+      makeMockTask('seed-1', 'active', {
+        bittorrent: { info: { name: 'movie.mkv' } },
+        seeder: 'true',
+      }),
+    ])
+    await store.fetchList()
     await store.pauseAllTask()
-    expect(mockApi.forcePauseAllTask).toHaveBeenCalled()
-    expect(mockApi.fetchTaskList).toHaveBeenCalled()
-    expect(mockApi.saveSession).toHaveBeenCalled()
+    expect(mockApi.forcePauseTask).toHaveBeenCalledWith({ gid: 'dl-1' })
+    expect(mockApi.forcePauseTask).toHaveBeenCalledTimes(1)
+    expect(mockApi.forcePauseAllTask).not.toHaveBeenCalled()
   })
 
   it('resumeAllTask calls API, refreshes, and saves session', async () => {
@@ -671,105 +947,9 @@ describe('TaskStore', () => {
     })
   })
 
-  // ── Task lifecycle scanning (completion + error detection) ────────
-
-  describe('task lifecycle scanning', () => {
-    it('fires onTaskComplete for newly completed tasks after initial scan', async () => {
-      const onComplete = vi.fn()
-      store.setOnTaskComplete(onComplete)
-      store.setApi(mockApi)
-
-      // Initial scan: complete task is seen but callback NOT fired (suppressed)
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped'
-          ? Promise.resolve([makeMockTask('c1', 'complete')])
-          : Promise.resolve([makeMockTask('a1', 'active')]),
-      )
-      await store.changeCurrentList('active')
-      expect(onComplete).not.toHaveBeenCalled()
-
-      // Second fetch: new completed task appears → callback fires
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped'
-          ? Promise.resolve([makeMockTask('c1', 'complete'), makeMockTask('c2', 'complete')])
-          : Promise.resolve([makeMockTask('a1', 'active')]),
-      )
-      await store.fetchList()
-      expect(onComplete).toHaveBeenCalledTimes(1)
-      expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ gid: 'c2' }))
-    })
-
-    it('fires onTaskError for newly errored tasks after initial scan', async () => {
-      const onError = vi.fn()
-      store.setOnTaskError(onError)
-      store.setApi(mockApi)
-
-      // Initial scan: error task present → suppressed
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped'
-          ? Promise.resolve([makeMockTask('e1', 'error', { errorCode: '3', errorMessage: 'Not found' })])
-          : Promise.resolve([]),
-      )
-      await store.changeCurrentList('active')
-      expect(onError).not.toHaveBeenCalled()
-
-      // Second fetch: new error task → callback fires
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped'
-          ? Promise.resolve([
-              makeMockTask('e1', 'error', { errorCode: '3' }),
-              makeMockTask('e2', 'error', { errorCode: '6', errorMessage: 'Network problem' }),
-            ])
-          : Promise.resolve([]),
-      )
-      await store.fetchList()
-      expect(onError).toHaveBeenCalledTimes(1)
-      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ gid: 'e2', errorCode: '6' }))
-    })
-
-    it('fetches stopped pool for lifecycle scanning via aria2 active query', async () => {
-      const onComplete = vi.fn()
-      store.setOnTaskComplete(onComplete)
-      store.setApi(mockApi)
-
-      // When on the stopped tab, fetchList now reads from DB.
-      // Lifecycle scanning for onComplete fires from the separate
-      // _scanStoppedPool path which still calls fetchTaskList({ type: 'stopped' }).
-      // Initial scan: c1 present → suppressed by initialScanDone guard
-      mockApi.fetchTaskList.mockResolvedValue([makeMockTask('c1', 'complete')])
-      await store.changeCurrentList('active')
-      await store.fetchList()
-
-      // c2 is new → onComplete fires
-      mockApi.fetchTaskList.mockResolvedValue([makeMockTask('c1', 'complete'), makeMockTask('c2', 'complete')])
-      await store.fetchList()
-      expect(onComplete).toHaveBeenCalledTimes(1)
-      expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ gid: 'c2' }))
-    })
-
-    it('does not re-fire callbacks for already-seen GIDs', async () => {
-      const onComplete = vi.fn()
-      store.setOnTaskComplete(onComplete)
-      store.setApi(mockApi)
-
-      // Initial scan
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped' ? Promise.resolve([]) : Promise.resolve([]),
-      )
-      await store.changeCurrentList('active')
-
-      // Complete task appears
-      mockApi.fetchTaskList.mockImplementation(({ type }: { type: string }) =>
-        type === 'stopped' ? Promise.resolve([makeMockTask('c1', 'complete')]) : Promise.resolve([]),
-      )
-      await store.fetchList()
-      expect(onComplete).toHaveBeenCalledTimes(1)
-
-      // Same task in next poll → no duplicate fire
-      await store.fetchList()
-      expect(onComplete).toHaveBeenCalledTimes(1)
-    })
-  })
+  // NOTE: Task lifecycle scanning (completion + error detection) has been
+  // migrated to the app-level useTaskLifecycleService. Tests are in
+  // src/composables/__tests__/useTaskLifecycleService.test.ts
 
   // ── registerTorrentSource / consumeTorrentSource ────────────────────
 

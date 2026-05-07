@@ -4,6 +4,7 @@
  * removing records whose local files no longer exist.
  */
 import { findStaleRecords, type StaleCheckItem } from './useDownloadCleanup'
+import { logger } from '@shared/logger'
 
 interface CleanupResult {
   scanned: number
@@ -27,5 +28,6 @@ export async function runStaleRecordCleanup(
     await removeStaleRecords(staleGids)
   }
 
+  logger.info('StaleCleanup', `scanned=${records.length} removed=${staleGids.length}`)
   return { scanned: records.length, removed: staleGids.length }
 }

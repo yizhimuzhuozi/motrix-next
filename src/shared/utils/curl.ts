@@ -1,5 +1,6 @@
 /** @fileoverview cURL command parser to extract URI, headers, and options. */
 import curlParser from '@bany/curl-to-json'
+import { sanitizeHeaderValue } from './headerSanitize'
 
 export const buildUrisFromCurl = (uris: string[] = []): string[] => {
   return uris.map((uri) => {
@@ -7,10 +8,11 @@ export const buildUrisFromCurl = (uris: string[] = []): string[] => {
       const parsedUri = curlParser(uri) as { url: string; params?: Record<string, string> }
       let url = parsedUri.url
       if (parsedUri.params && Object.keys(parsedUri.params).length > 0) {
-        const paramsStr = Object.keys(parsedUri.params)
-          .map((k) => `${k}=${parsedUri.params![k]}`)
-          .join('&')
-        url = `${url}?${paramsStr}`
+        const parsedUrl = new URL(url)
+        Object.entries(parsedUri.params).forEach(([key, value]) => {
+          parsedUrl.searchParams.append(key, value)
+        })
+        url = parsedUrl.toString()
       }
       return url
     }
@@ -26,7 +28,7 @@ export const buildHeadersFromCurl = (uris: string[] = []): (Record<string, strin
       if (parsed.cookie) header.cookie = parsed.cookie as string
       if (parsed['user-agent']) header['user-agent'] = parsed['user-agent'] as string
       if (parsed.referer) header.referer = parsed.referer as string
-      return header
+      return Object.fromEntries(Object.entries(header).map(([key, value]) => [key, sanitizeHeaderValue(value)]))
     }
     return undefined
   })

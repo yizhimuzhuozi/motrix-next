@@ -94,14 +94,14 @@ describe('lib.rs — ExitRequested safety net', () => {
 
   it('still handles Reopen on macOS', () => {
     expect(runEventBody).toContain('RunEvent::Reopen')
-    expect(runEventBody).toContain('ActivationPolicy::Regular')
+    expect(runEventBody).toContain('activate_main_window')
   })
 
-  it('Reopen uses get_or_create_main_window for window recreation', () => {
+  it('Reopen uses shared window activation for window recreation', () => {
     const reopenIdx = runEventBody.indexOf('RunEvent::Reopen')
     expect(reopenIdx).toBeGreaterThanOrEqual(0)
     const afterReopen = runEventBody.slice(reopenIdx, reopenIdx + 500)
-    expect(afterReopen).toContain('get_or_create_main_window')
+    expect(afterReopen).toContain('activate_main_window')
   })
 })
 
@@ -160,22 +160,35 @@ describe('tray.rs — get_or_create_main_window', () => {
     expect(fnBody).toContain('.visible(false)')
   })
 
+  it('restores saved geometry after recreating a destroyed window', () => {
+    const fnBody = extractBody(source, 'pub fn get_or_create_main_window')
+    expect(fnBody).toContain('restore_window_state_if_enabled')
+    expect(fnBody.indexOf('builder.build()')).toBeLessThan(fnBody.indexOf('restore_window_state_if_enabled'))
+  })
+
+  it('does not center the recreated window after build-time restore can run', () => {
+    const fnBody = extractBody(source, 'pub fn get_or_create_main_window')
+    const buildIdx = fnBody.indexOf('builder.build()')
+    const afterBuild = fnBody.slice(buildIdx)
+    expect(afterBuild).not.toContain('.center()')
+  })
+
   it('logs an error if window recreation fails', () => {
     const fnBody = extractBody(source, 'pub fn get_or_create_main_window')
     expect(fnBody).toContain('log::error!')
     expect(fnBody).toContain('window-recreate-failed')
   })
 
-  it('tray left-click handler uses get_or_create_main_window', () => {
+  it('tray left-click handler uses shared window activation', () => {
     const traySetup = extractBody(source, 'pub fn setup_tray')
-    expect(traySetup).toContain('get_or_create_main_window')
+    expect(traySetup).toContain('activate_main_window')
   })
 
-  it('"show" menu handler uses get_or_create_main_window', () => {
+  it('"show" menu handler uses shared window activation', () => {
     const showIdx = source.indexOf('"show" =>')
     expect(showIdx).toBeGreaterThanOrEqual(0)
     const afterShow = source.slice(showIdx, showIdx + 500)
-    expect(afterShow).toContain('get_or_create_main_window')
+    expect(afterShow).toContain('activate_main_window')
   })
 
   it('does NOT use raw get_webview_window in tray handlers', () => {
@@ -185,6 +198,46 @@ describe('tray.rs — get_or_create_main_window', () => {
     // Count occurrences of get_webview_window in setup_tray — should be 0
     const rawCalls = (setupBody.match(/get_webview_window/g) || []).length
     expect(rawCalls, 'tray handlers should use get_or_create, not raw get_webview_window').toBe(0)
+  })
+})
+
+describe('lib.rs — lightweight window-state preservation', () => {
+  let libSource: string
+
+  beforeAll(() => {
+    libSource = fs.readFileSync(path.join(TAURI_ROOT, 'src', 'lib.rs'), 'utf-8')
+  })
+
+  it('defines one shared helper for conditional window-state restore flags', () => {
+    const helperBody = extractBody(libSource, 'pub(crate) fn restore_window_state_if_enabled')
+    const preferenceBody = extractBody(libSource, 'fn keep_window_state_enabled')
+    expect(helperBody).toContain('keep_window_state_enabled')
+    expect(preferenceBody).toContain('keepWindowState')
+    expect(helperBody).toContain('restore_state')
+    expect(libSource).toContain('!StateFlags::VISIBLE')
+  })
+
+  it('uses the shared restore helper during initial setup', () => {
+    const setupBody = extractBody(libSource, 'fn setup_app')
+    expect(setupBody).toContain('restore_window_state_if_enabled')
+  })
+
+  it('saves window state before lightweight mode destroys the WebView', () => {
+    const helperBody = extractBody(libSource, 'fn handle_minimize_to_tray')
+    expect(helperBody).toContain('save_window_state_before_lightweight_destroy')
+    expect(helperBody.indexOf('save_window_state_before_lightweight_destroy')).toBeLessThan(
+      helperBody.indexOf('window.destroy()'),
+    )
+  })
+
+  it('keeps lightweight destroy state save scoped to the lightweight branch', () => {
+    const helperBody = extractBody(libSource, 'fn handle_minimize_to_tray')
+    const lightweightIdx = helperBody.indexOf('if lightweight')
+    const saveIdx = helperBody.indexOf('save_window_state_before_lightweight_destroy')
+    const hideIdx = helperBody.indexOf('window.hide()')
+    expect(lightweightIdx).toBeGreaterThanOrEqual(0)
+    expect(saveIdx).toBeGreaterThan(lightweightIdx)
+    expect(hideIdx).toBeGreaterThan(saveIdx)
   })
 })
 
@@ -217,8 +270,11 @@ describe('Diagnostic logging — window lifecycle events', () => {
       expect(onWinBody).toContain('window:close-prevented')
     })
 
-    it('logs hide-to-tray action at info level', () => {
-      expect(onWinBody).toContain('window:hide-to-tray')
+    it('logs hide/destroy action via handle_minimize_to_tray at info level', () => {
+      // The actual hide/destroy logging moved to the shared helper
+      const helperBody = extractBody(libSource, 'fn handle_minimize_to_tray')
+      expect(helperBody).toContain('log::info!')
+      expect(helperBody).toContain('tray:hide')
     })
 
     it('logs show-exit-dialog action at info level', () => {

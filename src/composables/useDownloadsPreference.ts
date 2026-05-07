@@ -1,0 +1,158 @@
+/**
+ * @fileoverview Pure functions for the Downloads preference tab.
+ *
+ * Manages: download paths, task concurrency, retry/recovery, speed limits,
+ * notifications/automation, and auto-cleanup. This is the core download
+ * experience tab — most fields map to aria2 engine options.
+ */
+import type { AppConfig, FileCategory } from '@shared/types'
+import {
+  DEFAULT_APP_CONFIG as D,
+  buildDefaultCategories,
+  BUILTIN_CATEGORY_LABELS,
+  BUILTIN_CATEGORY_TEMPLATES,
+} from '@shared/constants'
+
+// ── Types ───────────────────────────────────────────────────────────
+
+export interface DownloadsForm {
+  [key: string]: unknown
+  dir: string
+  fileCategoryEnabled: boolean
+  fileCategories: FileCategory[]
+  maxConcurrentDownloads: number
+  split: number
+  maxConnectionPerServer: number
+  continue: boolean
+  maxTries: number
+  retryWait: number
+  remoteTime: boolean
+  maxOverallDownloadLimit: string
+  maxOverallUploadLimit: string
+  speedScheduleEnabled: boolean
+  speedScheduleFrom: string
+  speedScheduleTo: string
+  speedScheduleDays: number
+  newTaskShowDownloading: boolean
+  noConfirmBeforeDeleteTask: boolean
+  deleteFilesWhenSkipConfirm: boolean
+  taskNotification: boolean
+  notifyOnStart: boolean
+  notifyOnComplete: boolean
+  shutdownWhenComplete: boolean
+  keepAwake: boolean
+  deleteTorrentAfterComplete: boolean
+  autoDeleteStaleRecords: boolean
+  clearCompletedOnExit: boolean
+}
+
+// ── Internals ───────────────────────────────────────────────────────
+
+/**
+ * Hydrates categories loaded from persisted config with missing fields.
+ * - `builtIn`: inferred from label matching against BUILTIN_CATEGORY_TEMPLATES
+ * - `directory`: filled from baseDir + template subdirName (built-in) or baseDir (custom)
+ * Empty directories would cause aria2 to fail, so this is safety-critical.
+ */
+function hydrateCategories(categories: FileCategory[], baseDir: string): FileCategory[] {
+  const normalizedBase = baseDir.replace(/\\/g, '/').replace(/\/+$/, '')
+  const templateMap: ReadonlyMap<string, string> = new Map(
+    BUILTIN_CATEGORY_TEMPLATES.map((t) => [t.label, t.subdirName]),
+  )
+
+  return categories.map((cat) => {
+    const isBuiltIn = cat.builtIn ?? BUILTIN_CATEGORY_LABELS.has(cat.label)
+    let directory = cat.directory
+    if (!directory) {
+      const subdirName = templateMap.get(cat.label)
+      directory = subdirName ? `${normalizedBase}/${subdirName}` : normalizedBase
+    }
+    return { ...cat, builtIn: isBuiltIn, directory }
+  })
+}
+
+// ── Pure Functions ──────────────────────────────────────────────────
+
+/**
+ * Builds the downloads form state from the preference store config.
+ * All fallback values reference DEFAULT_APP_CONFIG (single source of truth).
+ */
+export function buildDownloadsForm(config: AppConfig, defaultDir: string = ''): DownloadsForm {
+  return {
+    dir: config.dir || defaultDir,
+    fileCategoryEnabled: config.fileCategoryEnabled ?? D.fileCategoryEnabled,
+    fileCategories:
+      config.fileCategories && config.fileCategories.length > 0
+        ? hydrateCategories(config.fileCategories, config.dir || defaultDir)
+        : buildDefaultCategories(config.dir || defaultDir),
+    maxConcurrentDownloads: config.maxConcurrentDownloads ?? D.maxConcurrentDownloads,
+    split: config.split ?? D.split,
+    maxConnectionPerServer: config.maxConnectionPerServer ?? D.maxConnectionPerServer,
+    continue: config.continue ?? D.continue,
+    maxTries: config.maxTries ?? D.maxTries,
+    retryWait: config.retryWait ?? D.retryWait,
+    remoteTime: config.remoteTime ?? D.remoteTime,
+    maxOverallDownloadLimit: String(config.maxOverallDownloadLimit ?? D.maxOverallDownloadLimit),
+    maxOverallUploadLimit: String(config.maxOverallUploadLimit ?? D.maxOverallUploadLimit),
+    speedScheduleEnabled: config.speedScheduleEnabled ?? D.speedScheduleEnabled,
+    speedScheduleFrom: config.speedScheduleFrom ?? D.speedScheduleFrom,
+    speedScheduleTo: config.speedScheduleTo ?? D.speedScheduleTo,
+    speedScheduleDays: config.speedScheduleDays ?? D.speedScheduleDays,
+    newTaskShowDownloading: config.newTaskShowDownloading ?? D.newTaskShowDownloading,
+    noConfirmBeforeDeleteTask: config.noConfirmBeforeDeleteTask ?? D.noConfirmBeforeDeleteTask,
+    deleteFilesWhenSkipConfirm: config.deleteFilesWhenSkipConfirm ?? D.deleteFilesWhenSkipConfirm,
+    taskNotification: config.taskNotification ?? D.taskNotification,
+    notifyOnStart: config.notifyOnStart ?? D.notifyOnStart,
+    notifyOnComplete: config.notifyOnComplete ?? D.notifyOnComplete,
+    shutdownWhenComplete: config.shutdownWhenComplete ?? D.shutdownWhenComplete,
+    keepAwake: config.keepAwake ?? D.keepAwake,
+    deleteTorrentAfterComplete: config.deleteTorrentAfterComplete ?? false,
+    autoDeleteStaleRecords: config.autoDeleteStaleRecords ?? false,
+    clearCompletedOnExit: config.clearCompletedOnExit ?? false,
+  }
+}
+
+/**
+ * Converts the downloads form into aria2 system config key-value pairs.
+ * Only engine-level download params; app-only keys (notifications, cleanup)
+ * are excluded.
+ */
+export function buildDownloadsSystemConfig(f: DownloadsForm): Record<string, string> {
+  return {
+    dir: f.dir,
+    'max-concurrent-downloads': String(f.maxConcurrentDownloads),
+    'max-connection-per-server': String(f.maxConnectionPerServer),
+    split: String(f.split),
+    'max-overall-download-limit': f.maxOverallDownloadLimit,
+    'max-overall-upload-limit': f.maxOverallUploadLimit,
+    continue: String(f.continue !== false),
+    'remote-time': String(!!f.remoteTime),
+    'max-tries': String(f.maxTries),
+    'retry-wait': String(f.retryWait),
+  }
+}
+
+/**
+ * Transforms the downloads form for store persistence.
+ * Handles the fileCategories auto-populate guard.
+ * Since v2, split and maxConnectionPerServer are persisted independently.
+ */
+export function transformDownloadsForStore(f: DownloadsForm): Partial<AppConfig> {
+  const data = { ...f } as Partial<AppConfig> & Record<string, unknown>
+
+  // Guard: auto-populate default categories when classification is enabled but
+  // the categories array is empty (edge case from GitHub issue #229).
+  if (f.fileCategoryEnabled && (!f.fileCategories || f.fileCategories.length === 0)) {
+    data.fileCategories = buildDefaultCategories(f.dir)
+  }
+
+  data.split = f.split
+
+  return data
+}
+
+export function recordDownloadsDirectory(f: DownloadsForm, recordDirectory: (directory: string) => void): void {
+  const directory = f.dir.trim()
+  if (!directory) return
+  recordDirectory(directory)
+}

@@ -14,7 +14,7 @@ defineEmits<{
 
 <template>
   <div class="tab-pane-content">
-    <Transition name="torrent-swap" mode="out-in">
+    <Transition name="content-fade" mode="out-in">
       <div v-if="loaded" key="loaded">
         <slot name="file-list" />
       </div>
@@ -47,27 +47,5 @@ defineEmits<{
 }
 .torrent-upload:hover {
   border-color: var(--color-primary);
-}
-</style>
-
-<!-- Non-scoped: Vue Transition classes -->
-<style>
-.torrent-swap-enter-active {
-  transition:
-    opacity 0.22s cubic-bezier(0.2, 0, 0, 1),
-    transform 0.22s cubic-bezier(0.2, 0, 0, 1);
-}
-.torrent-swap-leave-active {
-  transition:
-    opacity 0.15s cubic-bezier(0.3, 0, 0.8, 0.15),
-    transform 0.15s cubic-bezier(0.3, 0, 0.8, 0.15);
-}
-.torrent-swap-enter-from {
-  opacity: 0;
-  transform: scale(0.96);
-}
-.torrent-swap-leave-to {
-  opacity: 0;
-  transform: scale(0.96);
 }
 </style>

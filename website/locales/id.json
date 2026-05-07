@@ -89,6 +89,8 @@
   "footer.ack": "Terima kasih kepada {link} atas fondasinya",
   "footer.contributing": "Kontribusi",
   "footer.coc": "Kode etik",
+  "footer.privacy": "Kebijakan Privasi",
+  "footer.signing": "Kebijakan Penandatanganan",
   "footer.license": "MIT — Hak Cipta © 2025-sekarang AnInsomniacy",
   "dl.modal.title": "Unduh untuk {os}",
   "dl.modal.download": "Unduh",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Jalankan <code>uname -m</code> di terminal",
   "theme.system": "Sistem",
   "theme.light": "Terang",
-  "theme.dark": "Gelap"
+  "theme.dark": "Gelap",
+  "hero.stars": "Stars",
+  "hero.downloads": "Unduhan",
+  "hero.version": "Terbaru",
+  "starHistory.title": "Star riwayat"
 }

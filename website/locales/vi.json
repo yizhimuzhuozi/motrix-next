@@ -89,6 +89,8 @@
   "footer.ack": "Cảm ơn {link} vì đã đặt nền móng",
   "footer.contributing": "Đóng góp",
   "footer.coc": "Quy tắc ứng xử",
+  "footer.privacy": "Chính sách bảo mật",
+  "footer.signing": "Chính sách ký mã",
   "footer.license": "MIT — Bản quyền © 2025-hiện tại AnInsomniacy",
   "dl.modal.title": "Tải xuống cho {os}",
   "dl.modal.download": "Tải xuống",
@@ -99,5 +101,9 @@
   "dl.modal.help.linux": "Chạy <code>uname -m</code> trong terminal",
   "theme.system": "Hệ thống",
   "theme.light": "Sáng",
-  "theme.dark": "Tối"
+  "theme.dark": "Tối",
+  "hero.stars": "Stars",
+  "hero.downloads": "Lượt tải",
+  "hero.version": "Mới nhất",
+  "starHistory.title": "Star lịch sử"
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-/** @fileoverview Advanced preference form: proxy, tracker, RPC, port, and user-agent settings. */
-import { ref, nextTick, onMounted } from 'vue'
+/** @fileoverview Advanced preference tab: RPC, extension, clipboard, protocols, engine, log, history, diagnostics. */
+import { ref, nextTick, onMounted, h } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { usePlatform } from '@/composables/usePlatform'
 import { useI18n } from 'vue-i18n'
 import { usePreferenceStore } from '@/stores/preference'
 import { usePreferenceForm } from '@/composables/usePreferenceForm'
@@ -12,8 +13,7 @@ import { useAdvancedActions } from '@/composables/useAdvancedActions'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { useIpc } from '@/composables/useIpc'
 import { appDataDir, appLogDir, join } from '@tauri-apps/api/path'
-import { LOG_LEVELS, PROXY_SCOPE_OPTIONS } from '@shared/constants'
-import { convertTrackerDataToLine } from '@shared/utils/tracker'
+import { LOG_LEVELS } from '@shared/constants'
 import {
   generateSecret,
   buildAdvancedForm,
@@ -21,10 +21,7 @@ import {
   transformAdvancedForStore,
   validateAdvancedForm,
   randomRpcPort,
-  randomBtPort,
-  randomDhtPort,
 } from '@/composables/useAdvancedPreference'
-import userAgentMap from '@shared/ua'
 import {
   NForm,
   NFormItem,
@@ -34,20 +31,19 @@ import {
   NSwitch,
   NSelect,
   NButton,
-  NButtonGroup,
   NSpace,
   NDivider,
   NIcon,
   NModal,
   NDataTable,
   NEmpty,
+  NCollapseTransition,
   useDialog,
 } from 'naive-ui'
 import { useAppMessage } from '@/composables/useAppMessage'
-import { SyncOutline, DiceOutline, DownloadOutline, FolderOpenOutline, TrashOutline } from '@vicons/ionicons5'
+import { DiceOutline, DownloadOutline, FolderOpenOutline, TrashOutline, CopyOutline } from '@vicons/ionicons5'
 import { logger } from '@shared/logger'
 import PreferenceActionBar from './PreferenceActionBar.vue'
-import { trackerSourceOptions } from '@shared/constants/trackerSources'
 
 const { restartEngine } = useEngineRestart()
 
@@ -58,17 +54,12 @@ const historyStore = useHistoryStore()
 const message = useAppMessage()
 const dialog = useDialog()
 
-import { DEFAULT_TRACKER_SOURCE, ENGINE_RPC_PORT } from '@shared/constants'
+const { isLinux, isMac } = usePlatform()
+
+import { ENGINE_RPC_PORT } from '@shared/constants'
 import { diffConfig, checkIsNeedRestart } from '@shared/utils/config'
 
-const proxyScopeOptions = PROXY_SCOPE_OPTIONS.map((s: string) => ({
-  label: t(`preferences.proxy-scope-${s}`),
-  value: s,
-}))
-
 const logLevelOptions = LOG_LEVELS.map((l: string) => ({ label: l, value: l }))
-
-const syncingTracker = ref(false)
 
 const aria2ConfPath = ref('')
 const sessionPath = ref('')
@@ -88,49 +79,110 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceF
     // If it was already empty before this edit session, no need to re-warn.
     const prevSecret = preferenceStore.config.rpcSecret
     if (!f.rpcSecret && !!prevSecret) {
-      return new Promise<boolean>((resolve) => {
+      const ok = await new Promise<boolean>((resolve) => {
         dialog.warning({
           title: t('preferences.rpc-secret-empty-title'),
           content: t('preferences.rpc-secret-empty-confirm'),
           positiveText: t('preferences.rpc-secret-empty-continue'),
-          negativeText: t('preferences.engine-restart-later'),
+          negativeText: t('app.cancel'),
           maskClosable: false,
           onPositiveClick: () => resolve(true),
           onNegativeClick: () => resolve(false),
           onClose: () => resolve(false),
         })
       })
+      if (!ok) return false
     }
+
+    // Gate: engine restart confirmation (RPC port / secret change).
+    // Must confirm BEFORE saving — declining cancels the entire save so
+    // config.json never contains values the running engine doesn't match.
+    const changed = diffConfig(preferenceStore.config, f)
+    if (checkIsNeedRestart(changed)) {
+      const ok = await new Promise<boolean>((resolve) => {
+        dialog.warning({
+          title: t('preferences.engine-restart-title'),
+          content: t('preferences.engine-restart-confirm'),
+          positiveText: t('preferences.engine-restart-now'),
+          negativeText: t('app.cancel'),
+          maskClosable: false,
+          onPositiveClick: () => resolve(true),
+          onNegativeClick: () => resolve(false),
+          onClose: () => resolve(false),
+        })
+      })
+      if (!ok) return false
+    }
+
+    // Gate: extension API port change confirmation.
+    // Separate from engine restart — this only rebinds the HTTP API server,
+    // downloads are unaffected.
+    if (changed.extensionApiPort !== undefined) {
+      const ok = await new Promise<boolean>((resolve) => {
+        dialog.warning({
+          title: t('preferences.extension-api-port'),
+          content: t('preferences.extension-api-port-confirm', { port: f.extensionApiPort }),
+          positiveText: t('app.confirm'),
+          negativeText: t('app.cancel'),
+          maskClosable: false,
+          onPositiveClick: () => resolve(true),
+          onNegativeClick: () => resolve(false),
+          onClose: () => resolve(false),
+        })
+      })
+      if (!ok) return false
+    }
+
+    // Protocol disable confirmation — single merged dialog.
+    const prev = preferenceStore.config.protocols
+    const disabledLinks: string[] = []
+    if (prev.magnet && !f.protocolMagnet) disabledLinks.push('magnet')
+    if (prev.thunder && !f.protocolThunder) disabledLinks.push('thunder')
+    const disabledExt = prev.motrixnext && !f.protocolMotrixnext
+
+    if (disabledLinks.length > 0 || disabledExt) {
+      const items: ReturnType<typeof h>[] = []
+      for (const p of disabledLinks) {
+        items.push(h('div', `• ${t('preferences.protocol-disable-link-warning', { protocols: `${p}://` })}`))
+      }
+      if (disabledExt) {
+        items.push(h('div', `• ${t('preferences.protocol-disable-ext-warning')}`))
+      }
+      const content =
+        items.length > 1
+          ? () =>
+              h('div', { style: 'display: flex; flex-direction: column; gap: 8px' }, [
+                h('div', t('preferences.protocol-disable-intro')),
+                ...items,
+              ])
+          : () => h('div', items)
+      const ok = await new Promise<boolean>((resolve) => {
+        dialog.warning({
+          title: t('preferences.protocol-disable-title'),
+          content,
+          positiveText: t('preferences.protocol-disable-confirm'),
+          negativeText: t('app.cancel'),
+          onPositiveClick: () => resolve(true),
+          onNegativeClick: () => resolve(false),
+          onClose: () => resolve(false),
+        })
+      })
+      if (!ok) return false
+    }
+
     return true
   },
   afterSave: async (f, prevConfig) => {
-    // Sync UPnP mapping state only after a successful Save.
-    if (f.enableUpnp !== prevConfig.enableUpnp) {
-      syncUpnpState(!!f.enableUpnp, f.listenPort, f.dhtListenPort)
-    }
-
-    // Hot-reload engine when startup-only settings change (port, secret).
     const changed = diffConfig(prevConfig, f)
+
+    // Engine restart — user already confirmed in beforeSave, execute immediately.
     if (checkIsNeedRestart(changed)) {
       const port = f.rpcListenPort || ENGINE_RPC_PORT
       const secret = f.rpcSecret || ''
-      const d = dialog.warning({
-        title: t('preferences.engine-restart-title'),
-        content: t('preferences.engine-restart-confirm'),
-        positiveText: t('preferences.engine-restart-now'),
-        negativeText: t('preferences.engine-restart-later'),
-        maskClosable: false,
-        onPositiveClick: async () => {
-          d.loading = true
-          d.negativeText = ''
-          d.closable = false
-          message.info(t('preferences.engine-restarting'), { duration: 2000 })
-          // Yield to browser so it paints the loading spinner before the IPC call
-          await nextTick()
-          await new Promise((r) => requestAnimationFrame(r))
-          await restartEngine({ port, secret })
-        },
-      })
+      message.info(t('preferences.engine-restarting'))
+      await nextTick()
+      await new Promise((r) => requestAnimationFrame(r))
+      await restartEngine({ port, secret })
     }
 
     // Log level changes need a full app relaunch (not engine restart),
@@ -149,19 +201,87 @@ const { form, isDirty, handleSave, handleReset, resetSnapshot } = usePreferenceF
         },
       })
     }
+
+    // Hardware rendering toggle needs a full app relaunch — the env var
+    // WEBKIT_DISABLE_DMABUF_RENDERER is read by WebKitGTK at process startup.
+    if (changed.hardwareRendering !== undefined && changed.hardwareRendering !== prevConfig.hardwareRendering) {
+      dialog.info({
+        title: t('preferences.restart-required'),
+        content: t('preferences.hardware-rendering-restart-confirm'),
+        positiveText: t('preferences.restart-now'),
+        negativeText: t('preferences.engine-restart-later'),
+        maskClosable: false,
+        onPositiveClick: async () => {
+          const { stopEngine } = useIpc()
+          await stopEngine()
+          await relaunch()
+        },
+      })
+    }
+
+    // Extension API port — user already confirmed in beforeSave, execute immediately.
+    if (changed.extensionApiPort !== undefined) {
+      const newPort = f.extensionApiPort
+      try {
+        await invoke('restart_http_api', { port: newPort })
+        message.success(t('preferences.extension-api-port-applied', { port: newPort }))
+      } catch (e) {
+        logger.warn('Advanced.extensionApi', `restart_http_api port=${newPort} failed: ${e}`)
+        message.error(t('preferences.extension-api-port-failed', { port: newPort }))
+      }
+    }
+
+    // Protocol handler registration (reconcile-based).
+    {
+      const prevProtocols = prevConfig.protocols ?? { magnet: false, thunder: false, motrixnext: true }
+      for (const [protocol, formKey, prev] of [
+        ['magnet', 'protocolMagnet', prevProtocols.magnet],
+        ['thunder', 'protocolThunder', prevProtocols.thunder],
+        ['motrixnext', 'protocolMotrixnext', prevProtocols.motrixnext],
+      ] as const) {
+        const enabled = f[formKey] as boolean
+        try {
+          if (enabled) {
+            const isDefault = await invoke<boolean>('is_default_protocol_client', { protocol })
+            if (!isDefault) {
+              await invoke('set_default_protocol_client', { protocol })
+              message.success(t('preferences.protocol-registered', { protocol }))
+            }
+          } else if (prev) {
+            if (isMac.value) {
+              message.info(t('preferences.protocol-macos-unregister-hint', { protocol }))
+            } else {
+              await invoke('remove_as_default_protocol_client', { protocol })
+              message.success(t('preferences.protocol-unregistered', { protocol }))
+            }
+          }
+        } catch (e) {
+          const reason =
+            e instanceof Error
+              ? e.message
+              : typeof e === 'object' && e !== null
+                ? Object.values(e as Record<string, unknown>).join(': ')
+                : String(e)
+          logger.warn('Advanced.protocol', `Failed to ${enabled ? 'register' : 'unregister'} ${protocol}: ${reason}`)
+          message.error(t('preferences.protocol-failed', { protocol, reason }))
+          ;(f as Record<string, unknown>)[formKey] = prev
+          resetSnapshot()
+          const revertedProtocols = { ...preferenceStore.config.protocols, [protocol]: prev }
+          preferenceStore.updateAndSave({ protocols: revertedProtocols })
+        }
+      }
+    }
   },
 })
 
 function buildForm() {
   const c = preferenceStore.config
-  const { form: formData, generatedSecret } = buildAdvancedForm(c)
-  // Side effect: persist auto-generated secret
+  const { form: formData, generatedSecret, generatedApiSecret } = buildAdvancedForm(c)
   if (generatedSecret) {
     preferenceStore.updateAndSave({ rpcSecret: generatedSecret })
   }
-  // Restore trackerSource default that buildAdvancedForm doesn't know about
-  if (!c.trackerSource) {
-    formData.trackerSource = [...DEFAULT_TRACKER_SOURCE]
+  if (generatedApiSecret) {
+    preferenceStore.updateAndSave({ extensionApiSecret: generatedApiSecret })
   }
   return formData
 }
@@ -191,30 +311,6 @@ async function loadPaths() {
   }
 }
 
-async function handleSyncTracker() {
-  if (form.value.trackerSource.length === 0) {
-    message.warning(t('preferences.bt-tracker-select-source'))
-    return
-  }
-  syncingTracker.value = true
-  try {
-    const results = await preferenceStore.fetchBtTracker(form.value.trackerSource)
-    const text = convertTrackerDataToLine(results)
-    if (text) {
-      form.value.btTracker = text
-      form.value.lastSyncTrackerTime = Date.now()
-      message.success(t('preferences.bt-tracker-sync-succeed'))
-    } else {
-      message.error(t('preferences.bt-tracker-sync-failed'))
-    }
-  } catch (e) {
-    logger.debug('Advanced.syncTracker', e)
-    message.error(t('preferences.bt-tracker-sync-failed'))
-  } finally {
-    syncingTracker.value = false
-  }
-}
-
 function onRpcPortDice() {
   form.value.rpcListenPort = randomRpcPort()
 }
@@ -223,33 +319,18 @@ function onRpcSecretDice() {
   form.value.rpcSecret = generateSecret()
 }
 
-function onBtPortDice() {
-  form.value.listenPort = randomBtPort()
+function onApiSecretDice() {
+  form.value.extensionApiSecret = generateSecret()
 }
 
-function onDhtPortDice() {
-  form.value.dhtListenPort = randomDhtPort()
-}
-
-// ─── UPnP Save-time Sync ─────────────────────────────────────────────
-
-/** Sync UPnP port-mapping state after preferences are saved. */
-async function syncUpnpState(enabled: boolean, btPort: number, dhtPort: number) {
+async function copyToClipboard(text: string, label: string) {
+  if (!text) return
   try {
-    if (enabled) {
-      await invoke('start_upnp_mapping', { btPort, dhtPort })
-    } else {
-      await invoke('stop_upnp_mapping')
-    }
+    await navigator.clipboard.writeText(text)
+    message.success(t('preferences.copied-to-clipboard', { label }))
   } catch (e) {
-    logger.warn('UPnP', `sync failed: ${e}`)
-    message.warning(t('preferences.upnp-mapping-failed'))
+    logger.debug('Advanced.clipboard', `writeText failed: ${e}`)
   }
-}
-
-function changeUA(type: string) {
-  const ua = userAgentMap[type]
-  if (ua) form.value.userAgent = ua
 }
 
 // ─── Advanced Actions (delegated to composable) ─────────────────────
@@ -286,94 +367,81 @@ function handleManualRestart() {
   handleManualRestartAction(form.value.rpcListenPort as number, form.value.rpcSecret as string)
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadForm()
   resetSnapshot()
   loadPaths()
+
+  // Read actual OS registration state for protocol toggles (all platforms).
+  // Uses custom Rust commands that support macOS NSWorkspace + Windows/Linux deep-link.
+  // This ensures the switches reflect reality even if another app has taken
+  // over the protocol association since Motrix last ran.
+  try {
+    form.value.protocolMagnet = await invoke<boolean>('is_default_protocol_client', { protocol: 'magnet' })
+    form.value.protocolThunder = await invoke<boolean>('is_default_protocol_client', { protocol: 'thunder' })
+    form.value.protocolMotrixnext = await invoke<boolean>('is_default_protocol_client', { protocol: 'motrixnext' })
+    // Patch snapshot so OS-queried values don't falsely trigger dirty state.
+    resetSnapshot()
+  } catch (e) {
+    logger.debug('Advanced.protocolCheck', e)
+  }
 })
 </script>
 
 <template>
   <div class="preference-form-wrapper">
-    <NForm label-placement="left" label-align="left" label-width="300px" size="small" class="form-preference">
-      <NDivider title-placement="left">{{ t('preferences.proxy') }}</NDivider>
-      <NFormItem :label="t('preferences.enable-proxy')">
-        <NSwitch v-model:value="form.proxy.enable" />
+    <NForm label-placement="left" label-align="left" label-width="260px" size="small" class="form-preference">
+      <NDivider title-placement="left">{{ t('preferences.extension-section') }}</NDivider>
+      <NFormItem :label="t('preferences.auto-submit-from-extension')">
+        <NSwitch v-model:value="form.autoSubmitFromExtension" />
       </NFormItem>
-      <div class="proxy-collapse" :class="{ 'proxy-collapse--open': form.proxy.enable }">
-        <div class="proxy-collapse__inner">
-          <NFormItem :label="t('preferences.proxy-server')">
-            <NInput v-model:value="form.proxy.server" placeholder="[http://][USER:PASSWORD@]HOST[:PORT]" />
-          </NFormItem>
-          <NFormItem label="Bypass">
-            <NInput
-              v-model:value="form.proxy.bypass"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 3 }"
-              :placeholder="t('preferences.proxy-bypass-input-tips')"
-            />
-          </NFormItem>
-          <NFormItem label="Scope">
-            <NSelect v-model:value="form.proxy.scope" :options="proxyScopeOptions" multiple style="width: 100%" />
-          </NFormItem>
-        </div>
-      </div>
-
-      <NDivider title-placement="left">{{ t('preferences.bt-tracker') }}</NDivider>
-      <NFormItem :label="t('preferences.bt-tracker-source')">
+      <NFormItem :label="t('preferences.extension-api-port')">
+        <NInputNumber v-model:value="form.extensionApiPort" :min="1024" :max="65535" style="width: 160px" />
+      </NFormItem>
+      <NFormItem
+        :label="t('preferences.extension-api-secret')"
+        :validation-status="form.extensionApiSecret ? undefined : 'warning'"
+      >
         <NInputGroup>
-          <NSelect
-            v-model:value="form.trackerSource"
-            :options="trackerSourceOptions"
-            multiple
-            :placeholder="t('preferences.bt-tracker-tips')"
+          <NInput
+            v-model:value="form.extensionApiSecret"
+            type="password"
+            show-password-on="click"
+            :placeholder="t('preferences.extension-api-secret')"
             style="flex: 1"
-            clearable
-            max-tag-count="responsive"
+            :status="form.extensionApiSecret ? undefined : 'warning'"
           />
-          <NButton :loading="syncingTracker" size="small" style="flex-shrink: 0" @click="handleSyncTracker">
+          <NButton
+            style="padding: 0 10px"
+            @click="copyToClipboard(form.extensionApiSecret, t('preferences.extension-api-secret'))"
+          >
             <template #icon>
-              <NIcon><SyncOutline /></NIcon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
             </template>
-            {{ t('preferences.bt-tracker-sync') }}
+          </NButton>
+          <NButton style="padding: 0 10px" @click="onApiSecretDice">
+            <template #icon>
+              <NIcon :size="14"><DiceOutline /></NIcon>
+            </template>
           </NButton>
         </NInputGroup>
       </NFormItem>
-      <NFormItem :label="t('preferences.bt-tracker-content')">
-        <NInput
-          v-model:value="form.btTracker"
-          type="textarea"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-          :placeholder="t('preferences.bt-tracker-input-tips')"
-        />
-      </NFormItem>
       <NFormItem :show-label="false">
-        <div class="info-text">
-          {{ t('preferences.bt-tracker-tips') }}
-          <a target="_blank" href="https://github.com/ngosang/trackerslist" rel="noopener noreferrer" class="info-link"
-            >ngosang/trackerslist ↗</a
-          >
-          <a
-            target="_blank"
-            href="https://github.com/XIU2/TrackersListCollection"
-            rel="noopener noreferrer"
-            class="info-link"
-            style="margin-left: 8px"
-            >XIU2/TrackersListCollection ↗</a
-          >
-        </div>
-      </NFormItem>
-      <NFormItem :label="t('preferences.auto-sync-tracker')">
-        <NSwitch v-model:value="form.autoSyncTracker" />
-      </NFormItem>
-      <NFormItem v-if="form.lastSyncTrackerTime" :show-label="false">
-        <div class="info-text">{{ new Date(form.lastSyncTrackerTime).toLocaleString() }}</div>
+        <div class="info-text">{{ t('preferences.extension-api-secret-tip') }}</div>
       </NFormItem>
 
       <NDivider title-placement="left">{{ t('preferences.rpc') }}</NDivider>
       <NFormItem :label="t('preferences.rpc-listen-port')">
         <NInputGroup>
           <NInputNumber v-model:value="form.rpcListenPort" :min="1024" :max="65535" style="width: 160px" />
+          <NButton
+            style="padding: 0 10px"
+            @click="copyToClipboard(String(form.rpcListenPort), t('preferences.rpc-listen-port'))"
+          >
+            <template #icon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
+            </template>
+          </NButton>
           <NButton style="padding: 0 10px" @click="onRpcPortDice">
             <template #icon>
               <NIcon :size="14"><DiceOutline /></NIcon>
@@ -387,10 +455,15 @@ onMounted(() => {
             v-model:value="form.rpcSecret"
             type="password"
             show-password-on="click"
-            placeholder="RPC Secret"
+            :placeholder="t('preferences.rpc-secret')"
             style="flex: 1"
             :status="form.rpcSecret ? undefined : 'warning'"
           />
+          <NButton style="padding: 0 10px" @click="copyToClipboard(form.rpcSecret, t('preferences.rpc-secret'))">
+            <template #icon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
+            </template>
+          </NButton>
           <NButton style="padding: 0 10px" @click="onRpcSecretDice">
             <template #icon>
               <NIcon :size="14"><DiceOutline /></NIcon>
@@ -399,56 +472,15 @@ onMounted(() => {
         </NInputGroup>
       </NFormItem>
 
-      <NDivider title-placement="left">{{ t('preferences.port') }}</NDivider>
-      <NFormItem label="UPnP/NAT-PMP">
-        <NSwitch v-model:value="form.enableUpnp" />
-      </NFormItem>
-      <NFormItem :label="t('preferences.bt-port')">
-        <NInputGroup>
-          <NInputNumber v-model:value="form.listenPort" :min="1024" :max="65535" style="width: 160px" />
-          <NButton style="padding: 0 10px" @click="onBtPortDice">
-            <template #icon>
-              <NIcon :size="14"><DiceOutline /></NIcon>
-            </template>
-          </NButton>
-        </NInputGroup>
-      </NFormItem>
-      <NFormItem :label="t('preferences.dht-port')">
-        <NInputGroup>
-          <NInputNumber v-model:value="form.dhtListenPort" :min="1024" :max="65535" style="width: 160px" />
-          <NButton style="padding: 0 10px" @click="onDhtPortDice">
-            <template #icon>
-              <NIcon :size="14"><DiceOutline /></NIcon>
-            </template>
-          </NButton>
-        </NInputGroup>
-      </NFormItem>
-
-      <NDivider title-placement="left">{{ t('preferences.user-agent') }}</NDivider>
-      <NFormItem :label="t('preferences.mock-user-agent')">
-        <NInput
-          v-model:value="form.userAgent"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="User-Agent"
-        />
-      </NFormItem>
-      <NFormItem :show-label="false">
-        <div class="ua-preset-row">
-          <NButtonGroup size="small">
-            <NButton @click="changeUA('aria2')">Aria2</NButton>
-            <NButton @click="changeUA('transmission')">Transmission</NButton>
-            <NButton @click="changeUA('chrome')">Chrome</NButton>
-            <NButton @click="changeUA('du')">du</NButton>
-          </NButtonGroup>
-          <NButton class="ua-reset-btn" size="small" ghost @click="form.userAgent = ''">Reset</NButton>
-        </div>
-      </NFormItem>
-
       <NDivider title-placement="left">{{ t('preferences.engine-section') }}</NDivider>
       <NFormItem :label="t('preferences.aria2-conf-path')">
         <NInputGroup>
           <NInput :value="aria2ConfPath" readonly style="flex: 1" />
+          <NButton style="padding: 0 10px" @click="copyToClipboard(aria2ConfPath, t('preferences.aria2-conf-path'))">
+            <template #icon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
+            </template>
+          </NButton>
           <NButton style="padding: 0 10px" @click="handleRevealPath(aria2ConfPath)">
             <template #icon>
               <NIcon :size="14"><FolderOpenOutline /></NIcon>
@@ -459,6 +491,11 @@ onMounted(() => {
       <NFormItem :label="t('preferences.session-path')">
         <NInputGroup>
           <NInput :value="sessionPath" readonly style="flex: 1" />
+          <NButton style="padding: 0 10px" @click="copyToClipboard(sessionPath, t('preferences.session-path'))">
+            <template #icon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
+            </template>
+          </NButton>
           <NButton style="padding: 0 10px" @click="handleRevealPath(sessionPath)">
             <template #icon>
               <NIcon :size="14"><FolderOpenOutline /></NIcon>
@@ -467,7 +504,7 @@ onMounted(() => {
         </NInputGroup>
       </NFormItem>
       <NFormItem :show-label="false">
-        <NButton class="session-reset-btn" ghost @click="handleSessionReset">
+        <NButton class="ghost-btn--warning" ghost @click="handleSessionReset">
           {{ t('preferences.clear-all-tasks') }}
         </NButton>
       </NFormItem>
@@ -476,6 +513,11 @@ onMounted(() => {
       <NFormItem :label="t('preferences.log-path')">
         <NInputGroup>
           <NInput :value="logPath" readonly style="flex: 1" />
+          <NButton style="padding: 0 10px" @click="copyToClipboard(logPath, t('preferences.log-path'))">
+            <template #icon>
+              <NIcon :size="14"><CopyOutline /></NIcon>
+            </template>
+          </NButton>
           <NButton style="padding: 0 10px" @click="handleRevealPath(logPath)">
             <template #icon>
               <NIcon :size="14"><FolderOpenOutline /></NIcon>
@@ -486,13 +528,13 @@ onMounted(() => {
       <NFormItem :label="t('preferences.log-level')">
         <div class="log-level-row">
           <NSelect v-model:value="form.logLevel" :options="logLevelOptions" style="width: 110px" />
-          <NButton class="export-logs-btn" ghost :loading="exportingLogs" @click="handleExportLogs">
+          <NButton class="ghost-btn--primary" ghost :loading="exportingLogs" @click="handleExportLogs">
             <template #icon>
               <NIcon><DownloadOutline /></NIcon>
             </template>
             {{ t('preferences.export-diagnostic-logs') }}
           </NButton>
-          <NButton class="clear-log-btn" ghost @click="handleClearLog">
+          <NButton class="ghost-btn--danger" ghost @click="handleClearLog">
             <template #icon>
               <NIcon><TrashOutline /></NIcon>
             </template>
@@ -510,13 +552,19 @@ onMounted(() => {
           <NButton class="db-browse-btn" @click="handleDbBrowse">
             {{ t('preferences.db-browse') }}
           </NButton>
-          <NButton class="db-reset-btn" ghost @click="handleDbReset">
+          <NButton class="ghost-btn--danger" ghost @click="handleDbReset">
             {{ t('preferences.db-reset') }}
           </NButton>
         </NSpace>
       </NFormItem>
 
-      <NDivider title-placement="left">{{ t('preferences.reset') }}</NDivider>
+      <NDivider title-placement="left">{{ t('preferences.diagnostics-section') }}</NDivider>
+      <NFormItem v-if="isLinux" :label="t('preferences.hardware-rendering')">
+        <NSwitch v-model:value="form.hardwareRendering" />
+      </NFormItem>
+      <NFormItem v-if="isLinux" :show-label="false">
+        <div class="info-text">{{ t('preferences.hardware-rendering-hint') }}</div>
+      </NFormItem>
       <NFormItem :show-label="false">
         <NSpace>
           <NButton class="open-config-folder-btn" @click="handleOpenConfigFolder">
@@ -525,13 +573,48 @@ onMounted(() => {
             </template>
             {{ t('preferences.open-config-folder') }}
           </NButton>
-          <NButton class="restore-defaults-btn" ghost @click="handleRestoreDefaults">
+          <NButton class="ghost-btn--warning" ghost @click="handleRestoreDefaults">
             {{ t('preferences.restore-defaults') }}
           </NButton>
-          <NButton class="factory-reset-btn" ghost @click="handleFactoryReset">
+          <NButton class="ghost-btn--danger" ghost @click="handleFactoryReset">
             {{ t('preferences.factory-reset') }}
           </NButton>
         </NSpace>
+      </NFormItem>
+
+      <!-- Clipboard Detection (migrated from Basic) -->
+      <NDivider title-placement="left">{{ t('preferences.clipboard-detection') }}</NDivider>
+      <NFormItem :label="t('preferences.clipboard-auto-detect')">
+        <NSwitch v-model:value="form.clipboardEnable" />
+      </NFormItem>
+      <NCollapseTransition :show="form.clipboardEnable" class="collapse-indent">
+        <NFormItem :label="t('preferences.clipboard-http')">
+          <NSwitch v-model:value="form.clipboardHttp" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-ftp')">
+          <NSwitch v-model:value="form.clipboardFtp" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-magnet')">
+          <NSwitch v-model:value="form.clipboardMagnet" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-thunder')">
+          <NSwitch v-model:value="form.clipboardThunder" />
+        </NFormItem>
+        <NFormItem :label="t('preferences.clipboard-bt-hash')">
+          <NSwitch v-model:value="form.clipboardBtHash" />
+        </NFormItem>
+      </NCollapseTransition>
+
+      <!-- Default Programs (migrated from Basic) -->
+      <NDivider title-placement="left">{{ t('preferences.default-programs') }}</NDivider>
+      <NFormItem :label="t('preferences.protocol-magnet')">
+        <NSwitch v-model:value="form.protocolMagnet" />
+      </NFormItem>
+      <NFormItem :label="t('preferences.protocol-thunder')">
+        <NSwitch v-model:value="form.protocolThunder" />
+      </NFormItem>
+      <NFormItem :label="t('preferences.protocol-motrixnext')">
+        <NSwitch v-model:value="form.protocolMotrixnext" />
       </NFormItem>
     </NForm>
 
@@ -573,6 +656,7 @@ onMounted(() => {
 .form-preference {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 30px 64px 36px;
 }
 .form-preference :deep(.n-form-item) {
@@ -581,6 +665,8 @@ onMounted(() => {
 .info-text {
   color: var(--m3-on-surface-variant);
   font-size: 12px;
+  max-width: 520px;
+  word-wrap: break-word;
 }
 .info-link {
   color: var(--color-primary);
@@ -603,48 +689,58 @@ onMounted(() => {
   padding: 16px 24px 16px 40px;
 }
 
-/* ── Restore Defaults — warm-gold ghost, same tone as session-reset ── */
-.restore-defaults-btn {
-  --btn-warning: #c9a055;
-  color: var(--btn-warning) !important;
-  border-color: var(--btn-warning) !important;
+/* ── Ghost button variants — shared tinted styles with M3 easing ──── */
+.ghost-btn--danger {
+  --btn-tint: var(--m3-error, #c97070);
+  color: var(--btn-tint) !important;
+  border-color: var(--btn-tint) !important;
   transition:
     color 0.35s cubic-bezier(0.2, 0, 0, 1),
     background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
     border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
-.restore-defaults-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-warning) 12%, transparent) !important;
+.ghost-btn--danger:hover {
+  background-color: color-mix(in srgb, var(--btn-tint) 12%, transparent) !important;
 }
-.restore-defaults-btn :deep(.n-button__border) {
-  border-color: var(--btn-warning) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.restore-defaults-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-warning) !important;
+.ghost-btn--danger :deep(.n-button__border),
+.ghost-btn--danger :deep(.n-button__state-border) {
+  border-color: var(--btn-tint) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* ── Export Logs — primary-toned ghost button with M3 easing ────── */
-.export-logs-btn {
-  color: var(--color-primary, #5b93d5) !important;
-  border-color: var(--color-primary, #5b93d5) !important;
-  --btn-primary: var(--color-primary, #5b93d5);
+.ghost-btn--warning {
+  --btn-tint: var(--m3-tertiary, #c9a055);
+  color: var(--btn-tint) !important;
+  border-color: var(--btn-tint) !important;
   transition:
     color 0.35s cubic-bezier(0.2, 0, 0, 1),
     background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
-.export-logs-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-primary) 12%, transparent) !important;
+.ghost-btn--warning:hover {
+  background-color: color-mix(in srgb, var(--btn-tint) 12%, transparent) !important;
 }
-.export-logs-btn :deep(.n-button__border) {
-  border-color: var(--btn-primary) !important;
+.ghost-btn--warning :deep(.n-button__border),
+.ghost-btn--warning :deep(.n-button__state-border) {
+  border-color: var(--btn-tint) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
-.export-logs-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-primary) !important;
+
+.ghost-btn--primary {
+  --btn-tint: var(--color-primary, #5b93d5);
+  color: var(--btn-tint) !important;
+  border-color: var(--btn-tint) !important;
+  transition:
+    color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.ghost-btn--primary:hover {
+  background-color: color-mix(in srgb, var(--btn-tint) 12%, transparent) !important;
+}
+.ghost-btn--primary :deep(.n-button__border),
+.ghost-btn--primary :deep(.n-button__state-border) {
+  border-color: var(--btn-tint) !important;
   transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -656,99 +752,51 @@ onMounted(() => {
   width: 100%;
 }
 
-/* ── DB Reset — muted-rose ghost, background fills on hover ──────── */
-.db-reset-btn {
-  --btn-error: #c97070;
-  color: var(--btn-error) !important;
-  border-color: var(--btn-error) !important;
-  transition:
-    color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.db-reset-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-error) 12%, transparent) !important;
-}
-.db-reset-btn :deep(.n-button__border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.db-reset-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* ── Session Reset — warm-gold ghost, background fills on hover ──── */
-.session-reset-btn {
-  --btn-warning: #c9a055;
-  color: var(--btn-warning) !important;
-  border-color: var(--btn-warning) !important;
-  transition:
-    color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.session-reset-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-warning) 12%, transparent) !important;
-}
-.session-reset-btn :deep(.n-button__border) {
-  border-color: var(--btn-warning) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.session-reset-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-warning) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* ── Factory Reset — muted-rose ghost, background fills on hover ─── */
-.factory-reset-btn {
-  --btn-error: #c97070;
-  color: var(--btn-error) !important;
-  border-color: var(--btn-error) !important;
-  transition:
-    color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.factory-reset-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-error) 12%, transparent) !important;
-}
-.factory-reset-btn :deep(.n-button__border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.factory-reset-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* ── Clear Log — muted-rose ghost, matches destructive action buttons ── */
-.clear-log-btn {
-  --btn-error: #c97070;
-  color: var(--btn-error) !important;
-  border-color: var(--btn-error) !important;
-  transition:
-    color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    background-color 0.35s cubic-bezier(0.2, 0, 0, 1),
-    border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.clear-log-btn:hover {
-  background-color: color-mix(in srgb, var(--btn-error) 12%, transparent) !important;
-}
-.clear-log-btn :deep(.n-button__border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-.clear-log-btn :deep(.n-button__state-border) {
-  border-color: var(--btn-error) !important;
-  transition: border-color 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-
 /* ── UA preset row — button group + standalone reset ─────────────── */
 .ua-preset-row {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── UA field wrapper — stacks textarea + warning within same NFormItem ── */
+.ua-field-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* ── UA warning — CSS Grid 0fr→1fr slide-in, matches proxy-collapse ── */
+.ua-warn-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+.ua-warn-collapse--open {
+  grid-template-rows: 1fr;
+}
+.ua-warn-collapse__inner {
+  overflow: hidden;
+}
+.ua-warn-bar {
+  display: flex;
   align-items: center;
   gap: 10px;
+  padding: 8px 12px;
+  margin-top: 6px;
+  border-radius: var(--border-radius);
+  background: var(--m3-error-container-bg);
+  opacity: 0;
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+.ua-warn-collapse--open .ua-warn-bar {
+  opacity: 1;
+}
+.ua-warn-text {
+  font-size: var(--font-size-sm);
+  color: var(--m3-error);
+  flex: 1;
 }
 
 /* ── UA Reset — muted-rose ghost that highlights on hover ─────────── */
@@ -785,5 +833,10 @@ onMounted(() => {
 }
 .proxy-collapse__inner {
   overflow: hidden;
+}
+
+/* ── Collapse indent: subordinate toggle hierarchy ────────────────── */
+.form-preference :deep(.collapse-indent) {
+  margin-left: 16px;
 }
 </style>

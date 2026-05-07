@@ -11,6 +11,8 @@ import {
   getActionLabel,
   getActionType,
   getActionTarget,
+  resolvePhaseAfterDownload,
+  shouldAllowUpdateDialogClose,
   isUpdateRollback,
   calcProgressPercent,
   bytesToMB,
@@ -92,6 +94,38 @@ describe('getActionTarget', () => {
     ['up-to-date', null],
   ])('phase "%s" → action "%s"', (phase, expected) => {
     expect(getActionTarget(phase)).toBe(expected)
+  })
+})
+
+// ── resolvePhaseAfterDownload ──────────────────────────────────────
+
+describe('resolvePhaseAfterDownload', () => {
+  it('returns ready when bytes were actually downloaded', () => {
+    expect(resolvePhaseAfterDownload('downloaded')).toBe('ready')
+  })
+
+  it('returns up-to-date when download command reports no update', () => {
+    expect(resolvePhaseAfterDownload('no-update')).toBe('up-to-date')
+  })
+})
+
+// ── shouldAllowUpdateDialogClose ───────────────────────────────────
+
+describe('shouldAllowUpdateDialogClose', () => {
+  it('disallows closing while downloading', () => {
+    expect(shouldAllowUpdateDialogClose('downloading')).toBe(false)
+  })
+
+  it('disallows closing while installing', () => {
+    expect(shouldAllowUpdateDialogClose('installing')).toBe(false)
+  })
+
+  it('allows closing in idle or terminal phases', () => {
+    expect(shouldAllowUpdateDialogClose('checking')).toBe(true)
+    expect(shouldAllowUpdateDialogClose('available')).toBe(true)
+    expect(shouldAllowUpdateDialogClose('ready')).toBe(true)
+    expect(shouldAllowUpdateDialogClose('error')).toBe(true)
+    expect(shouldAllowUpdateDialogClose('up-to-date')).toBe(true)
   })
 })
 

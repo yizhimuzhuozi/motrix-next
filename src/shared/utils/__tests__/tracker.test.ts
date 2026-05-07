@@ -35,6 +35,11 @@ describe('convertTrackerDataToLine', () => {
     const result = convertTrackerDataToLine(['a\r\nb', 'c'])
     expect(result).toBe('a\r\nb\r\nc')
   })
+
+  it('deduplicates individual tracker URLs across entries', () => {
+    const result = convertTrackerDataToLine(['udp://a\nudp://b', 'udp://b\nudp://c'])
+    expect(result).toBe('udp://a\r\nudp://b\r\nudp://c')
+  })
 })
 
 // ─── convertTrackerDataToComma ──────────────────────────────
@@ -54,6 +59,15 @@ describe('convertTrackerDataToComma', () => {
 
   it('returns single entry without comma', () => {
     expect(convertTrackerDataToComma(['tracker1'])).toBe('tracker1')
+  })
+
+  it('deduplicates individual tracker URLs across sources', () => {
+    const source1 = 'udp://tracker1:1234\nudp://shared:5678'
+    const source2 = 'udp://shared:5678\nudp://tracker2:9012'
+    const result = convertTrackerDataToComma([source1, source2])
+    const trackers = result.split(',')
+    expect(trackers.filter((t) => t === 'udp://shared:5678')).toHaveLength(1)
+    expect(trackers).toHaveLength(3)
   })
 })
 

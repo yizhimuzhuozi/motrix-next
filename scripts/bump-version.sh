@@ -30,15 +30,22 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
 fi
 
 # Update Cargo.toml (only the package version, not dependency versions)
-sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$CARGO_TOML"
+# BSD sed (macOS) requires -i '' with a space; GNU sed (Linux) requires -i without.
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$CARGO_TOML"
+else
+  sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$CARGO_TOML"
+fi
 
 # Update package.json
 cd "$PROJECT_ROOT"
 npm pkg set "version=$VERSION"
 
-# Regenerate Cargo.lock
+# Sync Cargo.lock with the new package version without upgrading dependencies.
+# 'cargo check' updates the lockfile only for manifest changes (our version bump),
+# unlike 'cargo generate-lockfile' which pulls all deps to latest compatible.
 cd "$PROJECT_ROOT/src-tauri"
-cargo generate-lockfile --quiet 2>/dev/null || true
+cargo check --quiet 2>/dev/null || true
 
 echo "✓ Bumped version to $VERSION"
 echo "  - $CARGO_TOML"

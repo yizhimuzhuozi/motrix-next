@@ -1,6 +1,32 @@
 /** @fileoverview Tests for locale utilities. */
 import { describe, it, expect } from 'vitest'
-import { isRTL, getLangDirection, calcFormLabelWidth } from '../locale'
+import { isRTL, getLangDirection, calcFormLabelWidth, resolveSystemLocale } from '../locale'
+
+const AVAILABLE = ['en-US', 'zh-CN', 'zh-TW', 'ja', 'ko', 'fr', 'de', 'pt-BR', 'ar', 'fa']
+
+describe('resolveSystemLocale', () => {
+  it('returns exact match when available', () => {
+    expect(resolveSystemLocale('zh-CN', AVAILABLE)).toBe('zh-CN')
+  })
+  it('normalizes Apple -Hans subtag', () => {
+    expect(resolveSystemLocale('zh-Hans-CN', AVAILABLE)).toBe('zh-CN')
+  })
+  it('normalizes Apple -Hant subtag', () => {
+    expect(resolveSystemLocale('zh-Hant-TW', AVAILABLE)).toBe('zh-TW')
+  })
+  it('falls back to prefix match', () => {
+    expect(resolveSystemLocale('pt', AVAILABLE)).toBe('pt-BR')
+  })
+  it('matches single-segment locale directly', () => {
+    expect(resolveSystemLocale('ja', AVAILABLE)).toBe('ja')
+  })
+  it('falls back to en-US for unknown locale', () => {
+    expect(resolveSystemLocale('xx-YY', AVAILABLE)).toBe('en-US')
+  })
+  it('falls back to en-US for empty available list', () => {
+    expect(resolveSystemLocale('zh-CN', [])).toBe('en-US')
+  })
+})
 
 describe('isRTL', () => {
   it('returns true for Arabic', () => {

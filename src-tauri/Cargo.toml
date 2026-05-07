@@ -1,6 +1,6 @@
 [package]
 name = "motrix-next"
-version = "3.4.6-beta.2"
+version = "3.8.9-beta.1"
 description = "A full-featured download manager"
 authors = ["AnInsomniacy"]
 edition = "2021"
@@ -28,6 +28,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+semver = "1"
 tokio = { version = "1", features = ["full"] }
 log = "0.4"
 thiserror = "2"
@@ -36,16 +37,49 @@ tauri-plugin-locale = "2.0.1"
 url = "2.5.8"
 tauri-plugin-window-state = "2.4.1"
 igd-next = { version = "0.15", features = ["aio_tokio"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 tauri-plugin-log = "2.8.0"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 dirs = "6"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = "0.4"
 trash = "5"
+dunce = "1"
+os_info = "3"
+sys-locale = "0.3"
+rusqlite = { version = "0.31", features = ["bundled"] }
+rfd = { version = "0.16", default-features = false }
+maxminddb = { version = "0.27", features = ["mmap"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+keepawake = "0.6"
+mime2ext = "0.1"
+urlencoding = "2"
+sanitize-filename = "0.6"
+content_disposition = "0.4"
+rfc2047-decoder = "1.1"
+strip-ansi-escapes = "0.2.1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm"] }
+windows-sys = { version = "0.59", features = [
+    "Win32_Graphics_Dwm",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+] }
+winreg = "0.56"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSDockTile", "NSApplication"] }
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSString", "NSBundle"] }
+core-foundation = "0.10"
+system-configuration = "0.7.0"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints.clippy]
 unwrap_used = "deny"

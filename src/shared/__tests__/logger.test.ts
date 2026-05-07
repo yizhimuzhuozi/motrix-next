@@ -12,7 +12,7 @@ vi.mock('@tauri-apps/plugin-log', () => ({
   trace: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { logger } from '@shared/logger'
+import { formatLogFields, logger } from '@shared/logger'
 import * as tauriLog from '@tauri-apps/plugin-log'
 
 // Cast to mock types for assertions
@@ -156,6 +156,44 @@ describe('logger (tauri-plugin-log bridging)', () => {
     it('does not throw when tauri bridge rejects', () => {
       mockTauriDebug.mockRejectedValue(new Error('IPC unavailable'))
       expect(() => logger.debug('Ctx', 'data')).not.toThrow()
+    })
+
+    it('does not throw on circular payloads and logs a fallback representation', () => {
+      const circular: { name: string; self?: unknown } = { name: 'loop' }
+      circular.self = circular
+
+      expect(() => logger.debug('Ctx', circular)).not.toThrow()
+      expect(mockTauriDebug).toHaveBeenCalledWith(expect.stringContaining('[Ctx]'))
+    })
+
+    it('does not throw on BigInt payloads and logs the numeric value', () => {
+      expect(() => logger.debug('Ctx', { bytes: 42n })).not.toThrow()
+      expect(mockTauriDebug).toHaveBeenCalledWith(expect.stringContaining('42'))
+    })
+
+    it('does not throw when payload serialization itself throws', () => {
+      const payload = {
+        toJSON(): never {
+          throw new Error('serialize failed')
+        },
+      }
+
+      expect(() => logger.debug('Ctx', payload)).not.toThrow()
+      expect(mockTauriDebug).toHaveBeenCalledWith(expect.stringContaining('[Ctx]'))
+    })
+  })
+
+  // ─── structured fields ───────────────────────────────────
+
+  describe('formatLogFields', () => {
+    it('formats stable key-value fields without JSON noise', () => {
+      expect(formatLogFields({ traceId: 'external-input-1', count: 2, hasCookie: false })).toBe(
+        'traceId=external-input-1 count=2 hasCookie=false',
+      )
+    })
+
+    it('keeps nullish values explicit for diagnostics', () => {
+      expect(formatLogFields({ route: null, reason: undefined })).toBe('route=null reason=undefined')
     })
   })
 

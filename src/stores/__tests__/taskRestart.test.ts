@@ -11,7 +11,7 @@
  *   7. Refreshes the task list and saves session on success.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { restartTask } from '../taskRestart'
+import { restartTask } from '../task/restart'
 import type { Aria2Task, TaskStatus } from '@shared/types'
 
 const makeMockTask = (gid: string, status: TaskStatus = 'active', extra: Partial<Aria2Task> = {}): Aria2Task => ({
@@ -45,7 +45,7 @@ function createMockApi() {
     removeTask: vi.fn().mockResolvedValue('OK'),
     removeTaskRecord: vi.fn().mockResolvedValue('OK'),
     fetchList: vi.fn().mockResolvedValue(undefined),
-    saveSession: vi.fn(),
+    saveSession: vi.fn().mockResolvedValue('OK'),
   }
 }
 
@@ -169,6 +169,43 @@ describe('restartTask', () => {
     })
     expect(api.addUriAtomic).toHaveBeenNthCalledWith(2, {
       uris: ['http://x.com/b.zip'],
+      options: { dir: '/dl' },
+    })
+  })
+
+  it('submits all mirror URIs as a single group for one file (not flattened)', async () => {
+    // Regression guard: a single-file task with 3 mirrors must produce
+    // exactly ONE addUriAtomic call with uris=[m1, m2, m3],
+    // not 3 separate calls with uris=[m1], uris=[m2], uris=[m3].
+    const task = makeMockTask('gid1', 'error', {
+      files: [
+        {
+          index: '1',
+          path: '/archive.zip',
+          length: '5000',
+          completedLength: '0',
+          selected: 'true',
+          uris: [
+            { uri: 'http://mirror1.example.com/archive.zip', status: 'used' },
+            { uri: 'http://mirror2.example.com/archive.zip', status: 'waiting' },
+            { uri: 'http://mirror3.example.com/archive.zip', status: 'waiting' },
+          ],
+        },
+      ],
+    })
+    api.getOption.mockResolvedValue({ dir: '/dl' })
+
+    await restartTask(task, api, mockHistoryFns)
+
+    // Must be called exactly ONCE — one file = one addUriAtomic call
+    expect(api.addUriAtomic).toHaveBeenCalledTimes(1)
+    // That call must contain ALL 3 mirror URIs
+    expect(api.addUriAtomic).toHaveBeenCalledWith({
+      uris: [
+        'http://mirror1.example.com/archive.zip',
+        'http://mirror2.example.com/archive.zip',
+        'http://mirror3.example.com/archive.zip',
+      ],
       options: { dir: '/dl' },
     })
   })

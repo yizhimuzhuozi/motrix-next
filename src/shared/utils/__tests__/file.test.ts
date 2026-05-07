@@ -271,9 +271,14 @@ describe('filterImageFiles', () => {
 
 describe('filterDocumentFiles', () => {
   it('matches document suffixes', () => {
-    // DOCUMENT_SUFFIXES includes .pdf, .doc, .txt, .csv, etc.
-    const files = [createEnrichedFile('.pdf'), createEnrichedFile('.docx')]
-    expect(filterDocumentFiles(files)).toHaveLength(2)
+    // DOCUMENT_SUFFIXES includes .pdf, .doc, .txt, .csv, .xls, .xlsx, etc.
+    const files = [
+      createEnrichedFile('.pdf'),
+      createEnrichedFile('.docx'),
+      createEnrichedFile('.xls'),
+      createEnrichedFile('.xlsx'),
+    ]
+    expect(filterDocumentFiles(files)).toHaveLength(4)
   })
 
   it('rejects non-document files', () => {
