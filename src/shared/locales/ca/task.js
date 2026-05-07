@@ -169,7 +169,7 @@ export default {
   'resume-all-task-fail': 'Error en reprendre totes les tasques',
   'resume-all-task-confirm': 'Reprendre totes les tasques?',
   'pause-all-task-confirm': 'Pausar totes les tasques?',
-  'purge-record-confirm': 'S\'eliminaran tots els registres completats o fallits.'eliminaran tots els registres completats, fallits o eliminats.',
+  'purge-record-confirm': 'S\'eliminaran tots els registres completats o fallits.',
   'purge-record-files-label': 'Elimina també els fitxers locals',
   'select-all-task': 'Seleccionar tot',
   'clear-recent-tasks': 'Esborrar tasques recents',
